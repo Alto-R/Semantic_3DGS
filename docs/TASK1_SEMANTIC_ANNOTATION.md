@@ -49,6 +49,12 @@ Current data/model status:
   directory.
 - `/lab/haoq_lab/cse12312032/data/EyeNavGS/Rutgers` and `NTHU` are symlinks to
   those cloned trace repos.
+- Trace inventory can be checked with:
+
+  ```bash
+  python scripts/inventory_eyenavgs_traces.py
+  ```
+
 - GraphDeco official pretrained models are downloaded with
   `scripts/download_graphdeco_models.sh`.
 - After extraction, discover available PLY files with:
