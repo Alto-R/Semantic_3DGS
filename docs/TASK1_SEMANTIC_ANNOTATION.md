@@ -71,6 +71,12 @@ Current data/model status:
   python scripts/find_point_clouds.py /lab/haoq_lab/cse12312032/data/3dgs_models/graphdeco
   ```
 
+  Build the initial scene/model manifest with:
+
+  ```bash
+  python scripts/build_task1_manifest.py
+  ```
+
 ## Pipeline
 
 1. Locate the scene model:
