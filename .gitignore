@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Large data and generated artifacts
+data/
+outputs/
+external/
+checkpoints/
+models/
+rendered_frames/
+masks/
+logs/
+tmp/
+scratch/
+
+# Common 3DGS / ML artifacts
+*.ckpt
+*.pth
+*.pt
+*.safetensors
+*.npz
+*.npy
+*.parquet
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+!.vscode/settings.example.json
+

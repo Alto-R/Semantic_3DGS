@@ -1,0 +1,27 @@
+# Copy this file to a machine-specific untracked config, for example:
+# - configs/paths.local.yaml
+# - configs/paths.cluster.yaml
+#
+# Keep large data outside Git.
+
+machine: cluster
+
+cluster:
+  ssh_alias: haoqi
+  root: /lab/haoq_lab/cse12312032
+
+paths:
+  repo: /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+  eyenavgs_data: /lab/haoq_lab/cse12312032/data/EyeNavGS
+  gaussian_models: /lab/haoq_lab/cse12312032/data/3dgs_models
+  external_repos: /lab/haoq_lab/cse12312032/external
+  task1_outputs: /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1
+
+task1:
+  pilot_scene: bicycle
+  semantic_property: label
+  unlabeled_id: 0
+  render_view_count: 150
+  baseline_method: FlashSplat
+  refinement_method: SAGA
+
