@@ -43,6 +43,20 @@ Fallback rule: use the first scene that has:
 - usable camera/render metadata
 - enough visual structure to validate labels from overlays
 
+Current data/model status:
+
+- EyeNavGS Rutgers and NTHU trace repos are cloned under the cluster `external/`
+  directory.
+- `/lab/haoq_lab/cse12312032/data/EyeNavGS/Rutgers` and `NTHU` are symlinks to
+  those cloned trace repos.
+- GraphDeco official pretrained models are downloaded with
+  `scripts/download_graphdeco_models.sh`.
+- After extraction, discover available PLY files with:
+
+  ```bash
+  python scripts/find_point_clouds.py /lab/haoq_lab/cse12312032/data/3dgs_models/graphdeco
+  ```
+
 ## Pipeline
 
 1. Locate the scene model:
@@ -130,4 +144,3 @@ python scripts/inspect_ply.py /tmp/semantic_test.ply --json
 
 The output PLY should have the same vertex count and all original properties,
 plus `label`.
-
