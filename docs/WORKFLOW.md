@@ -76,24 +76,35 @@ Host haoqi
 
 Use Git for source code, docs, configs, and small reproducible utilities.
 
-Expected flow:
+Current remotes:
+
+- `cluster`: immediate SSH remote hosted on the cluster at
+  `/lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git`
+- `origin`: reserved for a future private GitHub/GitLab remote
+
+Local setup used for Git over SSH:
+
+```powershell
+git config core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe -F C:/Users/dhana/.ssh/config"
+git remote add cluster haoqi:/lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git
+git push -u cluster main
+```
+
+Daily local-to-cluster sync:
 
 ```powershell
 cd "C:\Users\dhana\PROJECTS\PKU 3DGS VR"
 git status
-git add README.md .gitignore docs configs scripts
-git commit -m "Bootstrap EyeNavGS semantic annotation workflow"
-git remote add origin <private-git-remote-url>
-git push -u origin main
+git add <changed-files>
+git commit -m "<short message>"
+git push
 ```
 
 On the cluster:
 
 ```bash
-mkdir -p /lab/haoq_lab/cse12312032/projects
-cd /lab/haoq_lab/cse12312032/projects
-git clone <private-git-remote-url> pku-3dgs-vr
-cd pku-3dgs-vr
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+git pull
 ```
 
 Large data and generated files must not be committed.
