@@ -16,7 +16,7 @@ install_editable() {
   fi
   echo
   echo "installing $name"
-  conda run -n "$ENV_NAME" python -m pip install -e "$path"
+  conda run -n "$ENV_NAME" python -m pip install --no-build-isolation --no-deps -e "$path"
 }
 
 install_editable \
@@ -52,4 +52,3 @@ for mod in mods:
 if missing:
     raise SystemExit(f"missing imports: {missing}")
 PY
-
