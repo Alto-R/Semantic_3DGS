@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=eyenavgs-gpu-check
-#SBATCH --partition=gpulab01
-#SBATCH --qos=gpulab01
+#SBATCH --partition=rtx2080ti
+#SBATCH --qos=rtx2080ti
 #SBATCH --gres=gpu:1
 #SBATCH --time=00:05:00
 #SBATCH --output=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/slurm_gpu_check_%j.out
