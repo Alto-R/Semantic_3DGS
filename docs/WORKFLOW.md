@@ -31,15 +31,31 @@ Cluster root:
 
 ## SSH Setup
 
-Codex and scripts need non-interactive SSH. Do not put the cluster password in a
-command, script, config file, or log. Install the local public key once from a
-normal PowerShell terminal:
+The existing key is:
 
-```powershell
-type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh -p 10022 cse12312032@172.18.34.25 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+```text
+C:\Users\dhana\.ssh\id_ed25519
 ```
 
-After that, this should work without a password prompt:
+If `ssh haoqi` prints this prompt, the public key is already accepted by the
+cluster:
+
+```text
+Enter passphrase for key 'C:\Users\dhana\.ssh\id_ed25519':
+```
+
+That prompt asks for the local private-key passphrase, not the cluster account
+password. Codex and scripts cannot answer that interactive prompt reliably, so
+load the key into `ssh-agent` once per login session:
+
+```powershell
+Get-Service ssh-agent | Set-Service -StartupType Manual
+Start-Service ssh-agent
+ssh-add $env:USERPROFILE\.ssh\id_ed25519
+```
+
+Enter the key passphrase when `ssh-add` asks. After that, this should work
+without a prompt:
 
 ```powershell
 ssh haoqi "pwd; hostname"
@@ -140,4 +156,3 @@ Move only small artifacts back to Windows:
 
 Keep full datasets, model folders, raw rendered views, masks, and checkpoints on
 the cluster.
-
