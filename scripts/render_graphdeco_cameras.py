@@ -58,13 +58,14 @@ def tensor_to_image(render: torch.Tensor) -> Image.Image:
 
 def load_graphdeco(graphdeco_root: Path) -> Dict[str, Any]:
     sys.path.insert(0, str(graphdeco_root))
-    from gaussian_renderer import render
+    from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
     from scene.cameras import MiniCam
     from scene.gaussian_model import GaussianModel
     from utils.graphics_utils import focal2fov, getProjectionMatrix, getWorld2View2
 
     return {
-        "render": render,
+        "GaussianRasterizationSettings": GaussianRasterizationSettings,
+        "GaussianRasterizer": GaussianRasterizer,
         "MiniCam": MiniCam,
         "GaussianModel": GaussianModel,
         "focal2fov": focal2fov,
@@ -125,6 +126,66 @@ def selected_cameras(cameras: List[Dict[str, Any]], args: argparse.Namespace) ->
         yield cameras[index]
 
 
+def render_rgb(viewpoint_camera: Any, pc: Any, modules: Dict[str, Any], pipe: Any, bg_color: torch.Tensor) -> Dict[str, Any]:
+    screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, device="cuda")
+    tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
+    tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
+
+    raster_settings = modules["GaussianRasterizationSettings"](
+        image_height=int(viewpoint_camera.image_height),
+        image_width=int(viewpoint_camera.image_width),
+        tanfovx=tanfovx,
+        tanfovy=tanfovy,
+        bg=bg_color,
+        scale_modifier=1.0,
+        viewmatrix=viewpoint_camera.world_view_transform,
+        projmatrix=viewpoint_camera.full_proj_transform,
+        sh_degree=pc.active_sh_degree,
+        campos=viewpoint_camera.camera_center,
+        prefiltered=False,
+        debug=pipe.debug,
+    )
+    rasterizer = modules["GaussianRasterizer"](raster_settings=raster_settings)
+
+    cov3D_precomp = None
+    scales = None
+    rotations = None
+    if pipe.compute_cov3D_python:
+        cov3D_precomp = pc.get_covariance(1.0)
+    else:
+        scales = pc.get_scaling
+        rotations = pc.get_rotation
+
+    if pipe.convert_SHs_python:
+        from utils.sh_utils import eval_sh
+
+        shs_view = pc.get_features.transpose(1, 2).view(-1, 3, (pc.max_sh_degree + 1) ** 2)
+        directions = pc.get_xyz - viewpoint_camera.camera_center.repeat(pc.get_features.shape[0], 1)
+        directions = directions / directions.norm(dim=1, keepdim=True)
+        colors_precomp = torch.clamp_min(eval_sh(pc.active_sh_degree, shs_view, directions) + 0.5, 0.0)
+        shs = None
+    else:
+        colors_precomp = None
+        shs = pc.get_features
+
+    raster_output = rasterizer(
+        means3D=pc.get_xyz,
+        means2D=screenspace_points,
+        shs=shs,
+        colors_precomp=colors_precomp,
+        opacities=pc.get_opacity,
+        scales=scales,
+        rotations=rotations,
+        cov3D_precomp=cov3D_precomp,
+    )
+    rendered_image, radii = raster_output[:2]
+    return {
+        "render": rendered_image.clamp(0, 1),
+        "radii": radii,
+        "visibility_filter": (radii > 0).nonzero(),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True, type=Path)
@@ -179,7 +240,7 @@ def main() -> None:
     with torch.no_grad():
         for output_index, camera_json in enumerate(selected_cameras(cameras, args)):
             camera = make_camera(camera_json, modules, args.max_width)
-            result = modules["render"](camera, gaussians, pipe, background)
+            result = render_rgb(camera, gaussians, modules, pipe, background)
             filename = f"{output_index:05d}_cam{int(camera_json['id']):04d}.png"
             tensor_to_image(result["render"]).save(args.output_dir / filename)
             manifest["frames"].append(
