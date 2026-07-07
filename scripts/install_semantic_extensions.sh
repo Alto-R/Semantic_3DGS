@@ -33,22 +33,19 @@ install_editable \
 
 echo
 echo "verifying imports"
-conda run -n "$ENV_NAME" python - <<'PY'
+conda run -n "$ENV_NAME" python -c '
 import importlib.util
-
 mods = [
     "flashsplat_rasterization",
     "diff_gaussian_rasterization_contrastive_f",
     "diff_gaussian_rasterization_depth",
 ]
-
 missing = []
 for mod in mods:
     ok = importlib.util.find_spec(mod) is not None
     print(mod, "OK" if ok else "MISSING")
     if not ok:
         missing.append(mod)
-
 if missing:
     raise SystemExit(f"missing imports: {missing}")
-PY
+'
