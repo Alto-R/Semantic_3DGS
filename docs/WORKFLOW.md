@@ -150,6 +150,13 @@ cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 sbatch scripts/slurm_gpu_check.sbatch
 ```
 
+Install missing local CUDA extensions into the selected Conda environment:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+bash scripts/install_semantic_extensions.sh gaussian_grouping_true
+```
+
 ## Third-Party Code
 
 Clone third-party repos under:
