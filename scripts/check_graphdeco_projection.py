@@ -60,12 +60,64 @@ def report_variant(name: str, points: np.ndarray, w2c: np.ndarray, tanfovx: floa
     print(f"  ndc_y={json.dumps(quantiles(projected_y[in_front]), sort_keys=True)}")
 
 
+def c2w_to_w2c(camera: Dict[str, object]) -> np.ndarray:
+    rotation = np.asarray(camera["rotation"], dtype=np.float64)
+    position = np.asarray(camera["position"], dtype=np.float64)
+    c2w = np.eye(4, dtype=np.float64)
+    c2w[:3, :3] = rotation
+    c2w[:3, 3] = position
+    return np.linalg.inv(c2w)
+
+
+def scan_cameras(cameras: list, points: np.ndarray, max_scale: np.ndarray, limit: int) -> None:
+    rows = []
+    for camera in cameras:
+        fovx = focal2fov(float(camera["fx"]), int(camera["width"]))
+        fovy = focal2fov(float(camera["fy"]), int(camera["height"]))
+        tanfovx = math.tan(fovx * 0.5)
+        tanfovy = math.tan(fovy * 0.5)
+        camera_points = transform_points(points, c2w_to_w2c(camera))
+        z = camera_points[:, 2]
+        in_front = z > 0.01
+        if not np.any(in_front):
+            continue
+        projected_x = camera_points[in_front, 0] / z[in_front] / tanfovx
+        projected_y = camera_points[in_front, 1] / z[in_front] / tanfovy
+        inside = (np.abs(projected_x) <= 1.0) & (np.abs(projected_y) <= 1.0)
+        z_front = z[in_front]
+        scale_ratio = max_scale[in_front] / np.maximum(z_front, 1.0e-6)
+        rows.append(
+            {
+                "id": int(camera["id"]),
+                "name": camera.get("img_name", ""),
+                "front": float(in_front.mean()),
+                "inside": float(inside.mean()),
+                "z_q01": float(np.quantile(z_front, 0.01)),
+                "z_q05": float(np.quantile(z_front, 0.05)),
+                "scale_over_z_q99": float(np.quantile(scale_ratio, 0.99)),
+                "scale_over_z_max": float(np.max(scale_ratio)),
+            }
+        )
+
+    rows.sort(key=lambda row: (row["scale_over_z_q99"], -row["inside"]))
+    print("camera_scan=json_as_c2w")
+    print("id name front inside z_q01 z_q05 scale_over_z_q99 scale_over_z_max")
+    for row in rows[:limit]:
+        print(
+            f"{row['id']} {row['name']} {row['front']:.4f} {row['inside']:.4f} "
+            f"{row['z_q01']:.4f} {row['z_q05']:.4f} "
+            f"{row['scale_over_z_q99']:.6f} {row['scale_over_z_max']:.6f}"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True, type=Path)
     parser.add_argument("--iteration", default=30000, type=int)
     parser.add_argument("--camera-index", default=0, type=int)
     parser.add_argument("--sample-count", default=200_000, type=int)
+    parser.add_argument("--scan-cameras", action="store_true")
+    parser.add_argument("--scan-limit", default=20, type=int)
     args = parser.parse_args()
 
     camera_path = args.model_path / "cameras.json"
@@ -106,6 +158,10 @@ def main() -> None:
     print(f"camera_id={camera['id']} image_name={camera.get('img_name', '')}")
     print(f"sampled_points={len(points)} total_points={vertex.count}")
     print(f"max_exp_scale={json.dumps(quantiles(max_scale), sort_keys=True)}")
+
+    if args.scan_cameras:
+        scan_cameras(cameras, points, max_scale, args.scan_limit)
+        return
 
     c2w = np.eye(4, dtype=np.float64)
     c2w[:3, :3] = rotation
