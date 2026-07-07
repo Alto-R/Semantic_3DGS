@@ -141,6 +141,9 @@ Current cluster facts:
 - Allowed GPU QoS/partitions for this user: `rtx2080ti`, `titan`, `a100`
 - Default smoke-test target: `rtx2080ti`
 - Verified GPU smoke test: job `91780` ran on `gpu022` with an RTX 2080 Ti
+- Verified higher-VRAM smoke tests:
+  - job `91793` ran on `rtx8000` with a Quadro RTX 8000, 49 GB VRAM
+  - job `91794` ran on `l40gpu002` with an NVIDIA L40, 46 GB VRAM
 - `/lab` is nearly full: 32T total, about 624G free during setup on 2026-07-07
 
 Submit a GPU smoke test:
@@ -148,6 +151,13 @@ Submit a GPU smoke test:
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 sbatch scripts/slurm_gpu_check.sbatch
+```
+
+Target a specific higher-VRAM node:
+
+```bash
+sbatch --partition=titan --qos=titan --nodelist=rtx8000 scripts/slurm_gpu_check.sbatch
+sbatch --partition=a100 --qos=a100 --nodelist=l40gpu002 scripts/slurm_gpu_check.sbatch
 ```
 
 Install missing local CUDA extensions into the selected Conda environment:
