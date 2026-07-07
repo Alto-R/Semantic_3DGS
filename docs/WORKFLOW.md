@@ -133,6 +133,23 @@ Check cluster capabilities:
 bash scripts/cluster_check.sh
 ```
 
+Current cluster facts:
+
+- Login node: `login02`
+- GPU jobs must run through Slurm; the login node does not expose `nvidia-smi`
+- Slurm account: `gpulab02`
+- Allowed GPU QoS/partitions for this user: `rtx2080ti`, `titan`, `a100`
+- Default smoke-test target: `rtx2080ti`
+- Verified GPU smoke test: job `91780` ran on `gpu022` with an RTX 2080 Ti
+- `/lab` is nearly full: 32T total, about 624G free during setup on 2026-07-07
+
+Submit a GPU smoke test:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+sbatch scripts/slurm_gpu_check.sbatch
+```
+
 ## Third-Party Code
 
 Clone third-party repos under:

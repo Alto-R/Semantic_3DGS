@@ -38,3 +38,14 @@ for tool in sinfo squeue sbatch qstat qsub; do
   fi
 done
 
+if command -v sacctmgr >/dev/null 2>&1; then
+  echo
+  echo "slurm associations:"
+  sacctmgr show assoc "user=$(whoami)" format=User,Account,Partition,QOS%40 || true
+fi
+
+if command -v sinfo >/dev/null 2>&1; then
+  echo
+  echo "slurm partitions:"
+  sinfo
+fi
