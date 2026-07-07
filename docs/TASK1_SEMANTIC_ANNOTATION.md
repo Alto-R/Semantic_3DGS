@@ -77,6 +77,19 @@ Current data/model status:
   python scripts/build_task1_manifest.py
   ```
 
+  Current GraphDeco model manifest:
+
+  - 26 `point_cloud.ply` files extracted under
+    `/lab/haoq_lab/cse12312032/data/3dgs_models/graphdeco`.
+  - 8/12 EyeNavGS scenes match official GraphDeco pretrained models:
+    `truck`, `treehill`, `train`, `stump`, `room`, `playroom`, `drjohnson`,
+    `bicycle`.
+  - The four missing scenes are `nyc`, `london`, `berlin`, and `alameda`;
+    these are ZipNeRF-derived scenes and require a separate 3DGS model source.
+  - Manifest JSON was saved to:
+    `/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/manifests/task1_scene_manifest_graphdeco.json`.
+  - Pilot scene candidate: `bicycle`, iteration 30000, 6,131,954 Gaussians.
+
 ## Pipeline
 
 1. Locate the scene model:

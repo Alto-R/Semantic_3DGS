@@ -21,6 +21,11 @@ gaze-target dataset:
 - Local project folder: `C:\Users\dhana\PROJECTS\PKU 3DGS VR`
 - Cluster account: `ssh -p 10022 cse12312032@172.18.34.25`
 - Cluster root: `/lab/haoq_lab/cse12312032`
+- Cluster Git remote: `haoqi:/lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git`
+- Reused semantic Conda env: `gaussian_grouping_true`
+- GraphDeco official pretrained models downloaded and extracted on the cluster.
+- Current Task 1 model coverage: 8/12 EyeNavGS scenes matched; `nyc`,
+  `london`, `berlin`, and `alameda` still need separate 3DGS model sources.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
@@ -52,4 +57,3 @@ and camera/render metadata are available:
 4. Run FlashSplat baseline.
 5. Convert labels into project format.
 6. Validate with semantic overlay renders.
-
