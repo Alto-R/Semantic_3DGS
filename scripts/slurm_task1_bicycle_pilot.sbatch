@@ -19,6 +19,9 @@ GRAPHDECO_ROOT="${ROOT}/external/gaussian-splatting"
 MODEL_DIR="${ROOT}/data/3dgs_models/graphdeco/bicycle"
 PLY="${MODEL_DIR}/point_cloud/iteration_30000/point_cloud.ply"
 OUT_DIR="${ROOT}/outputs/eyenavgs_task1/bicycle"
+RENDER_MAX_WIDTH="${RENDER_MAX_WIDTH:-320}"
+RENDER_COUNT="${RENDER_COUNT:-20}"
+RENDER_CAMERA_INDICES="${RENDER_CAMERA_INDICES:-41,43,148,70,115,68,64,87,69,39,85,120,42,153,123,88,37,40,7,111}"
 
 mkdir -p "${OUT_DIR}/rgb_renders" "${OUT_DIR}/overlay_renders" "${ROOT}/outputs/eyenavgs_task1/logs"
 
@@ -59,12 +62,20 @@ if [ ! -f "${OUT_DIR}/label_map.json" ]; then
 JSON
 fi
 
-PYTHONPATH="${GRAPHDECO_ROOT}:${PYTHONPATH:-}" python scripts/render_graphdeco_cameras.py \
-  --model-path "${MODEL_DIR}" \
-  --output-dir "${OUT_DIR}/rgb_renders" \
-  --graphdeco-root "${GRAPHDECO_ROOT}" \
-  --iteration 30000 \
-  --count 20 \
-  --max-width 1280
+render_args=(
+  --model-path "${MODEL_DIR}"
+  --output-dir "${OUT_DIR}/rgb_renders"
+  --graphdeco-root "${GRAPHDECO_ROOT}"
+  --iteration 30000
+  --max-width "${RENDER_MAX_WIDTH}"
+)
+
+if [ -n "${RENDER_CAMERA_INDICES}" ]; then
+  render_args+=(--camera-indices "${RENDER_CAMERA_INDICES}")
+else
+  render_args+=(--count "${RENDER_COUNT}")
+fi
+
+PYTHONPATH="${GRAPHDECO_ROOT}:${PYTHONPATH:-}" python scripts/render_graphdeco_cameras.py "${render_args[@]}"
 
 find "${OUT_DIR}" -maxdepth 2 -type f | sort

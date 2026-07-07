@@ -219,3 +219,23 @@ points to the original author's local image path. The renderer prefers the
 official GraphDeco rasterizer submodule, which must be built once with
 `scripts/build_graphdeco_rasterizer.sh`; this avoids using the
 Gaussian-Grouping-modified rasterizer for plain RGB sanity renders.
+
+The default pilot render uses a conservative camera set selected by
+`scripts/check_graphdeco_projection.py`:
+
+```text
+41,43,148,70,115,68,64,87,69,39,85,120,42,153,123,88,37,40,7,111
+```
+
+These views avoid the worst near-plane/radius cases in the bicycle model. To
+try a higher-resolution run after the 320px sanity pass:
+
+```bash
+sbatch --export=ALL,RENDER_MAX_WIDTH=640 scripts/slurm_task1_bicycle_pilot.sbatch
+```
+
+To return to evenly spaced camera sampling, submit with an empty camera list:
+
+```bash
+sbatch --export=ALL,RENDER_CAMERA_INDICES=,RENDER_COUNT=20 scripts/slurm_task1_bicycle_pilot.sbatch
+```
