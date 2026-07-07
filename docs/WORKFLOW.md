@@ -157,6 +157,20 @@ cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 bash scripts/install_semantic_extensions.sh gaussian_grouping_true
 ```
 
+Current semantic environment status:
+
+- Reused Conda env: `gaussian_grouping_true`
+- PyTorch: `2.0.0+cu117`
+- Verified imports on the login node:
+  - `torch`
+  - `cv2`
+  - `segment_anything`
+  - `diff_gaussian_rasterization`
+  - `simple_knn`
+  - `flashsplat_rasterization`
+  - `diff_gaussian_rasterization_contrastive_f`
+  - `diff_gaussian_rasterization_depth`
+
 ## Third-Party Code
 
 Clone third-party repos under:
