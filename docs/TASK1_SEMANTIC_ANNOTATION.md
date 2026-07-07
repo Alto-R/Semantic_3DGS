@@ -177,3 +177,41 @@ python scripts/inspect_ply.py /tmp/semantic_test.ply --json
 
 The output PLY should have the same vertex count and all original properties,
 plus `label`.
+
+## Bicycle Pilot Bootstrap
+
+Run the first full bootstrap on the cluster from the project checkout:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+sbatch scripts/slurm_task1_bicycle_pilot.sbatch
+```
+
+Default resources target the L40 node:
+
+```text
+partition=a100
+qos=a100
+nodelist=l40gpu002
+```
+
+If that node is busy, submit the same job on the RTX8000 node:
+
+```bash
+sbatch --partition=titan --qos=titan --nodelist=rtx8000 scripts/slurm_task1_bicycle_pilot.sbatch
+```
+
+Expected first-stage outputs:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/point_cloud_inspection.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/semantic_point_cloud.ply
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/semantic_point_cloud_inspection.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/label_map.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/rgb_renders/
+```
+
+The rendered PNGs are RGB sanity frames from `cameras.json`. They are generated
+without original ground-truth images, because the pretrained GraphDeco model
+folder already contains camera intrinsics/extrinsics but its saved `cfg_args`
+points to the original author's local image path.
