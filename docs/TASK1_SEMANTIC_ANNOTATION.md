@@ -55,6 +55,14 @@ Current data/model status:
   python scripts/inventory_eyenavgs_traces.py
   ```
 
+  Current inventory notes:
+
+  - Rutgers: 12 scenes, 264 CSVs, 2,481,596 rows.
+  - NTHU: 12 expected scenes plus one anomalous `trian` folder, 289 CSVs,
+    1,384,969 rows.
+  - `trian/user21_trian.csv` has no matching `scene_setting.csv` entry and
+    should not be merged into `train` without manual confirmation.
+
 - GraphDeco official pretrained models are downloaded with
   `scripts/download_graphdeco_models.sh`.
 - After extraction, discover available PLY files with:

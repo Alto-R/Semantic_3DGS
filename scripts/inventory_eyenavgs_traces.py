@@ -124,15 +124,15 @@ def main() -> None:
             f"{site['site']}: {site['scene_count']} scenes, "
             f"{site['trace_file_count']} CSVs, {site['row_count']} rows"
         )
-        print("scene\tcsvs\trows\theaders")
+        print("scene\tcsvs\trows\theaders\tsetting")
         for scene in site["scenes"]:
             print(
                 f"{scene['scene']}\t{scene['trace_files']}\t{scene['rows']}\t"
-                f"{len(scene['header_variants'])}"
+                f"{len(scene['header_variants'])}\t"
+                f"{'yes' if scene['scene_setting'] else 'missing'}"
             )
         print()
 
 
 if __name__ == "__main__":
     main()
-
