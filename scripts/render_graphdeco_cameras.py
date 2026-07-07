@@ -57,6 +57,8 @@ def tensor_to_image(render: torch.Tensor) -> Image.Image:
 
 
 def load_graphdeco(graphdeco_root: Path) -> Dict[str, Any]:
+    rasterizer_root = graphdeco_root / "submodules" / "diff-gaussian-rasterization"
+    sys.path.insert(0, str(rasterizer_root))
     sys.path.insert(0, str(graphdeco_root))
     from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
     from scene.cameras import MiniCam
@@ -131,20 +133,23 @@ def render_rgb(viewpoint_camera: Any, pc: Any, modules: Dict[str, Any], pipe: An
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
 
-    raster_settings = modules["GaussianRasterizationSettings"](
-        image_height=int(viewpoint_camera.image_height),
-        image_width=int(viewpoint_camera.image_width),
-        tanfovx=tanfovx,
-        tanfovy=tanfovy,
-        bg=bg_color,
-        scale_modifier=1.0,
-        viewmatrix=viewpoint_camera.world_view_transform,
-        projmatrix=viewpoint_camera.full_proj_transform,
-        sh_degree=pc.active_sh_degree,
-        campos=viewpoint_camera.camera_center,
-        prefiltered=False,
-        debug=pipe.debug,
-    )
+    settings_kwargs = {
+        "image_height": int(viewpoint_camera.image_height),
+        "image_width": int(viewpoint_camera.image_width),
+        "tanfovx": tanfovx,
+        "tanfovy": tanfovy,
+        "bg": bg_color,
+        "scale_modifier": 1.0,
+        "viewmatrix": viewpoint_camera.world_view_transform,
+        "projmatrix": viewpoint_camera.full_proj_transform,
+        "sh_degree": pc.active_sh_degree,
+        "campos": viewpoint_camera.camera_center,
+        "prefiltered": False,
+        "debug": pipe.debug,
+    }
+    if "antialiasing" in getattr(modules["GaussianRasterizationSettings"], "_fields", ()):
+        settings_kwargs["antialiasing"] = False
+    raster_settings = modules["GaussianRasterizationSettings"](**settings_kwargs)
     rasterizer = modules["GaussianRasterizer"](raster_settings=raster_settings)
 
     cov3D_precomp = None

@@ -184,6 +184,7 @@ Run the first full bootstrap on the cluster from the project checkout:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+bash scripts/build_graphdeco_rasterizer.sh
 sbatch scripts/slurm_task1_bicycle_pilot.sbatch
 ```
 
@@ -214,4 +215,7 @@ Expected first-stage outputs:
 The rendered PNGs are RGB sanity frames from `cameras.json`. They are generated
 without original ground-truth images, because the pretrained GraphDeco model
 folder already contains camera intrinsics/extrinsics but its saved `cfg_args`
-points to the original author's local image path.
+points to the original author's local image path. The renderer prefers the
+official GraphDeco rasterizer submodule, which must be built once with
+`scripts/build_graphdeco_rasterizer.sh`; this avoids using the
+Gaussian-Grouping-modified rasterizer for plain RGB sanity renders.
