@@ -39,3 +39,7 @@ Current clone root:
 
 The repos were cloned with shallow history and `GIT_LFS_SKIP_SMUDGE=1` to avoid
 pulling large assets into `/lab`, which is already near capacity.
+
+Required submodules for GraphDeco, FlashSplat, and SAGA were initialized. SAGA's
+GitHub SSH submodule URLs were rewritten to HTTPS in the cluster clone because
+the cluster account does not have a GitHub SSH key.

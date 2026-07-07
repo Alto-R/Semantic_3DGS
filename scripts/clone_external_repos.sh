@@ -28,6 +28,21 @@ clone_or_update FlashSplat https://github.com/florinshen/FlashSplat.git
 clone_or_update SegAnyGAussians https://github.com/Jumpat/SegAnyGAussians.git
 
 echo
+echo "initializing required submodules"
+git -C gaussian-splatting submodule update --init --recursive --depth 1
+git -C FlashSplat submodule update --init --recursive --depth 1
+
+# SAGA records GitHub SSH URLs in .gitmodules; use HTTPS on clusters without a
+# GitHub SSH key.
+git -C SegAnyGAussians config --file .gitmodules \
+  submodule.third_party/kmeans_pytorch.url \
+  https://github.com/subhadarship/kmeans_pytorch.git
+git -C SegAnyGAussians config --file .gitmodules \
+  submodule.third_party/segment-anything.url \
+  https://github.com/facebookresearch/segment-anything.git
+git -C SegAnyGAussians submodule sync third_party/kmeans_pytorch third_party/segment-anything
+git -C SegAnyGAussians submodule update --init --recursive --depth 1
+
+echo
 echo "Recorded versions:"
 bash "$(dirname "$0")/record_external_repos.sh" "$ROOT"
-
