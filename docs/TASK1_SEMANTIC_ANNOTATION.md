@@ -239,3 +239,82 @@ To return to evenly spaced camera sampling, submit with an empty camera list:
 ```bash
 sbatch --export=ALL,RENDER_CAMERA_INDICES=,RENDER_COUNT=20 scripts/slurm_task1_bicycle_pilot.sbatch
 ```
+
+## Bicycle FlashSplat/SAM Pilot
+
+After the RGB sanity renders look valid, run the first binary semantic lift for
+the bicycle object:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+sbatch scripts/slurm_task1_bicycle_flashsplat.sbatch
+```
+
+This job runs two project-owned adapters instead of FlashSplat's stock
+COLMAP-source loader:
+
+1. `scripts/generate_flashsplat_prompt_masks.py`
+   - loads the pretrained GraphDeco model from `cameras.json`
+   - uses seed-view prompt points on camera index `70`
+   - projects the nearest prompted Gaussians into the selected views
+   - runs SAM on each rendered view
+   - writes masks and mask overlays under:
+
+   ```text
+   /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/prompt_masks_bicycle/
+   ```
+
+2. `scripts/run_flashsplat_cameras.py`
+   - loads those binary masks
+   - calls FlashSplat's `flashsplat_render` directly
+   - accumulates per-Gaussian `used_count`
+   - converts the binary FlashSplat decision into project labels
+   - writes the semantic PLY and validation overlays
+
+Default seed prompts in the 320x213 `cam0070` render:
+
+```text
+positive:
+93,110
+218,111
+160,80
+130,60
+205,48
+
+negative:
+45,80
+285,80
+286,132
+35,132
+160,30
+```
+
+Expected outputs:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/semantic_point_cloud.ply
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/label_map.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/flashsplat/flashsplat_counts.pt
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/flashsplat/gaussian_labels.npy
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/flashsplat/flashsplat_manifest.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/overlay_renders/
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/overlay_contact_sheet.png
+```
+
+This is a one-object pilot. It should not be counted as a fully labeled scene
+until additional labels are added and visually validated.
+
+Current pilot result:
+
+- Slurm job `91862` completed on `rtx8000`.
+- The semantic PLY has 6,131,954 vertices and the expected final `label`
+  property.
+- Binary label histogram:
+
+  ```json
+  {"0": 5841032, "1": 290922}
+  ```
+
+- Visual overlays confirm that the FlashSplat/SAM adapter runs end to end, but
+  the bicycle label still leaks into the bench in many views. Treat this output
+  as a technical baseline, not an accepted final semantic annotation.
