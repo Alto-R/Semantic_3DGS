@@ -240,81 +240,91 @@ To return to evenly spaced camera sampling, submit with an empty camera list:
 sbatch --export=ALL,RENDER_CAMERA_INDICES=,RENDER_COUNT=20 scripts/slurm_task1_bicycle_pilot.sbatch
 ```
 
-## Bicycle FlashSplat/SAM Pilot
+## Automatic SAM/FlashSplat Proposal Pilot
 
-After the RGB sanity renders look valid, run the first binary semantic lift for
-the bicycle object:
+The active Task 1 baseline is now automatic mask proposal generation, not
+manual prompt points:
+
+```text
+render selected 3DGS views
+-> run SAM automatic mask generation per view
+-> lift each mask proposal to sparse Gaussian supports with FlashSplat
+-> cluster overlapping 3D supports into object groups
+-> export label_map_auto.json and semantic_point_cloud_auto.ply
+```
+
+Run the bicycle automatic proposal pilot:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
-sbatch scripts/slurm_task1_bicycle_flashsplat.sbatch
+sbatch scripts/slurm_task1_bicycle_auto_proposals.sbatch
 ```
 
-This job runs two project-owned adapters instead of FlashSplat's stock
-COLMAP-source loader:
+For short test runs with a comma-separated camera list, set the environment
+variables before `sbatch`; do not put the comma-valued list directly inside
+`--export`, because Slurm splits `--export` on commas:
 
-1. `scripts/generate_flashsplat_prompt_masks.py`
-   - loads the pretrained GraphDeco model from `cameras.json`
-   - uses seed-view prompt points on camera index `70`
-   - projects the nearest prompted Gaussians into the selected views
-   - runs SAM on each rendered view
-   - writes masks and mask overlays under:
-
-   ```text
-   /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/prompt_masks_bicycle/
-   ```
-
-2. `scripts/run_flashsplat_cameras.py`
-   - loads those binary masks
-   - calls FlashSplat's `flashsplat_render` directly
-   - accumulates per-Gaussian `used_count`
-   - converts the binary FlashSplat decision into project labels
-   - writes the semantic PLY and validation overlays
-
-Default seed prompts in the 320x213 `cam0070` render:
-
-```text
-positive:
-93,110
-218,111
-160,80
-130,60
-205,48
-
-negative:
-45,80
-285,80
-286,132
-35,132
-160,30
+```bash
+AUTO_CAMERA_INDICES='70,115,68' AUTO_VIEW_COUNT=3 MAX_MASKS_PER_VIEW=8 MASK_BATCH_SIZE=4 \
+  sbatch --export=ALL,AUTO_CAMERA_INDICES,AUTO_VIEW_COUNT,MAX_MASKS_PER_VIEW,MASK_BATCH_SIZE \
+  scripts/slurm_task1_bicycle_auto_proposals.sbatch
 ```
+
+Active scripts:
+
+- `scripts/generate_sam_auto_masks.py`
+  - renders views from `cameras.json`
+  - runs `SamAutomaticMaskGenerator`
+  - filters tiny and near-full-image masks
+  - writes per-view proposal stacks and mask overlays
+
+- `scripts/run_flashsplat_mask_proposals.py`
+  - loads per-view SAM masks
+  - batches mask IDs through FlashSplat
+  - writes sparse Gaussian support files per mask proposal
+
+- `scripts/cluster_flashsplat_proposals.py`
+  - greedily merges proposal supports with high 3D overlap
+  - exports automatic object candidate labels
+  - writes `semantic_point_cloud_auto.ply`
 
 Expected outputs:
 
 ```text
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/semantic_point_cloud.ply
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/label_map.json
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/flashsplat/flashsplat_counts.pt
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/flashsplat/gaussian_labels.npy
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/flashsplat/flashsplat_manifest.json
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/overlay_renders/
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/overlay_contact_sheet.png
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/sam_auto/
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/flashsplat_proposals/
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/semantic_point_cloud_auto.ply
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/label_map_auto.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/auto_group_summary.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/sam_auto_contact_sheet.png
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/label_overlay_renders/
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/label_overlay_contact_sheet.png
 ```
 
-This is a one-object pilot. It should not be counted as a fully labeled scene
-until additional labels are added and visually validated.
+The automatic output labels are currently named `object_group_###` with class
+`object_candidate`. This solves automatic object proposal generation, but not
+final semantic naming. The next step after visual validation is to map object
+groups to semantic classes such as `bench`, `bicycle`, `tree`, `ground`, and
+`sky`, using either human validation or an open-vocabulary classifier.
 
-Current pilot result:
+The old prompt-based bicycle pilot is archived under:
 
-- Slurm job `91862` completed on `rtx8000`.
-- The semantic PLY has 6,131,954 vertices and the expected final `label`
-  property.
-- Binary label histogram:
+```text
+archive/task1_prompt_pilot/
+```
+
+Current automatic pilot result:
+
+- Slurm job `91872` completed on `rtx8000`.
+- Test scope: 3 views, 8 SAM masks per view.
+- SAM generated 24 lifted mask proposals.
+- Greedy 3D clustering produced 6 automatic object/stuff candidate groups.
+- Label histogram:
 
   ```json
-  {"0": 5841032, "1": 290922}
+  {"0": 5021685, "1": 339902, "2": 253174, "3": 45990, "4": 47164, "5": 61232, "6": 362807}
   ```
 
-- Visual overlays confirm that the FlashSplat/SAM adapter runs end to end, but
-  the bicycle label still leaks into the bench in many views. Treat this output
-  as a technical baseline, not an accepted final semantic annotation.
+- The label overlay contact sheet confirms the automatic pipeline works end to
+  end, but this is still a baseline: groups are broad candidates and need
+  semantic naming plus refinement before the scene can count as fully validated.

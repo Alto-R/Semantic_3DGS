@@ -182,6 +182,7 @@ def render_flashsplat(
     pipeline: SimpleNamespace,
     background: torch.Tensor,
     gt_mask: Optional[torch.Tensor] = None,
+    override_color: Optional[torch.Tensor] = None,
     obj_num: int = 1,
 ) -> Dict[str, Any]:
     return modules["flashsplat_render"](
@@ -189,6 +190,7 @@ def render_flashsplat(
         gaussians,
         pipeline,
         background,
+        override_color=override_color,
         gt_mask=gt_mask,
         obj_num=obj_num,
     )
