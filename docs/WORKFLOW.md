@@ -78,16 +78,17 @@ Use Git for source code, docs, configs, and small reproducible utilities.
 
 Current remotes:
 
-- `cluster`: immediate SSH remote hosted on the cluster at
-  `/lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git`
-- `origin`: reserved for a future private GitHub/GitLab remote
+- `origin`: private GitHub remote at
+  `https://github.com/DhanaKresnawijaya237/pku-3dgs-vr.git`
+- The old `cluster` bare remote under
+  `/lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git` is deprecated and should not
+  be used for new syncs.
 
-Local setup used for Git over SSH:
+Local setup used for GitHub:
 
 ```powershell
-git config core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe -F C:/Users/dhana/.ssh/config"
-git remote add cluster haoqi:/lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git
-git push -u cluster main
+git remote add origin https://github.com/DhanaKresnawijaya237/pku-3dgs-vr.git
+git push -u origin main
 ```
 
 Daily local-to-cluster sync:
@@ -104,8 +105,12 @@ On the cluster:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
-git pull
+git pull --ff-only
 ```
+
+The cluster checkout needs GitHub authentication before it can pull a private
+GitHub repo. Use a GitHub SSH key, deploy key, or `gh auth login` on the
+cluster. Do not store GitHub tokens in project files.
 
 Large data and generated files must not be committed.
 

@@ -78,10 +78,16 @@ setup confusion and go directly to implementation.
   C:\Users\dhana\PROJECTS\PKU 3DGS VR
   ```
 
-- Cluster bare remote:
+- Original cluster bare remote, now deprecated:
 
   ```text
   /lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git
+  ```
+
+- Current GitHub remote:
+
+  ```text
+  https://github.com/DhanaKresnawijaya237/pku-3dgs-vr
   ```
 
 - Cluster checkout:
@@ -93,19 +99,22 @@ setup confusion and go directly to implementation.
 - Current remote pattern:
 
   ```text
-  cluster -> haoqi:/lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git
+  origin -> https://github.com/DhanaKresnawijaya237/pku-3dgs-vr.git
   ```
 
 - Push local code first, then pull on the cluster:
 
   ```powershell
-  git -C "C:\Users\dhana\PROJECTS\PKU 3DGS VR" push cluster main
+  git -C "C:\Users\dhana\PROJECTS\PKU 3DGS VR" push origin main
   ```
 
   ```bash
   cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
   git pull --ff-only
   ```
+
+- Because the GitHub repo is private, the cluster checkout needs GitHub
+  authentication before it can pull directly from GitHub.
 
 - Use Git for code and docs only. Do not commit datasets, 3DGS models,
   generated PLYs, checkpoints, render outputs, third-party repos, or SAM/feature
@@ -283,8 +292,8 @@ When cluster work fails:
 - Use Windows local workspace for docs, code edits, Git control, and small
   sample inspections.
 - Keep large data off Windows unless specifically needed.
-- Use private GitHub later if needed, but the current cluster bare remote is
-  sufficient for local-to-cluster workflow.
+- Use private GitHub as the primary remote. The old cluster bare remote was
+  useful for bootstrapping, but should not be required for future syncs.
 - Do not ask again whether repo items can be copied/moved from `Documents` to
   `PROJECTS`; treat `PROJECTS` as canonical.
 - Do not store any cluster password or key material in the repo.

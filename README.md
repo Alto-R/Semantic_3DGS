@@ -19,9 +19,11 @@ gaze-target dataset:
 ## Current Status
 
 - Local project folder: `C:\Users\dhana\PROJECTS\PKU 3DGS VR`
+- GitHub remote: `https://github.com/DhanaKresnawijaya237/pku-3dgs-vr`
 - Cluster account: `ssh -p 10022 cse12312032@172.18.34.25`
 - Cluster root: `/lab/haoq_lab/cse12312032`
-- Cluster Git remote: `haoqi:/lab/haoq_lab/cse12312032/git/pku-3dgs-vr.git`
+- The old cluster bare Git remote is deprecated; use GitHub as the source of
+  truth.
 - Reused semantic Conda env: `gaussian_grouping_true`
 - GraphDeco official pretrained models downloaded and extracted on the cluster.
 - Current Task 1 model coverage: 8/12 EyeNavGS scenes matched; `nyc`,
