@@ -301,11 +301,66 @@ Expected outputs:
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/label_overlay_contact_sheet.png
 ```
 
-The automatic output labels are currently named `object_group_###` with class
+The automatic output labels are named `object_group_###` with class
 `object_candidate`. This solves automatic object proposal generation, but not
-final semantic naming. The next step after visual validation is to map object
-groups to semantic classes such as `bench`, `bicycle`, `tree`, `ground`, and
-`sky`, using either human validation or an open-vocabulary classifier.
+final semantic naming. A scene only counts toward D1 after these groups are
+reviewed, renamed, merged/dropped if needed, and exported as final semantic
+outputs.
+
+## Review and Finalize Automatic Groups
+
+Create a review CSV from the automatic group outputs:
+
+```bash
+python scripts/create_label_review_template.py \
+  --auto-label-map /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/label_map_auto.json \
+  --auto-summary /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/auto_group_summary.json \
+  --output /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/label_review.csv
+```
+
+Review `label_overlay_contact_sheet.png` and the overlay render folder, then
+edit these CSV columns:
+
+- `final_id`: final object/semantic id. Use the same id on multiple source
+  rows to merge groups. Use `0` to drop a source group back to unlabeled.
+- `final_name`: human-readable final label such as `bicycle_01`, `tree_03`,
+  `ground`, or `sky`.
+- `final_class`: semantic class such as `bicycle`, `tree`, `ground`, or `sky`.
+- `review_status` and `notes`: optional bookkeeping for uncertain groups.
+
+Apply the reviewed CSV to generate the D1-style outputs:
+
+```bash
+python scripts/apply_label_review.py \
+  --auto-labels /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/gaussian_labels_auto.npy \
+  --review-csv /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/label_review.csv \
+  --input-ply /lab/haoq_lab/cse12312032/data/3dgs_models/graphdeco/bicycle/point_cloud/iteration_30000/point_cloud.ply \
+  --output-dir /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle \
+  --scene bicycle \
+  --overwrite
+```
+
+Expected final outputs:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/semantic_point_cloud.ply
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/label_map.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/gaussian_labels.npy
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/label_review_summary.json
+```
+
+Validate the final scene package before counting it as complete:
+
+```bash
+python scripts/validate_task1_outputs.py \
+  --labels-npy /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/gaussian_labels.npy \
+  --label-map /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/label_map.json \
+  --semantic-ply /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle/semantic_point_cloud.ply
+```
+
+The validator intentionally fails if any nonzero final class is still
+`object_candidate`. Pass `--allow-object-candidate` only for debugging an
+unreviewed automatic output.
 
 The old prompt-based bicycle pilot is archived under:
 
