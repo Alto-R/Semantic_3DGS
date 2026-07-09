@@ -27,6 +27,10 @@ SEMANTIC_VIEW_COUNT="${SEMANTIC_VIEW_COUNT:-10}"
 MAX_DETECTIONS_PER_VIEW="${MAX_DETECTIONS_PER_VIEW:-24}"
 MASK_BATCH_SIZE="${MASK_BATCH_SIZE:-4}"
 CONTACT_THUMB_WIDTH="${CONTACT_THUMB_WIDTH:-360}"
+MIN_ASSIGNED_GAUSSIANS="${MIN_ASSIGNED_GAUSSIANS:-0}"
+MIN_ASSIGNED_THING_GAUSSIANS="${MIN_ASSIGNED_THING_GAUSSIANS:-5000}"
+MIN_ASSIGNED_STUFF_GAUSSIANS="${MIN_ASSIGNED_STUFF_GAUSSIANS:-10000}"
+MIN_LABEL_SCORE="${MIN_LABEL_SCORE:-0.0}"
 BOX_THRESHOLD="${BOX_THRESHOLD:-0.30}"
 TEXT_THRESHOLD="${TEXT_THRESHOLD:-0.25}"
 SAM_CHECKPOINT="${SAM_CHECKPOINT:-${ROOT}/InvRGBL_modif/pretrained/sam_vit_h_4b8939.pth}"
@@ -34,6 +38,8 @@ GROUNDED_SAM_ROOT="${GROUNDED_SAM_ROOT:-${ROOT}/gaussian-grouping/Tracking-Anyth
 GROUNDINGDINO_CONFIG="${GROUNDINGDINO_CONFIG:-${ROOT}/gaussian-grouping/Tracking-Anything-with-DEVA/saves/GroundingDINO_SwinT_OGC.py}"
 GROUNDINGDINO_CHECKPOINT="${GROUNDINGDINO_CHECKPOINT:-${ROOT}/gaussian-grouping/Tracking-Anything-with-DEVA/saves/groundingdino_swint_ogc.pth}"
 SAM_ROOT="${SAM_ROOT:-${GROUNDED_SAM_ROOT}/segment_anything}"
+TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
+export TOKENIZERS_PARALLELISM
 
 mkdir -p "${OUT_DIR}" "${GROUND_OUT_DIR}" "${PROPOSAL_DIR}" "${ROOT}/outputs/eyenavgs_task1/logs"
 
@@ -54,6 +60,9 @@ echo "host=$(hostname)"
 echo "project=${PROJECT_ROOT}"
 echo "model=${MODEL_DIR}"
 echo "grounded_sam=${GROUNDED_SAM_ROOT}"
+echo "min_assigned_gaussians=${MIN_ASSIGNED_GAUSSIANS}"
+echo "min_assigned_thing_gaussians=${MIN_ASSIGNED_THING_GAUSSIANS}"
+echo "min_assigned_stuff_gaussians=${MIN_ASSIGNED_STUFF_GAUSSIANS}"
 nvidia-smi
 
 python scripts/generate_grounded_sam_masks.py \
@@ -100,9 +109,22 @@ python scripts/cluster_semantic_flashsplat_proposals.py \
   --merge-iou 0.35 \
   --containment-threshold 0.70 \
   --max-groups 96 \
+  --min-assigned-gaussians "${MIN_ASSIGNED_GAUSSIANS}" \
+  --min-assigned-thing-gaussians "${MIN_ASSIGNED_THING_GAUSSIANS}" \
+  --min-assigned-stuff-gaussians "${MIN_ASSIGNED_STUFF_GAUSSIANS}" \
+  --min-label-score "${MIN_LABEL_SCORE}" \
   --overwrite
 
 python scripts/inspect_ply.py "${OUT_DIR}/semantic_point_cloud.ply" --json > "${OUT_DIR}/semantic_point_cloud_inspection.json"
+
+python scripts/export_debug_label_colors.py \
+  --input-ply "${OUT_DIR}/semantic_point_cloud.ply" \
+  --label-map "${OUT_DIR}/label_map.json" \
+  --output-ply "${OUT_DIR}/semantic_point_cloud_debug_colors.ply" \
+  --metadata-json "${OUT_DIR}/semantic_point_cloud_debug_colors.json" \
+  --overwrite
+
+python scripts/inspect_ply.py "${OUT_DIR}/semantic_point_cloud_debug_colors.ply" --json > "${OUT_DIR}/semantic_point_cloud_debug_colors_inspection.json"
 
 python scripts/render_auto_label_overlays.py \
   --model-path "${MODEL_DIR}" \
@@ -132,5 +154,9 @@ python scripts/validate_task1_outputs.py \
   --label-map "${OUT_DIR}/label_map.json" \
   --semantic-ply "${OUT_DIR}/semantic_point_cloud.ply" \
   > "${OUT_DIR}/task1_validation.json"
+
+python scripts/summarize_task1_semantic_run.py \
+  --output-dir "${OUT_DIR}" \
+  --summary-name pipeline_run_summary.json
 
 find "${OUT_DIR}" -maxdepth 3 -type f | sort

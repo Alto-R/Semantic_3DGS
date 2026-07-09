@@ -104,27 +104,28 @@ Current data/model status:
    python scripts/inspect_ply.py /path/to/point_cloud.ply --json
    ```
 
-3. Render 100-200 representative RGB views from the original 3DGS model.
+3. Render representative RGB views from the original 3DGS model.
 
-4. Generate 2D masks using the mask generator expected by the chosen tool:
+4. Generate semantic 2D masks automatically:
 
-   - FlashSplat baseline path first.
-   - SAGA mask/feature path for refinement.
-   - SAM2 only if the chosen toolchain requires or benefits from it.
+   - GroundingDINO proposes class-aware boxes from the configured vocabulary.
+   - SAM converts those boxes into binary masks.
+   - The mask metadata carries `class`, phrase, and confidence forward.
 
-5. Lift 2D masks/groups to Gaussian labels:
+5. Lift semantic masks/groups to Gaussian labels:
 
-   - Run FlashSplat for a fast full-scene baseline.
-   - Export per-Gaussian group IDs.
+   - Run FlashSplat to convert each 2D mask into a sparse Gaussian support.
+   - Fuse same-class 3D supports into object/stuff groups.
    - Convert groups into the project label schema.
 
-6. Name and validate labels:
+6. Prune and validate labels:
 
-   - Create semantic overlay renders.
-   - Use contact sheets to assign human-readable `name` and `class`.
+   - Drop tiny/low-confidence labels automatically after final assignment.
+   - Compact label IDs so there are no gaps.
+   - Create semantic overlay renders and contact sheets for QA.
    - Keep `0` as `unlabeled`.
 
-7. Refine important objects with SAGA:
+7. Refine important objects with SAGA only if the automatic baseline fails:
 
    High-priority object types:
 
@@ -251,7 +252,8 @@ render selected 3DGS views
 -> run SAM on GroundingDINO boxes to get semantic masks
 -> lift each semantic mask to sparse Gaussian supports with FlashSplat
 -> fuse same-class 3D supports into persistent object/stuff labels
--> export label_map.json and semantic_point_cloud.ply
+-> prune tiny/low-confidence final labels automatically
+-> export label_map.json, semantic_point_cloud.ply, and debug artifacts
 ```
 
 This path automatically carries class names from GroundingDINO into the final
@@ -294,8 +296,17 @@ Active semantic scripts:
 - `scripts/cluster_semantic_flashsplat_proposals.py`
   - merges lifted proposals only when they have the same class
   - merges stuff classes such as `ground`, `road`, `sidewalk`, and `sky`
+  - prunes tiny final labels after 3D assignment
   - creates instance labels such as `bicycle_01`, `tree_02`, `bench_01`
   - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
+
+- `scripts/export_debug_label_colors.py`
+  - appends `red`, `green`, and `blue` properties to a separate debug PLY
+  - keeps the final deliverable PLY contract unchanged
+
+- `scripts/summarize_task1_semantic_run.py`
+  - writes one `pipeline_run_summary.json` across mask generation, FlashSplat
+    lifting, 3D fusion/pruning, exports, and validation
 
 Expected semantic outputs:
 
@@ -303,12 +314,25 @@ Expected semantic outputs:
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/grounded_sam/
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/flashsplat_proposals/
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud.ply
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud_debug_colors.ply
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/label_map.json
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/gaussian_labels.npy
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_group_summary.json
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/grounded_sam_contact_sheet.png
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_label_overlay_contact_sheet.png
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/task1_validation.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/pipeline_run_summary.json
+```
+
+Per-stage logs are:
+
+```text
+grounded_sam/grounded_sam_manifest.json
+flashsplat_proposals/proposal_manifest.json
+semantic_group_summary.json
+semantic_point_cloud_debug_colors.json
+task1_validation.json
+pipeline_run_summary.json
 ```
 
 Example final label map:

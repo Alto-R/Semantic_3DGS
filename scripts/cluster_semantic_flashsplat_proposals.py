@@ -287,6 +287,73 @@ def prune_and_compact_groups(labels: np.ndarray, groups: list[SemanticGroup]) ->
     return compacted, active_groups
 
 
+def assigned_prune_threshold(
+    group: SemanticGroup,
+    min_assigned_gaussians: int,
+    min_assigned_thing_gaussians: int,
+    min_assigned_stuff_gaussians: int,
+) -> int:
+    threshold = max(0, min_assigned_gaussians)
+    if group.is_stuff:
+        threshold = max(threshold, max(0, min_assigned_stuff_gaussians))
+    else:
+        threshold = max(threshold, max(0, min_assigned_thing_gaussians))
+    return threshold
+
+
+def prune_assigned_groups(
+    labels: np.ndarray,
+    groups: list[SemanticGroup],
+    min_assigned_gaussians: int,
+    min_assigned_thing_gaussians: int,
+    min_assigned_stuff_gaussians: int,
+    min_label_score: float,
+) -> tuple[np.ndarray, list[SemanticGroup], list[dict[str, Any]]]:
+    kept: list[SemanticGroup] = []
+    pruned: list[dict[str, Any]] = []
+    prune_ids: list[int] = []
+    for group in groups:
+        threshold = assigned_prune_threshold(
+            group,
+            min_assigned_gaussians,
+            min_assigned_thing_gaussians,
+            min_assigned_stuff_gaussians,
+        )
+        reasons: list[str] = []
+        if threshold > 0 and group.assigned_count < threshold:
+            reasons.append(f"assigned_gaussians<{threshold}")
+        if min_label_score > 0.0 and group.score < min_label_score:
+            reasons.append(f"score<{min_label_score}")
+
+        if not reasons:
+            kept.append(group)
+            continue
+
+        prune_ids.append(group.group_id)
+        pruned.append(
+            {
+                "id": group.group_id,
+                "class": group.class_name,
+                "is_stuff": group.is_stuff,
+                "assigned_gaussian_count": group.assigned_count,
+                "support_gaussian_count": group.gaussian_count,
+                "proposal_count": group.proposal_count,
+                "source_view_count": len(group.source_frames),
+                "score": group.score,
+                "mean_score": group.mean_score,
+                "assigned_threshold": threshold,
+                "reasons": reasons,
+                "proposal_ids": group.proposal_ids,
+                "phrases": dict(group.phrases),
+            }
+        )
+
+    if prune_ids:
+        for label_id in prune_ids:
+            labels[labels == label_id] = 0
+    return labels, kept, pruned
+
+
 def build_label_map(scene: str, groups: list[SemanticGroup]) -> tuple[dict[str, Any], dict[int, str]]:
     class_counts = Counter(group.class_name for group in groups)
     class_ordinals: dict[str, int] = defaultdict(int)
@@ -348,6 +415,10 @@ def main() -> None:
     parser.add_argument("--min-group-gaussians", default=1000, type=int)
     parser.add_argument("--min-group-proposals", default=1, type=int)
     parser.add_argument("--max-groups", default=128, type=int)
+    parser.add_argument("--min-assigned-gaussians", default=0, type=int)
+    parser.add_argument("--min-assigned-thing-gaussians", default=0, type=int)
+    parser.add_argument("--min-assigned-stuff-gaussians", default=0, type=int)
+    parser.add_argument("--min-label-score", default=0.0, type=float)
     parser.add_argument("--scene", default="")
     parser.add_argument("--semantic-ply-name", default="semantic_point_cloud.ply")
     parser.add_argument("--require-class", action="store_true", default=True)
@@ -380,6 +451,15 @@ def main() -> None:
     groups = filter_groups(groups, args.min_group_gaussians, args.min_group_proposals, args.max_groups)
     labels = assign_labels(vertex.count, groups)
     labels, groups = prune_and_compact_groups(labels, groups)
+    labels, groups, pruned_groups = prune_assigned_groups(
+        labels,
+        groups,
+        args.min_assigned_gaussians,
+        args.min_assigned_thing_gaussians,
+        args.min_assigned_stuff_gaussians,
+        args.min_label_score,
+    )
+    labels, groups = prune_and_compact_groups(labels, groups)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     labels_path = args.output_dir / "gaussian_labels.npy"
@@ -398,11 +478,29 @@ def main() -> None:
     histogram = {str(label): int(count) for label, count in zip(*np.unique(labels, return_counts=True))}
     summary = {
         "source": "groundingdino_sam_flashsplat",
+        "stage": "semantic_fusion_and_pruning",
         "model_path": str(args.model_path),
         "ply_path": str(ply_path),
         "proposal_dir": str(args.proposal_dir),
+        "parameters": {
+            "min_proposal_gaussians": args.min_proposal_gaussians,
+            "max_proposal_gaussians": args.max_proposal_gaussians,
+            "merge_iou": args.merge_iou,
+            "containment_threshold": args.containment_threshold,
+            "min_group_gaussians": args.min_group_gaussians,
+            "min_group_proposals": args.min_group_proposals,
+            "max_groups": args.max_groups,
+            "min_assigned_gaussians": args.min_assigned_gaussians,
+            "min_assigned_thing_gaussians": args.min_assigned_thing_gaussians,
+            "min_assigned_stuff_gaussians": args.min_assigned_stuff_gaussians,
+            "min_label_score": args.min_label_score,
+        },
         "proposal_count": len(proposals),
         "group_count": len(groups),
+        "pruning": {
+            "pruned_group_count": len(pruned_groups),
+            "pruned_groups": pruned_groups,
+        },
         "stuff_classes": sorted(stuff_classes),
         "label_histogram": histogram,
         "groups": [group_summary(group, names_by_id[group.group_id]) for group in groups],
