@@ -101,6 +101,9 @@ def export_stage(output_dir: Path) -> dict[str, Any]:
         "debug_color_ply": file_record(output_dir / "semantic_point_cloud_debug_colors.ply"),
         "debug_color_metadata": file_record(output_dir / "semantic_point_cloud_debug_colors.json"),
         "debug_color_inspection": file_record(output_dir / "semantic_point_cloud_debug_colors_inspection.json"),
+        "supersplat_debug_ply": file_record(output_dir / "semantic_point_cloud_supersplat_debug.ply"),
+        "supersplat_debug_metadata": file_record(output_dir / "semantic_point_cloud_supersplat_debug.json"),
+        "supersplat_debug_inspection": file_record(output_dir / "semantic_point_cloud_supersplat_debug_inspection.json"),
         "semantic_overlay_dir": file_record(output_dir / "semantic_label_overlay_renders"),
         "semantic_overlay_contact_sheet": file_record(output_dir / "semantic_label_overlay_contact_sheet.png"),
     }

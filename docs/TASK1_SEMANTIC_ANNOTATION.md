@@ -302,7 +302,14 @@ Active semantic scripts:
 
 - `scripts/export_debug_label_colors.py`
   - appends `red`, `green`, and `blue` properties to a separate debug PLY
+  - useful for generic PLY viewers that read vertex RGB columns
   - keeps the final deliverable PLY contract unchanged
+
+- `scripts/export_supersplat_label_colors.py`
+  - writes a separate SuperSplat-compatible debug PLY
+  - bakes label colors into `f_dc_0`, `f_dc_1`, and `f_dc_2`
+  - clears `f_rest_*` so SuperSplat shows semantic label colors instead of the
+    original 3DGS appearance
 
 - `scripts/summarize_task1_semantic_run.py`
   - writes one `pipeline_run_summary.json` across mask generation, FlashSplat
@@ -315,6 +322,7 @@ Expected semantic outputs:
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/flashsplat_proposals/
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud.ply
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud_debug_colors.ply
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud_supersplat_debug.ply
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/label_map.json
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/gaussian_labels.npy
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_group_summary.json
@@ -331,6 +339,7 @@ grounded_sam/grounded_sam_manifest.json
 flashsplat_proposals/proposal_manifest.json
 semantic_group_summary.json
 semantic_point_cloud_debug_colors.json
+semantic_point_cloud_supersplat_debug.json
 task1_validation.json
 pipeline_run_summary.json
 ```

@@ -126,6 +126,15 @@ python scripts/export_debug_label_colors.py \
 
 python scripts/inspect_ply.py "${OUT_DIR}/semantic_point_cloud_debug_colors.ply" --json > "${OUT_DIR}/semantic_point_cloud_debug_colors_inspection.json"
 
+python scripts/export_supersplat_label_colors.py \
+  --input-ply "${OUT_DIR}/semantic_point_cloud.ply" \
+  --label-map "${OUT_DIR}/label_map.json" \
+  --output-ply "${OUT_DIR}/semantic_point_cloud_supersplat_debug.ply" \
+  --metadata-json "${OUT_DIR}/semantic_point_cloud_supersplat_debug.json" \
+  --overwrite
+
+python scripts/inspect_ply.py "${OUT_DIR}/semantic_point_cloud_supersplat_debug.ply" --json > "${OUT_DIR}/semantic_point_cloud_supersplat_debug_inspection.json"
+
 python scripts/render_auto_label_overlays.py \
   --model-path "${MODEL_DIR}" \
   --labels-npy "${OUT_DIR}/gaussian_labels.npy" \
