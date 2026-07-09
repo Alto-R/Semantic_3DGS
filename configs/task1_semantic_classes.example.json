@@ -1,0 +1,74 @@
+{
+  "classes": [
+    {
+      "class": "bicycle",
+      "type": "thing",
+      "prompts": ["bicycle", "bike"]
+    },
+    {
+      "class": "car",
+      "type": "thing",
+      "prompts": ["car", "vehicle"]
+    },
+    {
+      "class": "bench",
+      "type": "thing",
+      "prompts": ["bench"]
+    },
+    {
+      "class": "tree",
+      "type": "thing",
+      "prompts": ["tree"]
+    },
+    {
+      "class": "building",
+      "type": "thing",
+      "prompts": ["building", "house"]
+    },
+    {
+      "class": "ground",
+      "type": "stuff",
+      "prompts": ["ground", "terrain"]
+    },
+    {
+      "class": "road",
+      "type": "stuff",
+      "prompts": ["road", "street"]
+    },
+    {
+      "class": "sidewalk",
+      "type": "stuff",
+      "prompts": ["sidewalk", "pavement"]
+    },
+    {
+      "class": "sky",
+      "type": "stuff",
+      "prompts": ["sky"]
+    },
+    {
+      "class": "pole",
+      "type": "thing",
+      "prompts": ["pole", "streetlight", "lamp post"]
+    },
+    {
+      "class": "sign",
+      "type": "thing",
+      "prompts": ["sign", "traffic sign"]
+    },
+    {
+      "class": "fence",
+      "type": "thing",
+      "prompts": ["fence"]
+    },
+    {
+      "class": "person",
+      "type": "thing",
+      "prompts": ["person", "pedestrian"]
+    },
+    {
+      "class": "vegetation",
+      "type": "stuff",
+      "prompts": ["vegetation", "bush", "grass", "plant"]
+    }
+  ]
+}

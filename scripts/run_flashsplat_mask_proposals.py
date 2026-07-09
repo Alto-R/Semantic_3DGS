@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lift automatic 2D mask proposals to sparse Gaussian support sets."""
+"""Lift 2D mask proposals to sparse Gaussian support sets."""
 
 from __future__ import annotations
 
@@ -41,6 +41,33 @@ def load_mask_stack(mask_path: Path, height: int, width: int) -> np.ndarray:
     return masks
 
 
+def resolve_mask_manifest(input_dir: Path, manifest_name: str, mask_dir_name: str) -> tuple[Path, Path]:
+    if manifest_name:
+        manifest_path = input_dir / manifest_name
+        if not manifest_path.exists():
+            raise FileNotFoundError(manifest_path)
+    else:
+        candidates = [
+            "grounded_sam_manifest.json",
+            "sam_auto_manifest.json",
+        ]
+        manifest_path = next((input_dir / name for name in candidates if (input_dir / name).exists()), None)
+        if manifest_path is None:
+            raise FileNotFoundError(
+                f"Could not find any mask manifest in {input_dir}: {', '.join(candidates)}"
+            )
+
+    if mask_dir_name:
+        mask_dir = input_dir / mask_dir_name
+    elif manifest_path.name == "grounded_sam_manifest.json":
+        mask_dir = input_dir / "grounded_sam_masks"
+    else:
+        mask_dir = input_dir / "sam_auto_masks"
+    if not mask_dir.exists():
+        raise FileNotFoundError(mask_dir)
+    return manifest_path, mask_dir
+
+
 def build_index_mask(masks: np.ndarray, start: int, end: int) -> torch.Tensor:
     height, width = masks.shape[1:]
     indexed = np.zeros((height, width), dtype=np.float32)
@@ -68,11 +95,58 @@ def save_support(
     )
 
 
+def proposal_metadata(
+    proposal_id: int,
+    support_file: str,
+    frame: Dict[str, Any],
+    camera_index: int,
+    mask_index: int,
+    mask_meta: Dict[str, Any],
+    gaussian_count: int,
+    fallback_area: int,
+) -> Dict[str, Any]:
+    record: Dict[str, Any] = {
+        "proposal_id": proposal_id,
+        "support_file": support_file,
+        "frame_file": frame["file"],
+        "camera_index": camera_index,
+        "camera_id": int(frame["camera_id"]),
+        "image_name": frame.get("image_name", ""),
+        "mask_index": int(mask_index),
+        "mask_area": int(mask_meta.get("area", fallback_area)),
+        "gaussian_count": int(gaussian_count),
+        "predicted_iou": float(mask_meta.get("predicted_iou", mask_meta.get("sam_score", 0.0))),
+        "stability_score": float(mask_meta.get("stability_score", 1.0)),
+    }
+    for key in [
+        "source",
+        "class",
+        "class_name",
+        "phrase",
+        "confidence",
+        "grounding_score",
+        "sam_score",
+        "bbox",
+        "bbox_xyxy",
+    ]:
+        if key in mask_meta:
+            record[key] = mask_meta[key]
+    if "class_name" not in record and "class" in record:
+        record["class_name"] = record["class"]
+    if "class" not in record and "class_name" in record:
+        record["class"] = record["class_name"]
+    if "confidence" not in record:
+        record["confidence"] = float(record.get("grounding_score", record["predicted_iou"]))
+    return record
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True, type=Path)
     parser.add_argument("--sam-output-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--manifest-name", default="")
+    parser.add_argument("--mask-dir-name", default="")
     parser.add_argument(
         "--flashsplat-root",
         default="/lab/haoq_lab/cse12312032/external/FlashSplat",
@@ -91,9 +165,11 @@ def main() -> None:
     if args.mask_batch_size <= 0:
         raise ValueError("--mask-batch-size must be positive")
 
-    manifest_path = args.sam_output_dir / "sam_auto_manifest.json"
-    if not manifest_path.exists():
-        raise FileNotFoundError(manifest_path)
+    manifest_path, mask_dir = resolve_mask_manifest(
+        args.sam_output_dir,
+        args.manifest_name,
+        args.mask_dir_name,
+    )
     sam_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     support_dir = args.output_dir / "proposal_supports"
@@ -112,6 +188,8 @@ def main() -> None:
         "model_path": str(args.model_path),
         "ply_path": str(ply_path),
         "sam_output_dir": str(args.sam_output_dir),
+        "source_manifest": str(manifest_path),
+        "mask_dir": str(mask_dir),
         "iteration": args.iteration,
         "max_width": args.max_width,
         "mask_batch_size": args.mask_batch_size,
@@ -125,7 +203,7 @@ def main() -> None:
             camera_index = int(frame["camera_index"])
             camera_json = cameras[camera_index]
             camera = make_camera(camera_json, modules, args.max_width)
-            mask_path = args.sam_output_dir / "sam_auto_masks" / frame["mask_file"]
+            mask_path = mask_dir / frame["mask_file"]
             masks = load_mask_stack(mask_path, int(camera.image_height), int(camera.image_width))
             if args.max_masks_per_view > 0:
                 masks = masks[: args.max_masks_per_view]
@@ -166,19 +244,16 @@ def main() -> None:
                     if mask_index < len(frame.get("masks", [])):
                         mask_meta = frame["masks"][mask_index]
                     proposals.append(
-                        {
-                            "proposal_id": proposal_id,
-                            "support_file": support_file,
-                            "frame_file": frame["file"],
-                            "camera_index": camera_index,
-                            "camera_id": int(frame["camera_id"]),
-                            "image_name": frame.get("image_name", ""),
-                            "mask_index": int(mask_index),
-                            "mask_area": int(mask_meta.get("area", int(masks[mask_index].sum()))),
-                            "gaussian_count": int(support.shape[0]),
-                            "predicted_iou": float(mask_meta.get("predicted_iou", 0.0)),
-                            "stability_score": float(mask_meta.get("stability_score", 0.0)),
-                        }
+                        proposal_metadata(
+                            proposal_id,
+                            support_file,
+                            frame,
+                            camera_index,
+                            mask_index,
+                            mask_meta,
+                            int(support.shape[0]),
+                            int(masks[mask_index].sum()),
+                        )
                     )
                     print(
                         f"proposal {proposal_id:06d}: frame={frame['file']} "

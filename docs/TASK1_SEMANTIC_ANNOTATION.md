@@ -240,10 +240,98 @@ To return to evenly spaced camera sampling, submit with an empty camera list:
 sbatch --export=ALL,RENDER_CAMERA_INDICES=,RENDER_COUNT=20 scripts/slurm_task1_bicycle_pilot.sbatch
 ```
 
-## Automatic SAM/FlashSplat Proposal Pilot
+## Automatic GroundingDINO/SAM Semantic Pipeline
 
-The active Task 1 baseline is now automatic mask proposal generation, not
-manual prompt points:
+The active Task 1 route is semantic 2D proposal generation, not manual prompt
+points and not manual object naming:
+
+```text
+render selected 3DGS views
+-> run GroundingDINO with a scene vocabulary
+-> run SAM on GroundingDINO boxes to get semantic masks
+-> lift each semantic mask to sparse Gaussian supports with FlashSplat
+-> fuse same-class 3D supports into persistent object/stuff labels
+-> export label_map.json and semantic_point_cloud.ply
+```
+
+This path automatically carries class names from GroundingDINO into the final
+3D Gaussian labels. The class vocabulary is tracked in:
+
+```text
+configs/task1_semantic_classes.example.json
+```
+
+Run the bicycle semantic pilot:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+sbatch scripts/slurm_task1_bicycle_grounded_sam.sbatch
+```
+
+For a short smoke run with three selected cameras:
+
+```bash
+SEMANTIC_CAMERA_INDICES='70,115,68' SEMANTIC_VIEW_COUNT=3 MAX_DETECTIONS_PER_VIEW=12 MASK_BATCH_SIZE=4 \
+  sbatch --export=ALL,SEMANTIC_CAMERA_INDICES,SEMANTIC_VIEW_COUNT,MAX_DETECTIONS_PER_VIEW,MASK_BATCH_SIZE \
+  scripts/slurm_task1_bicycle_grounded_sam.sbatch
+```
+
+Active semantic scripts:
+
+- `scripts/generate_grounded_sam_masks.py`
+  - renders views from `cameras.json`
+  - runs GroundingDINO with the configured class vocabulary
+  - runs SAM on each detected box
+  - writes per-view binary mask stacks plus semantic metadata
+  - writes semantic mask overlays with class names and detection scores
+
+- `scripts/run_flashsplat_mask_proposals.py`
+  - loads either SAM-auto or GroundingDINO/SAM masks
+  - batches mask IDs through FlashSplat
+  - writes sparse Gaussian support files per semantic mask proposal
+  - preserves `class`, `phrase`, and confidence metadata
+
+- `scripts/cluster_semantic_flashsplat_proposals.py`
+  - merges lifted proposals only when they have the same class
+  - merges stuff classes such as `ground`, `road`, `sidewalk`, and `sky`
+  - creates instance labels such as `bicycle_01`, `tree_02`, `bench_01`
+  - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
+
+Expected semantic outputs:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/grounded_sam/
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/flashsplat_proposals/
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud.ply
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/label_map.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/gaussian_labels.npy
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_group_summary.json
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/grounded_sam_contact_sheet.png
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_label_overlay_contact_sheet.png
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/task1_validation.json
+```
+
+Example final label map:
+
+```json
+{
+  "scene": "bicycle",
+  "labels": [
+    {"id": 0, "name": "unlabeled", "class": "unlabeled"},
+    {"id": 1, "name": "bicycle_01", "class": "bicycle"},
+    {"id": 2, "name": "tree_01", "class": "tree"},
+    {"id": 3, "name": "ground", "class": "ground"}
+  ]
+}
+```
+
+The class vocabulary is still an input prompt list, but the per-object naming is
+automatic. For scenes with missing categories, update the class config and
+rerun; do not manually edit the final labels for the primary D1 pipeline.
+
+## Fallback SAM/FlashSplat Proposal Pilot
+
+The older baseline is automatic class-agnostic mask proposal generation:
 
 ```text
 render selected 3DGS views
@@ -253,7 +341,7 @@ render selected 3DGS views
 -> export label_map_auto.json and semantic_point_cloud_auto.ply
 ```
 
-Run the bicycle automatic proposal pilot:
+Run the bicycle class-agnostic proposal pilot:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
@@ -301,15 +389,15 @@ Expected outputs:
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_auto/label_overlay_contact_sheet.png
 ```
 
-The automatic output labels are named `object_group_###` with class
-`object_candidate`. This solves automatic object proposal generation, but not
-final semantic naming. A scene only counts toward D1 after these groups are
-reviewed, renamed, merged/dropped if needed, and exported as final semantic
-outputs.
+The fallback output labels are named `object_group_###` with class
+`object_candidate`. This is useful for finding missed objects or diagnosing
+GroundingDINO failures, but it is no longer the preferred automatic D1 path
+because it has no semantic class names.
 
-## Review and Finalize Automatic Groups
+## Optional Review and Finalize Fallback Groups
 
-Create a review CSV from the automatic group outputs:
+The review tools remain available only for fallback or QA. Create a review CSV
+from class-agnostic automatic group outputs:
 
 ```bash
 python scripts/create_label_review_template.py \
