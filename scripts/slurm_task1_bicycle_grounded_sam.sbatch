@@ -26,6 +26,7 @@ SEMANTIC_CAMERA_INDICES="${SEMANTIC_CAMERA_INDICES:-70,115,68,64,87,120,42,153,7
 SEMANTIC_VIEW_COUNT="${SEMANTIC_VIEW_COUNT:-10}"
 MAX_DETECTIONS_PER_VIEW="${MAX_DETECTIONS_PER_VIEW:-24}"
 MASK_BATCH_SIZE="${MASK_BATCH_SIZE:-4}"
+CONTACT_THUMB_WIDTH="${CONTACT_THUMB_WIDTH:-360}"
 BOX_THRESHOLD="${BOX_THRESHOLD:-0.30}"
 TEXT_THRESHOLD="${TEXT_THRESHOLD:-0.25}"
 SAM_CHECKPOINT="${SAM_CHECKPOINT:-${ROOT}/InvRGBL_modif/pretrained/sam_vit_h_4b8939.pth}"
@@ -118,13 +119,13 @@ python scripts/make_contact_sheet.py \
   --image-dir "${GROUND_OUT_DIR}/grounded_sam_overlays" \
   --output "${OUT_DIR}/grounded_sam_contact_sheet.png" \
   --columns 5 \
-  --thumb-width 220
+  --thumb-width "${CONTACT_THUMB_WIDTH}"
 
 python scripts/make_contact_sheet.py \
   --image-dir "${OUT_DIR}/semantic_label_overlay_renders" \
   --output "${OUT_DIR}/semantic_label_overlay_contact_sheet.png" \
   --columns 5 \
-  --thumb-width 220
+  --thumb-width "${CONTACT_THUMB_WIDTH}"
 
 python scripts/validate_task1_outputs.py \
   --labels-npy "${OUT_DIR}/gaussian_labels.npy" \
