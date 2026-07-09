@@ -40,6 +40,7 @@ class SemanticGroup:
     phrases: Counter[str] = field(default_factory=Counter)
     scores: list[float] = field(default_factory=list)
     is_stuff: bool = False
+    assigned_count: int = 0
 
     @property
     def gaussian_count(self) -> int:
@@ -267,6 +268,25 @@ def assign_labels(vertex_count: int, groups: list[SemanticGroup]) -> np.ndarray:
     return labels
 
 
+def prune_and_compact_groups(labels: np.ndarray, groups: list[SemanticGroup]) -> tuple[np.ndarray, list[SemanticGroup]]:
+    histogram = {int(label): int(count) for label, count in zip(*np.unique(labels, return_counts=True))}
+    active_groups = [group for group in groups if histogram.get(group.group_id, 0) > 0]
+    remap = {group.group_id: new_id for new_id, group in enumerate(active_groups, start=1)}
+    if len(active_groups) == len(groups) and all(remap[group.group_id] == group.group_id for group in active_groups):
+        for group in active_groups:
+            group.assigned_count = histogram.get(group.group_id, 0)
+        return labels, active_groups
+
+    compacted = np.zeros(labels.shape, dtype=np.int32)
+    for group in active_groups:
+        old_id = group.group_id
+        new_id = remap[old_id]
+        compacted[labels == old_id] = new_id
+        group.group_id = new_id
+        group.assigned_count = histogram.get(old_id, 0)
+    return compacted, active_groups
+
+
 def build_label_map(scene: str, groups: list[SemanticGroup]) -> tuple[dict[str, Any], dict[int, str]]:
     class_counts = Counter(group.class_name for group in groups)
     class_ordinals: dict[str, int] = defaultdict(int)
@@ -285,7 +305,8 @@ def build_label_map(scene: str, groups: list[SemanticGroup]) -> tuple[dict[str, 
                 "class": group.class_name,
                 "source": "groundingdino_sam_flashsplat",
                 "proposal_count": group.proposal_count,
-                "gaussian_count": group.gaussian_count,
+                "gaussian_count": group.assigned_count or group.gaussian_count,
+                "support_gaussian_count": group.gaussian_count,
                 "source_view_count": len(group.source_frames),
                 "score": group.score,
                 "mean_score": group.mean_score,
@@ -301,7 +322,8 @@ def group_summary(group: SemanticGroup, name: str) -> dict[str, Any]:
         "name": name,
         "class": group.class_name,
         "is_stuff": group.is_stuff,
-        "gaussian_count": group.gaussian_count,
+        "gaussian_count": group.assigned_count or group.gaussian_count,
+        "support_gaussian_count": group.gaussian_count,
         "proposal_count": group.proposal_count,
         "source_view_count": len(group.source_frames),
         "score": group.score,
@@ -357,6 +379,7 @@ def main() -> None:
     groups = merge_stuff_groups(groups, stuff_classes)
     groups = filter_groups(groups, args.min_group_gaussians, args.min_group_proposals, args.max_groups)
     labels = assign_labels(vertex.count, groups)
+    labels, groups = prune_and_compact_groups(labels, groups)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     labels_path = args.output_dir / "gaussian_labels.npy"
