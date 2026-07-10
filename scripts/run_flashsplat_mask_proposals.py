@@ -78,6 +78,110 @@ def build_index_mask(masks: np.ndarray, start: int, end: int) -> torch.Tensor:
     return torch.from_numpy(indexed).to(device="cuda", dtype=torch.float32)
 
 
+def normalized_class_name(mask_meta: Dict[str, Any]) -> str:
+    value = mask_meta.get("class_name", mask_meta.get("class", "unknown"))
+    return str(value or "unknown").strip().lower().replace(" ", "_")
+
+
+def masks_by_class(masks: np.ndarray, frame: Dict[str, Any]) -> Dict[str, np.ndarray]:
+    combined: Dict[str, np.ndarray] = {}
+    metadata = frame.get("masks", [])
+    for mask_index, mask in enumerate(masks):
+        mask_meta = metadata[mask_index] if mask_index < len(metadata) else {}
+        class_name = normalized_class_name(mask_meta)
+        if class_name in {"", "unknown", "object_candidate"}:
+            continue
+        if class_name in combined:
+            combined[class_name] |= mask
+        else:
+            combined[class_name] = mask.copy()
+    return combined
+
+
+def increment_view_counts(counts: np.ndarray, indices: np.ndarray) -> None:
+    if indices.shape[0] > 0:
+        counts[indices] += np.uint16(1)
+
+
+def update_class_evidence(
+    class_masks: Dict[str, np.ndarray],
+    camera: Any,
+    gaussians: Any,
+    modules: Dict[str, Any],
+    pipeline: Any,
+    background: torch.Tensor,
+    vertex_count: int,
+    threshold: float,
+    evidence: Dict[str, Dict[str, np.ndarray]],
+) -> None:
+    for class_name, class_mask in class_masks.items():
+        binary_mask = torch.from_numpy(class_mask.astype(np.float32)).to(device="cuda")
+        render_pkg = render_flashsplat(
+            camera,
+            gaussians,
+            modules,
+            pipeline,
+            background,
+            gt_mask=binary_mask,
+            obj_num=2,
+        )
+        used_count = render_pkg["used_count"].detach().cpu().numpy()
+        class_record = evidence.setdefault(
+            class_name,
+            {
+                "positive_views": np.zeros((vertex_count,), dtype=np.uint16),
+                "negative_views": np.zeros((vertex_count,), dtype=np.uint16),
+            },
+        )
+        positive = np.flatnonzero(used_count[1] > threshold)
+        negative = np.flatnonzero(used_count[0] > threshold)
+        increment_view_counts(class_record["positive_views"], positive)
+        increment_view_counts(class_record["negative_views"], negative)
+        del used_count
+        del render_pkg
+        del binary_mask
+        torch.cuda.empty_cache()
+
+
+def write_class_evidence(
+    output_dir: Path,
+    evidence: Dict[str, Dict[str, np.ndarray]],
+    threshold: float,
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    records: list[Dict[str, Any]] = []
+    for class_name, arrays in sorted(evidence.items()):
+        observed = (arrays["positive_views"] > 0) | (arrays["negative_views"] > 0)
+        indices = np.flatnonzero(observed).astype(np.uint32)
+        filename = f"{class_name}.npz"
+        np.savez_compressed(
+            output_dir / filename,
+            indices=indices,
+            positive_views=arrays["positive_views"][indices],
+            negative_views=arrays["negative_views"][indices],
+        )
+        records.append(
+            {
+                "class": class_name,
+                "file": filename,
+                "gaussian_count": int(indices.shape[0]),
+                "positive_gaussian_count": int((arrays["positive_views"] > 0).sum()),
+                "negative_gaussian_count": int((arrays["negative_views"] > 0).sum()),
+                "max_positive_views": int(arrays["positive_views"].max()),
+                "max_negative_views": int(arrays["negative_views"].max()),
+            }
+        )
+    manifest = {
+        "source": "flashsplat_class_positive_negative_visibility",
+        "threshold": threshold,
+        "classes": records,
+    }
+    (output_dir / "class_evidence_manifest.json").write_text(
+        json.dumps(manifest, indent=2),
+        encoding="utf-8",
+    )
+
+
 def save_support(
     output_path: Path,
     support_indices: np.ndarray,
@@ -160,6 +264,8 @@ def main() -> None:
     parser.add_argument("--mask-batch-size", default=4, type=int)
     parser.add_argument("--max-masks-per-view", default=32, type=int)
     parser.add_argument("--support-threshold", default=0.0, type=float)
+    parser.add_argument("--write-class-evidence", action="store_true")
+    parser.add_argument("--class-evidence-threshold", default=0.05, type=float)
     parser.add_argument("--min-support-gaussians", default=100, type=int)
     parser.add_argument("--white-background", action="store_true")
     args = parser.parse_args()
@@ -186,6 +292,7 @@ def main() -> None:
 
     proposal_id = 1
     proposals: List[Dict[str, Any]] = []
+    class_evidence: Dict[str, Dict[str, np.ndarray]] = {}
     output_manifest: Dict[str, Any] = {
         "model_path": str(args.model_path),
         "ply_path": str(ply_path),
@@ -197,6 +304,8 @@ def main() -> None:
         "mask_batch_size": args.mask_batch_size,
         "support_threshold": args.support_threshold,
         "min_support_gaussians": args.min_support_gaussians,
+        "write_class_evidence": args.write_class_evidence,
+        "class_evidence_threshold": args.class_evidence_threshold,
         "proposals": proposals,
     }
 
@@ -212,6 +321,24 @@ def main() -> None:
             if masks.shape[0] == 0:
                 print(f"skipped {frame['file']}: no masks")
                 continue
+
+            if args.write_class_evidence:
+                frame_class_masks = masks_by_class(masks, frame)
+                update_class_evidence(
+                    frame_class_masks,
+                    camera,
+                    gaussians,
+                    modules,
+                    pipeline,
+                    background,
+                    int(gaussians.get_xyz.shape[0]),
+                    args.class_evidence_threshold,
+                    class_evidence,
+                )
+                print(
+                    f"class evidence: frame={frame['file']} "
+                    f"classes={','.join(sorted(frame_class_masks))}"
+                )
 
             for start in range(0, masks.shape[0], args.mask_batch_size):
                 end = min(start + args.mask_batch_size, masks.shape[0])
@@ -271,6 +398,12 @@ def main() -> None:
         json.dumps(output_manifest, indent=2),
         encoding="utf-8",
     )
+    if args.write_class_evidence:
+        write_class_evidence(
+            args.output_dir / "class_evidence",
+            class_evidence,
+            args.class_evidence_threshold,
+        )
     print(f"wrote {args.output_dir / 'proposal_manifest.json'}")
 
 

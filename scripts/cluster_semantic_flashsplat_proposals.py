@@ -38,6 +38,14 @@ class SemanticProposal:
 
 
 @dataclass
+class ClassEvidence:
+    class_name: str
+    indices: np.ndarray
+    positive_views: np.ndarray
+    negative_views: np.ndarray
+
+
+@dataclass
 class SemanticGroup:
     group_id: int
     class_name: str
@@ -118,6 +126,29 @@ def load_assignment_priorities(path: Path | None, override: str) -> dict[str, in
         if isinstance(data, dict):
             names = [normalize_class_name(item) for item in data.get("assignment_priority", [])]
     return {class_name: len(names) - index for index, class_name in enumerate(names)}
+
+
+def load_class_evidence(path: Path | None) -> dict[str, ClassEvidence] | None:
+    if path is None:
+        return None
+    manifest_path = path / "class_evidence_manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(manifest_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    evidence: dict[str, ClassEvidence] = {}
+    for item in manifest.get("classes", []):
+        class_name = normalize_class_name(item.get("class"))
+        with np.load(path / str(item["file"])) as data:
+            indices = data["indices"].astype(np.uint32)
+            positive_views = data["positive_views"].astype(np.uint16)
+            negative_views = data["negative_views"].astype(np.uint16)
+        evidence[class_name] = ClassEvidence(
+            class_name=class_name,
+            indices=indices,
+            positive_views=positive_views,
+            negative_views=negative_views,
+        )
+    return evidence
 
 
 def group_order_key(group: SemanticGroup, priorities: dict[str, int]) -> tuple[Any, ...]:
@@ -293,6 +324,27 @@ def frame_supports_for_group(
     return frame_supports
 
 
+def signed_evidence_gate(
+    candidate_indices: np.ndarray,
+    evidence: ClassEvidence,
+    min_positive_views: int,
+    min_ratio: float,
+) -> np.ndarray:
+    positions = np.searchsorted(evidence.indices, candidate_indices)
+    matched = positions < evidence.indices.shape[0]
+    matched_positions = positions[matched]
+    matched[matched] = evidence.indices[matched_positions] == candidate_indices[matched]
+
+    positive = np.zeros((candidate_indices.shape[0],), dtype=np.float32)
+    negative = np.zeros((candidate_indices.shape[0],), dtype=np.float32)
+    if matched.any():
+        positions = positions[matched]
+        positive[matched] = evidence.positive_views[positions]
+        negative[matched] = evidence.negative_views[positions]
+    ratio = positive / np.maximum(positive + negative, 1.0)
+    return (positive >= max(0, min_positive_views)) & (ratio >= min_ratio)
+
+
 def assign_labels(
     vertex_count: int,
     groups: list[SemanticGroup],
@@ -300,6 +352,9 @@ def assign_labels(
     priorities: dict[str, int],
     reliability_views: float,
     min_quality: float,
+    class_evidence: dict[str, ClassEvidence] | None,
+    class_evidence_min_positive_views: int,
+    class_evidence_min_ratio: float,
 ) -> np.ndarray:
     labels = np.zeros((vertex_count,), dtype=np.int32)
     best_quality = np.zeros((vertex_count,), dtype=np.float32)
@@ -324,6 +379,19 @@ def assign_labels(
         tie_break = priorities.get(group.class_name, 0) * 1e-7
         candidate_quality = evidence + np.float32(tie_break)
         selected = (evidence >= min_quality) & (candidate_quality > best_quality)
+        if class_evidence is not None and not group.is_stuff:
+            signed = class_evidence.get(group.class_name)
+            if signed is None:
+                raise ValueError(f"Missing signed class evidence for {group.class_name}")
+            candidate_indices = np.flatnonzero(selected)
+            signed_keep = signed_evidence_gate(
+                candidate_indices,
+                signed,
+                class_evidence_min_positive_views,
+                class_evidence_min_ratio,
+            )
+            selected[:] = False
+            selected[candidate_indices[signed_keep]] = True
         labels[selected] = group.group_id
         best_quality[selected] = candidate_quality[selected]
     return labels
@@ -609,6 +677,9 @@ def main() -> None:
     parser.add_argument("--class-priority", default="")
     parser.add_argument("--assignment-reliability-views", default=2.0, type=float)
     parser.add_argument("--assignment-min-quality", default=0.03, type=float)
+    parser.add_argument("--class-evidence-dir", type=Path)
+    parser.add_argument("--class-evidence-min-positive-views", default=2, type=int)
+    parser.add_argument("--class-evidence-min-ratio", default=0.50, type=float)
     parser.add_argument("--spatial-prune-thing-islands", action="store_true")
     parser.add_argument("--spatial-voxel-scale-multiplier", default=4.0, type=float)
     parser.add_argument("--spatial-min-voxel-size", default=0.01, type=float)
@@ -652,6 +723,7 @@ def main() -> None:
 
     stuff_classes = load_stuff_classes(args.class_config, args.stuff_classes)
     assignment_priorities = load_assignment_priorities(args.class_config, args.class_priority)
+    class_evidence = load_class_evidence(args.class_evidence_dir)
     proposals = load_proposals(
         manifest_path,
         support_dir,
@@ -675,6 +747,9 @@ def main() -> None:
         assignment_priorities,
         args.assignment_reliability_views,
         args.assignment_min_quality,
+        class_evidence,
+        args.class_evidence_min_positive_views,
+        args.class_evidence_min_ratio,
     )
     labels, groups = prune_and_compact_groups(labels, groups)
     labels, groups, pruned_groups = prune_assigned_groups(
@@ -694,6 +769,9 @@ def main() -> None:
             assignment_priorities,
             args.assignment_reliability_views,
             args.assignment_min_quality,
+            class_evidence,
+            args.class_evidence_min_positive_views,
+            args.class_evidence_min_ratio,
         )
         labels, groups = prune_and_compact_groups(labels, groups)
 
@@ -761,6 +839,9 @@ def main() -> None:
             "assignment_mode": "confidence_weighted_multiview",
             "assignment_reliability_views": args.assignment_reliability_views,
             "assignment_min_quality": args.assignment_min_quality,
+            "class_evidence_dir": str(args.class_evidence_dir) if args.class_evidence_dir else "",
+            "class_evidence_min_positive_views": args.class_evidence_min_positive_views,
+            "class_evidence_min_ratio": args.class_evidence_min_ratio,
             "spatial_prune_thing_islands": args.spatial_prune_thing_islands,
             "spatial_voxel_scale_multiplier": args.spatial_voxel_scale_multiplier,
             "spatial_min_voxel_size": args.spatial_min_voxel_size,

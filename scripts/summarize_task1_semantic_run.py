@@ -80,6 +80,8 @@ def flashsplat_stage(paths: dict[str, Path]) -> dict[str, Any]:
     root = paths["proposals"]
     manifest_path = root / "proposal_manifest.json"
     manifest = read_json(manifest_path)
+    class_evidence_path = root / "class_evidence" / "class_evidence_manifest.json"
+    class_evidence = read_json(class_evidence_path)
     proposals = manifest.get("proposals", []) if not manifest.get("missing") else []
     class_counts: Counter[str] = Counter()
     support_total = 0
@@ -94,6 +96,8 @@ def flashsplat_stage(paths: dict[str, Path]) -> dict[str, Any]:
         "proposal_class_counts": dict(sorted(class_counts.items())),
         "proposal_support_gaussian_total": support_total,
         "proposal_support_dir": file_record(root / "proposal_supports"),
+        "class_evidence_manifest": file_record(class_evidence_path),
+        "class_evidence_class_count": len(class_evidence.get("classes", [])),
     }
 
 

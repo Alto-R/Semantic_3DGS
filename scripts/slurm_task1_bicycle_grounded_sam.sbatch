@@ -153,6 +153,8 @@ run_stage 02_flashsplat \
     --mask-batch-size "${MASK_BATCH_SIZE}" \
     --max-masks-per-view "${MAX_DETECTIONS_PER_VIEW}" \
     --support-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
+    --write-class-evidence \
+    --class-evidence-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
     --min-support-gaussians 250
 
 run_stage 03_semantic_fusion \
@@ -175,6 +177,9 @@ run_stage 03_semantic_fusion \
     --max-groups 96 \
     --assignment-reliability-views 2 \
     --assignment-min-quality 0.08 \
+    --class-evidence-dir "${PROPOSAL_DIR}/class_evidence" \
+    --class-evidence-min-positive-views 2 \
+    --class-evidence-min-ratio 0.50 \
     --spatial-prune-thing-islands \
     --spatial-voxel-scale-multiplier 4 \
     --spatial-min-voxel-size 0.01 \

@@ -252,6 +252,7 @@ render selected 3DGS views
 -> run SAM on GroundingDINO boxes to get semantic masks
 -> lift each semantic mask to sparse Gaussian supports with FlashSplat
 -> discard negligible FlashSplat support and fuse same-class evidence across views
+-> accumulate positive and negative per-class visibility across the rendered views
 -> assign Gaussian ownership by confidence-weighted multi-view agreement
 -> prune tiny/low-confidence final labels automatically
 -> remove disconnected 3D islands from thing labels using adaptive Gaussian-scale voxels
@@ -298,6 +299,8 @@ Active semantic scripts:
   - writes sparse Gaussian support files per semantic mask proposal
   - rejects negligible raster contributions with a default support threshold of
     `0.05`
+  - records positive views inside each class mask and negative views where the
+    same Gaussian contributes outside that mask
   - preserves `class`, `phrase`, and confidence metadata
 
 - `scripts/cluster_semantic_flashsplat_proposals.py`
@@ -306,6 +309,8 @@ Active semantic scripts:
   - prunes tiny final labels after 3D assignment
   - creates instance labels such as `bicycle_01`, `tree_02`, `bench_01`
   - resolves ambiguous ownership using confidence-weighted multi-view support
+  - requires thing-label Gaussians to have at least two positive views and a
+    positive visibility ratio of at least `0.50`
   - penalizes one-view groups and uses class priority only as an exact tie-break
   - the bicycle quality pass requires at least two proposals per group and a
     minimum ownership quality of `0.08` to suppress one-view background leakage
