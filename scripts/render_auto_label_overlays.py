@@ -25,24 +25,19 @@ from flashsplat_cameras import (
     selected_camera_items,
     tensor_to_rgb_array,
 )
+from semantic_palette import load_label_items, normalize_classes, palette_records, rgb_for_label
 
 
-def label_color(label_id: int) -> np.ndarray:
-    return np.asarray(
-        [
-            ((37 * label_id) % 255) / 255.0,
-            ((97 * (label_id + 3)) % 255) / 255.0,
-            ((173 * (label_id + 5)) % 255) / 255.0,
-        ],
-        dtype=np.float32,
-    )
-
-
-def label_ids_from_map(label_map: Dict[str, Any], max_labels: int) -> List[int]:
+def label_ids_from_map(
+    label_map: Dict[str, Any],
+    max_labels: int,
+    focus_classes: set[str],
+) -> List[int]:
     ids = [
         int(item["id"])
         for item in label_map.get("labels", [])
         if int(item.get("id", 0)) > 0
+        and (not focus_classes or str(item.get("class", "")).lower() in focus_classes)
     ]
     ids = sorted(ids)
     if max_labels > 0:
@@ -50,10 +45,14 @@ def label_ids_from_map(label_map: Dict[str, Any], max_labels: int) -> List[int]:
     return ids
 
 
-def color_tensor_from_labels(labels: np.ndarray, label_ids: Iterable[int]) -> torch.Tensor:
+def color_tensor_from_labels(
+    labels: np.ndarray,
+    label_ids: Iterable[int],
+    label_items: Dict[int, Dict[str, Any]],
+) -> torch.Tensor:
     colors = np.zeros((labels.shape[0], 3), dtype=np.float32)
     for label_id in label_ids:
-        colors[labels == label_id] = label_color(label_id)
+        colors[labels == label_id] = np.asarray(rgb_for_label(label_id, label_items), dtype=np.float32)
     return torch.from_numpy(colors).to(device="cuda", dtype=torch.float32)
 
 
@@ -85,6 +84,7 @@ def main() -> None:
     parser.add_argument("--count", default=10, type=int)
     parser.add_argument("--max-width", default=320, type=int)
     parser.add_argument("--max-labels", default=64, type=int)
+    parser.add_argument("--focus-classes", default="")
     parser.add_argument("--overlay-alpha", default=0.55, type=float)
     parser.add_argument("--white-background", action="store_true")
     args = parser.parse_args()
@@ -97,7 +97,9 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     labels = np.load(args.labels_npy).astype(np.int32)
     label_map = json.loads(args.label_map.read_text(encoding="utf-8"))
-    label_ids = label_ids_from_map(label_map, args.max_labels)
+    label_items = load_label_items(args.label_map)
+    focus_classes = normalize_classes(args.focus_classes)
+    label_ids = label_ids_from_map(label_map, args.max_labels, focus_classes)
     if not label_ids:
         raise ValueError("No nonzero labels found in label map")
 
@@ -108,7 +110,7 @@ def main() -> None:
     gaussians = load_gaussians(modules, ply_path, args.sh_degree)
     pipeline = default_pipeline()
     background = background_tensor(args.white_background)
-    colors_precomp = color_tensor_from_labels(labels, label_ids)
+    colors_precomp = color_tensor_from_labels(labels, label_ids, label_items)
 
     manifest = {
         "model_path": str(args.model_path),
@@ -116,6 +118,8 @@ def main() -> None:
         "labels_npy": str(args.labels_npy),
         "label_map": str(args.label_map),
         "label_ids": label_ids,
+        "focus_classes": sorted(focus_classes),
+        "palette": palette_records(label_ids, label_items),
         "frames": [],
     }
 

@@ -17,15 +17,33 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def file_record(path: Path) -> dict[str, Any]:
+    record = {"path": str(path), "exists": path.exists(), "bytes": 0}
+    if path.exists() and path.is_file():
+        record["bytes"] = path.stat().st_size
+    elif path.exists() and path.is_dir():
+        record["file_count"] = sum(1 for item in path.rglob("*") if item.is_file())
+    return record
+
+
+def first_path(output_dir: Path, *relative_paths: str) -> Path:
+    candidates = [output_dir / relative for relative in relative_paths]
+    return next((path for path in candidates if path.exists()), candidates[0])
+
+
+def run_paths(output_dir: Path) -> dict[str, Path]:
     return {
-        "path": str(path),
-        "exists": path.exists(),
-        "bytes": path.stat().st_size if path.exists() else 0,
+        "ground": first_path(output_dir, "stages/01_grounded_sam", "grounded_sam"),
+        "proposals": first_path(output_dir, "stages/02_flashsplat", "flashsplat_proposals"),
+        "fusion": first_path(output_dir, "stages/03_semantic_fusion", "."),
+        "deliverables": first_path(output_dir, "deliverables", "."),
+        "visualizations": first_path(output_dir, "visualizations", "."),
+        "validation": first_path(output_dir, "validation", "."),
     }
 
 
-def grounded_sam_stage(output_dir: Path) -> dict[str, Any]:
-    manifest_path = output_dir / "grounded_sam" / "grounded_sam_manifest.json"
+def grounded_sam_stage(paths: dict[str, Path]) -> dict[str, Any]:
+    root = paths["ground"]
+    manifest_path = root / "grounded_sam_manifest.json"
     manifest = read_json(manifest_path)
     frames = manifest.get("frames", []) if not manifest.get("missing") else []
     class_counts: Counter[str] = Counter()
@@ -36,23 +54,31 @@ def grounded_sam_stage(output_dir: Path) -> dict[str, Any]:
             phrase = str(mask.get("phrase", "")).strip()
             if phrase:
                 phrase_counts[phrase] += 1
+    mask_stack_dir = root / "mask_stacks"
+    if not mask_stack_dir.exists():
+        mask_stack_dir = root / "grounded_sam_masks"
+    overlay_dir = root / "overlays"
+    if not overlay_dir.exists():
+        overlay_dir = root / "grounded_sam_overlays"
     return {
         "name": "GroundingDINO + SAM masks",
         "manifest": file_record(manifest_path),
         "frame_count": len(frames),
+        "selected_camera_indices": manifest.get("selected_camera_indices", []),
         "raw_detection_count": sum(int(frame.get("raw_detection_count", 0)) for frame in frames),
         "kept_mask_count": sum(int(frame.get("kept_mask_count", 0)) for frame in frames),
         "class_counts": dict(sorted(class_counts.items())),
         "top_phrases": dict(phrase_counts.most_common(20)),
-        "rgb_render_dir": file_record(output_dir / "grounded_sam" / "rgb_renders"),
-        "mask_dir": file_record(output_dir / "grounded_sam" / "grounded_sam_masks"),
-        "overlay_dir": file_record(output_dir / "grounded_sam" / "grounded_sam_overlays"),
-        "contact_sheet": file_record(output_dir / "grounded_sam_contact_sheet.png"),
+        "rgb_render_dir": file_record(root / "rgb_renders"),
+        "mask_stack_dir": file_record(mask_stack_dir),
+        "binary_mask_dir": file_record(root / "binary_masks"),
+        "overlay_dir": file_record(overlay_dir),
     }
 
 
-def flashsplat_stage(output_dir: Path) -> dict[str, Any]:
-    manifest_path = output_dir / "flashsplat_proposals" / "proposal_manifest.json"
+def flashsplat_stage(paths: dict[str, Path]) -> dict[str, Any]:
+    root = paths["proposals"]
+    manifest_path = root / "proposal_manifest.json"
     manifest = read_json(manifest_path)
     proposals = manifest.get("proposals", []) if not manifest.get("missing") else []
     class_counts: Counter[str] = Counter()
@@ -67,18 +93,18 @@ def flashsplat_stage(output_dir: Path) -> dict[str, Any]:
         "proposal_count": len(proposals),
         "proposal_class_counts": dict(sorted(class_counts.items())),
         "proposal_support_gaussian_total": support_total,
-        "proposal_support_dir": file_record(output_dir / "flashsplat_proposals" / "proposal_supports"),
+        "proposal_support_dir": file_record(root / "proposal_supports"),
     }
 
 
-def semantic_fusion_stage(output_dir: Path) -> dict[str, Any]:
-    summary_path = output_dir / "semantic_group_summary.json"
+def semantic_fusion_stage(paths: dict[str, Path]) -> dict[str, Any]:
+    summary_path = paths["fusion"] / "semantic_group_summary.json"
     summary = read_json(summary_path)
-    groups = summary.get("groups", []) if not summary.get("missing") else []
     pruning = summary.get("pruning", {}) if not summary.get("missing") else {}
     return {
         "name": "3D semantic fusion and automatic pruning",
         "summary": file_record(summary_path),
+        "labels_npy": file_record(paths["fusion"] / "gaussian_labels.npy"),
         "proposal_count": summary.get("proposal_count", 0),
         "group_count": summary.get("group_count", 0),
         "label_histogram": summary.get("label_histogram", {}),
@@ -87,30 +113,31 @@ def semantic_fusion_stage(output_dir: Path) -> dict[str, Any]:
             "pruned_group_count": pruning.get("pruned_group_count", 0),
             "pruned_groups": pruning.get("pruned_groups", []),
         },
-        "groups": groups,
+        "groups": summary.get("groups", []),
     }
 
 
-def export_stage(output_dir: Path) -> dict[str, Any]:
+def export_stage(paths: dict[str, Path]) -> dict[str, Any]:
+    deliverables = paths["deliverables"]
+    visualizations = paths["visualizations"]
+    ply_dir = visualizations / "ply" if (visualizations / "ply").exists() else visualizations
+    overlay_root = visualizations / "overlays"
+    contact_root = visualizations / "contact_sheets"
     return {
         "name": "Semantic PLY and debug exports",
-        "semantic_ply": file_record(output_dir / "semantic_point_cloud.ply"),
-        "labels_npy": file_record(output_dir / "gaussian_labels.npy"),
-        "label_map": file_record(output_dir / "label_map.json"),
-        "semantic_ply_inspection": file_record(output_dir / "semantic_point_cloud_inspection.json"),
-        "debug_color_ply": file_record(output_dir / "semantic_point_cloud_debug_colors.ply"),
-        "debug_color_metadata": file_record(output_dir / "semantic_point_cloud_debug_colors.json"),
-        "debug_color_inspection": file_record(output_dir / "semantic_point_cloud_debug_colors_inspection.json"),
-        "supersplat_debug_ply": file_record(output_dir / "semantic_point_cloud_supersplat_debug.ply"),
-        "supersplat_debug_metadata": file_record(output_dir / "semantic_point_cloud_supersplat_debug.json"),
-        "supersplat_debug_inspection": file_record(output_dir / "semantic_point_cloud_supersplat_debug_inspection.json"),
-        "semantic_overlay_dir": file_record(output_dir / "semantic_label_overlay_renders"),
-        "semantic_overlay_contact_sheet": file_record(output_dir / "semantic_label_overlay_contact_sheet.png"),
+        "semantic_ply": file_record(deliverables / "semantic_point_cloud.ply"),
+        "label_map": file_record(deliverables / "label_map.json"),
+        "debug_color_ply": file_record(ply_dir / "semantic_point_cloud_rgb_debug.ply"),
+        "supersplat_debug_ply": file_record(ply_dir / "semantic_point_cloud_supersplat_debug.ply"),
+        "bicycle_bench_debug_ply": file_record(ply_dir / "bicycle_vs_bench_supersplat_debug.ply"),
+        "semantic_overlay_dir": file_record(overlay_root / "semantic_labels"),
+        "bicycle_bench_overlay_dir": file_record(overlay_root / "bicycle_vs_bench"),
+        "contact_sheet_dir": file_record(contact_root),
     }
 
 
-def validation_stage(output_dir: Path) -> dict[str, Any]:
-    validation_path = output_dir / "task1_validation.json"
+def validation_stage(paths: dict[str, Path]) -> dict[str, Any]:
+    validation_path = paths["validation"] / "task1_validation.json"
     validation = read_json(validation_path)
     return {
         "name": "Task 1 output validation",
@@ -123,14 +150,16 @@ def validation_stage(output_dir: Path) -> dict[str, Any]:
 
 
 def build_summary(output_dir: Path) -> dict[str, Any]:
+    paths = run_paths(output_dir)
     return {
         "output_dir": str(output_dir),
+        "layout": {name: str(path) for name, path in paths.items()},
         "stages": {
-            "groundingdino_sam": grounded_sam_stage(output_dir),
-            "flashsplat": flashsplat_stage(output_dir),
-            "semantic_fusion_pruning": semantic_fusion_stage(output_dir),
-            "exports": export_stage(output_dir),
-            "validation": validation_stage(output_dir),
+            "groundingdino_sam": grounded_sam_stage(paths),
+            "flashsplat": flashsplat_stage(paths),
+            "semantic_fusion_pruning": semantic_fusion_stage(paths),
+            "exports": export_stage(paths),
+            "validation": validation_stage(paths),
         },
     }
 
@@ -139,10 +168,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--summary-name", default="pipeline_run_summary.json")
+    parser.add_argument("--summary-path", type=Path)
     args = parser.parse_args()
 
     summary = build_summary(args.output_dir)
-    summary_path = args.output_dir / args.summary_name
+    summary_path = args.summary_path or args.output_dir / args.summary_name
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"wrote {summary_path}")
 

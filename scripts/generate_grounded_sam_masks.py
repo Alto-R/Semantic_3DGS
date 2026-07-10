@@ -362,6 +362,25 @@ def save_overlay(rgb: np.ndarray, detections: list[Detection], output_path: Path
     image.save(output_path)
 
 
+def safe_filename_part(value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", value.strip()).strip("_")
+    return cleaned or "unknown"
+
+
+def save_binary_masks(
+    detections: list[Detection],
+    stem: str,
+    output_dir: Path,
+) -> list[str]:
+    filenames: list[str] = []
+    for index, detection in enumerate(detections):
+        filename = f"{stem}__mask_{index:03d}__{safe_filename_part(detection.class_name)}.png"
+        mask_image = Image.fromarray(detection.mask.astype(np.uint8) * 255, mode="L")
+        mask_image.save(output_dir / filename)
+        filenames.append(filename)
+    return filenames
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True, type=Path)
@@ -418,9 +437,10 @@ def main() -> None:
     text_prompt = text_prompt_from_specs(specs, args.text_prompt or None)
 
     rgb_dir = args.output_dir / "rgb_renders"
-    mask_dir = args.output_dir / "grounded_sam_masks"
-    overlay_dir = args.output_dir / "grounded_sam_overlays"
-    for directory in (rgb_dir, mask_dir, overlay_dir):
+    mask_dir = args.output_dir / "mask_stacks"
+    binary_mask_dir = args.output_dir / "binary_masks"
+    overlay_dir = args.output_dir / "overlays"
+    for directory in (rgb_dir, mask_dir, binary_mask_dir, overlay_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     cameras = load_cameras(args.model_path)
@@ -445,6 +465,15 @@ def main() -> None:
         "ply_path": str(ply_path),
         "iteration": args.iteration,
         "max_width": args.max_width,
+        "requested_view_count": args.count,
+        "requested_camera_indices": args.camera_indices,
+        "selected_camera_indices": [camera_index for camera_index, _ in selected_items],
+        "output_directories": {
+            "rgb_renders": str(rgb_dir),
+            "mask_stacks": str(mask_dir),
+            "binary_masks": str(binary_mask_dir),
+            "overlays": str(overlay_dir),
+        },
         "text_prompt": text_prompt,
         "classes": [
             {"class": spec.name, "prompts": list(spec.prompts), "type": spec.kind}
@@ -516,11 +545,13 @@ def main() -> None:
             if detections:
                 mask_stack = np.stack([detection.mask.astype(np.uint8) for detection in detections], axis=0)
             np.savez_compressed(mask_dir / f"{stem}.npz", masks=mask_stack)
+            binary_mask_files = save_binary_masks(detections, stem, binary_mask_dir)
             save_overlay(rgb, detections, overlay_dir / filename)
 
             frame_record = {
                 "file": filename,
                 "mask_file": f"{stem}.npz",
+                "binary_mask_files": binary_mask_files,
                 "camera_index": camera_index,
                 "camera_id": int(camera_json["id"]),
                 "image_name": camera_json.get("img_name", ""),
@@ -528,7 +559,13 @@ def main() -> None:
                 "render_height": int(camera.image_height),
                 "raw_detection_count": int(boxes.shape[0]),
                 "kept_mask_count": int(mask_stack.shape[0]),
-                "masks": [record_for_detection(detection, index) for index, detection in enumerate(detections)],
+                "masks": [
+                    {
+                        **record_for_detection(detection, index),
+                        "binary_mask_file": binary_mask_files[index],
+                    }
+                    for index, detection in enumerate(detections)
+                ],
             }
             manifest["frames"].append(frame_record)
             print(

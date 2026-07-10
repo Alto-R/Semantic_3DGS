@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import colorsys
 import json
 import shutil
 from pathlib import Path
@@ -13,6 +12,12 @@ from typing import Any
 import numpy as np
 
 from ply_utils import element_stride, read_ply_header, scalar_property_size
+from semantic_palette import (
+    load_label_items,
+    normalize_classes,
+    palette_records,
+    rgb_for_label,
+)
 
 
 SH_C0 = 0.28209479177387814
@@ -62,19 +67,19 @@ def vertex_property_offsets(input_ply: Path) -> tuple[dict[str, tuple[int, np.dt
     return offsets, offset
 
 
-def rgb_for_label(label_id: int) -> tuple[float, float, float]:
-    if label_id == 0:
-        return (0.10, 0.10, 0.10)
-    hue = (label_id * 0.618033988749895) % 1.0
-    return colorsys.hsv_to_rgb(hue, 0.78, 0.96)
-
-
 def sh_dc_for_rgb(rgb: tuple[float, float, float]) -> np.ndarray:
     return (np.asarray(rgb, dtype=np.float32) - 0.5) / SH_C0
 
 
-def collect_label_colors(labels: np.ndarray) -> dict[int, np.ndarray]:
-    return {int(label_id): sh_dc_for_rgb(rgb_for_label(int(label_id))) for label_id in np.unique(labels)}
+def collect_label_colors(
+    labels: np.ndarray,
+    label_items: dict[int, dict[str, Any]],
+    focus_classes: set[str],
+) -> dict[int, np.ndarray]:
+    return {
+        int(label_id): sh_dc_for_rgb(rgb_for_label(int(label_id), label_items, focus_classes))
+        for label_id in np.unique(labels)
+    }
 
 
 def mutable_column(
@@ -94,6 +99,7 @@ def export_supersplat_debug_ply(
     label_property: str,
     batch_size: int,
     overwrite: bool,
+    focus_classes: set[str],
 ) -> dict[str, Any]:
     header = read_ply_header(input_ply)
     vertex = header.element("vertex")
@@ -113,6 +119,7 @@ def export_supersplat_debug_ply(
         raise ValueError(f"{input_ply} is missing required SuperSplat color properties: {missing}")
 
     label_offset, label_dtype = offsets[label_property]
+    label_items = load_label_items(label_map)
     dc_offsets = [offsets[f"f_dc_{index}"] for index in range(3)]
     for name, (_, dtype) in zip(["f_dc_0", "f_dc_1", "f_dc_2"], dc_offsets):
         if dtype.kind != "f":
@@ -139,7 +146,7 @@ def export_supersplat_debug_ply(
 
             labels = mutable_column(blob, count, stride, label_offset, label_dtype).astype(np.int64)
             seen_labels.update(int(label_id) for label_id in np.unique(labels))
-            dc_by_label = collect_label_colors(labels)
+            dc_by_label = collect_label_colors(labels, label_items, focus_classes)
 
             for label_id, dc_color in dc_by_label.items():
                 selected = labels == label_id
@@ -153,11 +160,6 @@ def export_supersplat_debug_ply(
             target.write(blob)
         shutil.copyfileobj(source, target)
 
-    label_map_ids: set[int] = set()
-    if label_map is not None and label_map.exists():
-        data = json.loads(label_map.read_text(encoding="utf-8"))
-        label_map_ids = {int(item["id"]) for item in data.get("labels", []) if "id" in item}
-
     return {
         "input_ply": str(input_ply),
         "output_ply": str(output_ply),
@@ -165,16 +167,10 @@ def export_supersplat_debug_ply(
         "vertex_count": vertex.count,
         "label_property": label_property,
         "color_mode": "supersplat_sh_dc",
+        "focus_classes": sorted(focus_classes),
         "zeroed_f_rest_property_count": len(rest_offsets),
         "label_count": len(seen_labels),
-        "labels": [
-            {
-                "id": label_id,
-                "rgb": [round(channel, 4) for channel in rgb_for_label(label_id)],
-                "in_label_map": label_id in label_map_ids,
-            }
-            for label_id in sorted(seen_labels)
-        ],
+        "palette": palette_records(seen_labels, label_items, focus_classes),
     }
 
 
@@ -186,6 +182,7 @@ def main() -> None:
     parser.add_argument("--label-property", default="label")
     parser.add_argument("--batch-size", default=100_000, type=int)
     parser.add_argument("--metadata-json", type=Path)
+    parser.add_argument("--focus-classes", default="")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -196,6 +193,7 @@ def main() -> None:
         label_property=args.label_property,
         batch_size=args.batch_size,
         overwrite=args.overwrite,
+        focus_classes=normalize_classes(args.focus_classes),
     )
     metadata_path = args.metadata_json or args.output_ply.with_suffix(".json")
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")

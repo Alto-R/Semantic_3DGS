@@ -100,6 +100,27 @@ def load_stuff_classes(path: Path | None, override: str) -> set[str]:
     return stuff
 
 
+def load_assignment_priorities(path: Path | None, override: str) -> dict[str, int]:
+    names: list[str] = []
+    if override:
+        names = [normalize_class_name(item) for item in override.split(",") if item.strip()]
+    elif path is not None and path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            names = [normalize_class_name(item) for item in data.get("assignment_priority", [])]
+    return {class_name: len(names) - index for index, class_name in enumerate(names)}
+
+
+def group_order_key(group: SemanticGroup, priorities: dict[str, int]) -> tuple[Any, ...]:
+    return (
+        0 if group.is_stuff else 1,
+        priorities.get(group.class_name, 0),
+        group.score,
+        group.proposal_count,
+        group.gaussian_count,
+    )
+
+
 def load_proposals(
     manifest_path: Path,
     support_dir: Path,
@@ -220,6 +241,7 @@ def filter_groups(
     min_group_gaussians: int,
     min_group_proposals: int,
     max_groups: int,
+    priorities: dict[str, int],
 ) -> list[SemanticGroup]:
     kept = [
         group
@@ -227,15 +249,7 @@ def filter_groups(
         if group.gaussian_count >= min_group_gaussians
         and group.proposal_count >= min_group_proposals
     ]
-    kept.sort(
-        key=lambda group: (
-            0 if group.is_stuff else 1,
-            group.score,
-            group.proposal_count,
-            group.gaussian_count,
-        ),
-        reverse=True,
-    )
+    kept.sort(key=lambda group: group_order_key(group, priorities), reverse=True)
     if max_groups > 0:
         kept = kept[:max_groups]
     for label_id, group in enumerate(kept, start=1):
@@ -250,18 +264,13 @@ def final_label_name(group: SemanticGroup, class_counts: dict[str, int], class_o
     return f"{group.class_name}_{class_ordinals[group.class_name]:02d}"
 
 
-def assign_labels(vertex_count: int, groups: list[SemanticGroup]) -> np.ndarray:
+def assign_labels(
+    vertex_count: int,
+    groups: list[SemanticGroup],
+    priorities: dict[str, int],
+) -> np.ndarray:
     labels = np.zeros((vertex_count,), dtype=np.int32)
-    ordered = sorted(
-        groups,
-        key=lambda group: (
-            0 if group.is_stuff else 1,
-            group.score,
-            group.proposal_count,
-            group.gaussian_count,
-        ),
-        reverse=True,
-    )
+    ordered = sorted(groups, key=lambda group: group_order_key(group, priorities), reverse=True)
     for group in ordered:
         unassigned = labels[group.indices] == 0
         labels[group.indices[unassigned]] = group.group_id
@@ -407,6 +416,7 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--class-config", type=Path)
     parser.add_argument("--stuff-classes", default="")
+    parser.add_argument("--class-priority", default="")
     parser.add_argument("--iteration", default=30000, type=int)
     parser.add_argument("--min-proposal-gaussians", default=500, type=int)
     parser.add_argument("--max-proposal-gaussians", default=0, type=int)
@@ -421,6 +431,10 @@ def main() -> None:
     parser.add_argument("--min-label-score", default=0.0, type=float)
     parser.add_argument("--scene", default="")
     parser.add_argument("--semantic-ply-name", default="semantic_point_cloud.ply")
+    parser.add_argument("--labels-path", type=Path)
+    parser.add_argument("--label-map-path", type=Path)
+    parser.add_argument("--summary-path", type=Path)
+    parser.add_argument("--semantic-ply-path", type=Path)
     parser.add_argument("--require-class", action="store_true", default=True)
     parser.add_argument("--allow-unknown-class", dest="require_class", action="store_false")
     parser.add_argument("--overwrite", action="store_true")
@@ -439,6 +453,7 @@ def main() -> None:
         raise ValueError(f"{ply_path} has no vertex element")
 
     stuff_classes = load_stuff_classes(args.class_config, args.stuff_classes)
+    assignment_priorities = load_assignment_priorities(args.class_config, args.class_priority)
     proposals = load_proposals(
         manifest_path,
         support_dir,
@@ -448,8 +463,14 @@ def main() -> None:
     )
     groups = cluster_class_proposals(proposals, stuff_classes, args.merge_iou, args.containment_threshold)
     groups = merge_stuff_groups(groups, stuff_classes)
-    groups = filter_groups(groups, args.min_group_gaussians, args.min_group_proposals, args.max_groups)
-    labels = assign_labels(vertex.count, groups)
+    groups = filter_groups(
+        groups,
+        args.min_group_gaussians,
+        args.min_group_proposals,
+        args.max_groups,
+        assignment_priorities,
+    )
+    labels = assign_labels(vertex.count, groups, assignment_priorities)
     labels, groups = prune_and_compact_groups(labels, groups)
     labels, groups, pruned_groups = prune_assigned_groups(
         labels,
@@ -462,10 +483,12 @@ def main() -> None:
     labels, groups = prune_and_compact_groups(labels, groups)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    labels_path = args.output_dir / "gaussian_labels.npy"
-    label_map_path = args.output_dir / "label_map.json"
-    summary_path = args.output_dir / "semantic_group_summary.json"
-    semantic_ply = args.output_dir / args.semantic_ply_name
+    labels_path = args.labels_path or args.output_dir / "gaussian_labels.npy"
+    label_map_path = args.label_map_path or args.output_dir / "label_map.json"
+    summary_path = args.summary_path or args.output_dir / "semantic_group_summary.json"
+    semantic_ply = args.semantic_ply_path or args.output_dir / args.semantic_ply_name
+    for path in [labels_path, label_map_path, summary_path, semantic_ply]:
+        path.parent.mkdir(parents=True, exist_ok=True)
     for path in [labels_path, label_map_path, summary_path, semantic_ply]:
         if path.exists() and not args.overwrite:
             raise FileExistsError(f"{path} exists; pass --overwrite to replace it")
@@ -494,6 +517,7 @@ def main() -> None:
             "min_assigned_thing_gaussians": args.min_assigned_thing_gaussians,
             "min_assigned_stuff_gaussians": args.min_assigned_stuff_gaussians,
             "min_label_score": args.min_label_score,
+            "assignment_priority": assignment_priorities,
         },
         "proposal_count": len(proposals),
         "group_count": len(groups),

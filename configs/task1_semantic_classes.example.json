@@ -1,4 +1,20 @@
 {
+  "assignment_priority": [
+    "bicycle",
+    "person",
+    "car",
+    "pole",
+    "sign",
+    "fence",
+    "bench",
+    "tree",
+    "building",
+    "ground",
+    "road",
+    "sidewalk",
+    "vegetation",
+    "sky"
+  ],
   "classes": [
     {
       "class": "bicycle",

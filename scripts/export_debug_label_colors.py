@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 
 from ply_utils import element_stride, read_ply_header, scalar_property_size
+from semantic_palette import load_label_items, palette_records, rgb8_for_label
 
 
 SCALAR_DTYPES = {
@@ -67,21 +68,13 @@ def insert_rgb_properties(lines: list[str]) -> bytes:
     return ("\n".join(new_lines) + "\n").encode("ascii")
 
 
-def label_color(label_id: int) -> list[int]:
-    if label_id == 0:
-        return [90, 90, 90]
-    value = (label_id * 2654435761) & 0xFFFFFFFF
-    return [
-        64 + ((value >> 0) & 0x7F),
-        64 + ((value >> 8) & 0x7F),
-        64 + ((value >> 16) & 0x7F),
-    ]
-
-
-def colors_for_labels(labels: np.ndarray) -> np.ndarray:
+def colors_for_labels(labels: np.ndarray, label_items: dict[int, dict[str, Any]]) -> np.ndarray:
     colors = np.zeros((labels.shape[0], 3), dtype=np.uint8)
     for label_id in np.unique(labels.astype(np.int64)):
-        colors[labels == label_id] = np.asarray(label_color(int(label_id)), dtype=np.uint8)
+        colors[labels == label_id] = np.asarray(
+            rgb8_for_label(int(label_id), label_items),
+            dtype=np.uint8,
+        )
     return colors
 
 
@@ -123,6 +116,7 @@ def export_debug_ply(
         raise FileExistsError(f"{output_ply} exists; pass --overwrite to replace it")
 
     label_offset, label_dtype = label_property_offset(input_ply, property_name)
+    label_items = load_label_items(label_map)
     stride = element_stride(vertex)
     new_stride = stride + 3
     new_header = insert_rgb_properties(header.lines)
@@ -146,17 +140,12 @@ def export_debug_ply(
                 strides=(stride,),
             ).astype(np.int64)
             seen_labels.update(int(label_id) for label_id in np.unique(labels))
-            colors = colors_for_labels(labels)
+            colors = colors_for_labels(labels, label_items)
             combined = np.empty((count, new_stride), dtype=np.uint8)
             combined[:, :stride] = vertex_bytes
             combined[:, stride:] = colors
             target.write(combined.tobytes())
         shutil.copyfileobj(source, target)
-
-    label_map_ids: set[int] = set()
-    if label_map is not None and label_map.exists():
-        data = json.loads(label_map.read_text(encoding="utf-8"))
-        label_map_ids = {int(item["id"]) for item in data.get("labels", []) if "id" in item}
 
     return {
         "input_ply": str(input_ply),
@@ -165,10 +154,7 @@ def export_debug_ply(
         "vertex_count": vertex.count,
         "label_property": property_name,
         "label_count": len(seen_labels),
-        "labels": [
-            {"id": label_id, "rgb": label_color(label_id), "in_label_map": label_id in label_map_ids}
-            for label_id in sorted(seen_labels)
-        ],
+        "palette": palette_records(seen_labels, label_items),
     }
 
 

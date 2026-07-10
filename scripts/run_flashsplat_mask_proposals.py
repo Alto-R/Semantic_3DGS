@@ -60,7 +60,9 @@ def resolve_mask_manifest(input_dir: Path, manifest_name: str, mask_dir_name: st
     if mask_dir_name:
         mask_dir = input_dir / mask_dir_name
     elif manifest_path.name == "grounded_sam_manifest.json":
-        mask_dir = input_dir / "grounded_sam_masks"
+        mask_dir = input_dir / "mask_stacks"
+        if not mask_dir.exists():
+            mask_dir = input_dir / "grounded_sam_masks"
     else:
         mask_dir = input_dir / "sam_auto_masks"
     if not mask_dir.exists():

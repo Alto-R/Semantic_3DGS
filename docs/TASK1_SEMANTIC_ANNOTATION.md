@@ -263,7 +263,8 @@ This path automatically carries class names from GroundingDINO into the final
 configs/task1_semantic_classes.example.json
 ```
 
-Run the bicycle semantic pilot:
+Run the bicycle semantic quality pass. The tracked defaults are 50 evenly
+spaced views, 960-pixel render width, and up to 32 detections per view:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
@@ -284,7 +285,9 @@ Active semantic scripts:
   - renders views from `cameras.json`
   - runs GroundingDINO with the configured class vocabulary
   - runs SAM on each detected box
-  - writes per-view binary mask stacks plus semantic metadata
+  - writes compressed per-view mask stacks for FlashSplat
+  - writes every SAM detection as an 8-bit black/white PNG (`0` background,
+    `255` mask) under `binary_masks/`
   - writes semantic mask overlays with class names and detection scores
 
 - `scripts/run_flashsplat_mask_proposals.py`
@@ -298,6 +301,8 @@ Active semantic scripts:
   - merges stuff classes such as `ground`, `road`, `sidewalk`, and `sky`
   - prunes tiny final labels after 3D assignment
   - creates instance labels such as `bicycle_01`, `tree_02`, `bench_01`
+  - applies class-aware ownership priority for ambiguous Gaussian supports;
+    the configured bicycle-before-bench rule protects thin bicycle geometry
   - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
 
 - `scripts/export_debug_label_colors.py`
@@ -310,6 +315,11 @@ Active semantic scripts:
   - bakes label colors into `f_dc_0`, `f_dc_1`, and `f_dc_2`
   - clears `f_rest_*` so SuperSplat shows semantic label colors instead of the
     original 3DGS appearance
+  - can focus selected classes while dimming all other labels
+
+- `scripts/semantic_palette.py`
+  - provides one class-aware palette shared by overlays and debug PLYs
+  - uses red for bicycle and blue for bench in every validation artifact
 
 - `scripts/summarize_task1_semantic_run.py`
   - writes one `pipeline_run_summary.json` across mask generation, FlashSplat
@@ -318,31 +328,54 @@ Active semantic scripts:
 Expected semantic outputs:
 
 ```text
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/grounded_sam/
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/flashsplat_proposals/
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud.ply
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud_debug_colors.ply
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_point_cloud_supersplat_debug.ply
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/label_map.json
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/gaussian_labels.npy
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_group_summary.json
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/grounded_sam_contact_sheet.png
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/semantic_label_overlay_contact_sheet.png
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/task1_validation.json
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic/pipeline_run_summary.json
+bicycle_semantic/
+  stages/
+    01_grounded_sam/
+      rgb_renders/
+      mask_stacks/
+      binary_masks/
+      overlays/
+      grounded_sam_manifest.json
+    02_flashsplat/
+      proposal_supports/
+      proposal_manifest.json
+    03_semantic_fusion/
+      gaussian_labels.npy
+      semantic_group_summary.json
+  deliverables/
+    semantic_point_cloud.ply
+    label_map.json
+  visualizations/
+    ply/
+      semantic_point_cloud_rgb_debug.ply
+      semantic_point_cloud_supersplat_debug.ply
+      bicycle_vs_bench_supersplat_debug.ply
+    overlays/
+      semantic_labels/
+      bicycle_vs_bench/
+    contact_sheets/
+  validation/
+    semantic_point_cloud_inspection.json
+    task1_validation.json
+    pipeline_run_summary.json
+  logs/
 ```
 
-Per-stage logs are:
+Each executable stage also has its own text log under `logs/`. Machine-readable
+stage records are:
 
 ```text
-grounded_sam/grounded_sam_manifest.json
-flashsplat_proposals/proposal_manifest.json
-semantic_group_summary.json
-semantic_point_cloud_debug_colors.json
-semantic_point_cloud_supersplat_debug.json
-task1_validation.json
-pipeline_run_summary.json
+stages/01_grounded_sam/grounded_sam_manifest.json
+stages/02_flashsplat/proposal_manifest.json
+stages/03_semantic_fusion/semantic_group_summary.json
+visualizations/ply/*.json
+validation/task1_validation.json
+validation/pipeline_run_summary.json
 ```
+
+`RESET_OUTPUT=1` is the batch-script default. It recreates the scene output
+directory before every run so stale masks and proposals cannot leak into a new
+result. Set `RESET_OUTPUT=0` only while debugging a failed stage.
 
 Example final label map:
 
