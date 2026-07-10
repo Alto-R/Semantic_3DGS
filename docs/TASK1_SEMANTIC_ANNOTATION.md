@@ -256,6 +256,7 @@ render selected 3DGS views
 -> assign Gaussian ownership by confidence-weighted multi-view agreement
 -> prune tiny/low-confidence final labels automatically
 -> remove disconnected 3D islands from thing labels using adaptive Gaussian-scale voxels
+-> rebuild same-class thing instances from connected 3D components
 -> export label_map.json, semantic_point_cloud.ply, and debug artifacts
 ```
 
@@ -316,6 +317,10 @@ Active semantic scripts:
     minimum ownership quality of `0.08` to suppress one-view background leakage
   - removes small disconnected 3D components from thing labels while leaving
     ground, road, sky, vegetation, and other stuff classes unchanged
+  - consolidates same-class fragments that form one connected 3D component and
+    preserves disconnected components as separate persistent instance IDs
+  - records source-label contributions, component bounds, and before/after
+    instance counts in `semantic_group_summary.json`
   - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
 
 - `scripts/export_debug_label_colors.py`
@@ -389,6 +394,36 @@ validation/pipeline_run_summary.json
 `RESET_OUTPUT=1` is the batch-script default. It recreates the scene output
 directory before every run so stale masks and proposals cannot leak into a new
 result. Set `RESET_OUTPUT=0` only while debugging a failed stage.
+
+To test fusion or instance-consolidation changes without rerunning
+GroundingDINO, SAM, and FlashSplat, write to a separate output and reuse the
+accepted source stages:
+
+```bash
+sbatch --export=ALL,OUTPUT_NAME=bicycle_semantic_identity_test,REUSE_SOURCE_OUT=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic \
+  scripts/slurm_task1_bicycle_grounded_sam.sbatch
+```
+
+This mode symlinks the source mask/proposal stages into the test output, reruns
+fusion and all validation visualizations, and never modifies the source result.
+
+### Bicycle signed-evidence baseline
+
+Slurm job `92344` completed from commit `385f8ba` on the RTX 8000:
+
+- 50 evenly spaced views at 960-pixel width
+- 411 GroundingDINO + SAM masks and 399 FlashSplat proposals
+- signed evidence for 14 semantic classes
+- 6,131,954 Gaussians and 25 nonzero output labels
+- structural validation status `ok`
+- unlabeled ratio `0.6025267`
+
+Compared with spatial-only job `92331`, the signed negative evidence removes
+the visible bicycle-colored road streaks and bench-colored vegetation patches.
+The foreground silhouettes remain stable across the 50-view contact sheet.
+The remaining known issues are conservative unlabeled coverage and fragmented
+same-class instance IDs; the identity-test run above validates the automatic
+connected-component consolidation before it becomes the new baseline.
 
 Example final label map:
 

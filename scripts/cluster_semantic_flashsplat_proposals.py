@@ -397,22 +397,19 @@ def assign_labels(
     return labels
 
 
-def voxel_component_membership(
+def voxel_components(
     points: np.ndarray,
     voxel_size: float,
-    min_component_gaussians: int,
-    min_component_ratio: float,
-) -> tuple[np.ndarray, dict[str, Any]]:
+) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
     if voxel_size <= 0:
         raise ValueError("voxel_size must be positive")
     if points.ndim != 2 or points.shape[1] != 3:
         raise ValueError("points must have shape (N, 3)")
     if points.shape[0] == 0:
-        return np.zeros((0,), dtype=bool), {
+        return np.zeros((0,), dtype=np.int64), np.zeros((0,), dtype=np.int64), {
+            "voxel_count": 0,
             "component_count": 0,
-            "kept_component_count": 0,
             "largest_component_gaussians": 0,
-            "component_keep_threshold": 0,
         }
 
     voxel_coordinates = np.floor(points / voxel_size).astype(np.int64)
@@ -449,27 +446,43 @@ def voxel_component_membership(
         dtype=np.int64,
         count=voxels.shape[0],
     )
-    component_sizes = np.bincount(
-        voxel_roots,
-        weights=voxel_counts,
-        minlength=voxels.shape[0],
-    ).astype(np.int64)
-    active_roots = np.flatnonzero(component_sizes > 0)
-    largest = int(component_sizes[active_roots].max())
+    point_roots = voxel_roots[inverse]
+    _, point_components = np.unique(point_roots, return_inverse=True)
+    component_sizes = np.bincount(point_components).astype(np.int64)
+    largest = int(component_sizes.max())
+    return point_components, component_sizes, {
+        "voxel_count": int(voxels.shape[0]),
+        "component_count": int(component_sizes.shape[0]),
+        "largest_component_gaussians": largest,
+    }
+
+
+def voxel_component_membership(
+    points: np.ndarray,
+    voxel_size: float,
+    min_component_gaussians: int,
+    min_component_ratio: float,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    point_components, component_sizes, component_stats = voxel_components(points, voxel_size)
+    if component_sizes.shape[0] == 0:
+        return np.zeros((0,), dtype=bool), {
+            **component_stats,
+            "kept_component_count": 0,
+            "component_keep_threshold": 0,
+        }
+
+    largest = int(component_sizes.max())
     keep_threshold = max(
         max(1, min_component_gaussians),
         int(np.ceil(largest * max(0.0, min_component_ratio))),
     )
-    kept_roots = active_roots[component_sizes[active_roots] >= keep_threshold]
-    if kept_roots.shape[0] == 0:
-        kept_roots = np.asarray([active_roots[np.argmax(component_sizes[active_roots])]])
-    point_roots = voxel_roots[inverse]
-    keep = np.isin(point_roots, kept_roots)
+    kept_components = np.flatnonzero(component_sizes >= keep_threshold)
+    if kept_components.shape[0] == 0:
+        kept_components = np.asarray([int(np.argmax(component_sizes))])
+    keep = np.isin(point_components, kept_components)
     return keep, {
-        "voxel_count": int(voxels.shape[0]),
-        "component_count": int(active_roots.shape[0]),
-        "kept_component_count": int(kept_roots.shape[0]),
-        "largest_component_gaussians": largest,
+        **component_stats,
+        "kept_component_count": int(kept_components.shape[0]),
         "component_keep_threshold": keep_threshold,
     }
 
@@ -531,6 +544,166 @@ def prune_thing_label_islands(
             }
         )
     return labels, reports
+
+
+def merged_component_group(
+    group_id: int,
+    class_name: str,
+    assigned_indices: np.ndarray,
+    source_groups: list[SemanticGroup],
+    source_counts: np.ndarray,
+) -> SemanticGroup:
+    support_indices = np.unique(np.concatenate([group.indices for group in source_groups]))
+    merged = SemanticGroup(
+        group_id=group_id,
+        class_name=class_name,
+        indices=support_indices,
+        is_stuff=False,
+        assigned_count=int(assigned_indices.shape[0]),
+    )
+    merged.proposal_ids = sorted(
+        {proposal_id for group in source_groups for proposal_id in group.proposal_ids}
+    )
+    for group in source_groups:
+        merged.source_frames.update(group.source_frames)
+        merged.phrases.update(group.phrases)
+        merged.scores.extend(group.scores)
+
+    total = max(int(source_counts.sum()), 1)
+    merged.assignment_reliability = float(
+        sum(group.assignment_reliability * int(count) for group, count in zip(source_groups, source_counts))
+        / total
+    )
+    merged.assignment_peak_quality = max(
+        (group.assignment_peak_quality for group in source_groups),
+        default=0.0,
+    )
+    return merged
+
+
+def consolidate_thing_instances(
+    labels: np.ndarray,
+    groups: list[SemanticGroup],
+    vertex_data: np.memmap,
+    voxel_scale_multiplier: float,
+    min_voxel_size: float,
+    max_voxel_size: float,
+    min_component_gaussians: int,
+    min_component_ratio: float,
+) -> tuple[np.ndarray, list[SemanticGroup], list[dict[str, Any]]]:
+    """Rebuild thing instances from connected components across same-class labels."""
+
+    required = {"x", "y", "z", "scale_0", "scale_1", "scale_2"}
+    missing = sorted(required - set(vertex_data.dtype.names or ()))
+    if missing:
+        raise ValueError(f"PLY is missing instance-consolidation properties: {missing}")
+
+    group_by_id = {group.group_id: group for group in groups}
+    next_group_id = max(group_by_id, default=0) + 1
+    rebuilt: list[SemanticGroup] = []
+    reports: list[dict[str, Any]] = []
+    processed_classes: set[str] = set()
+
+    for group in groups:
+        if group.is_stuff:
+            rebuilt.append(group)
+            continue
+        if group.class_name in processed_classes:
+            continue
+        processed_classes.add(group.class_name)
+
+        class_groups = [
+            candidate
+            for candidate in groups
+            if not candidate.is_stuff and candidate.class_name == group.class_name
+        ]
+        class_group_ids = np.asarray([candidate.group_id for candidate in class_groups], dtype=np.int32)
+        class_indices = np.flatnonzero(np.isin(labels, class_group_ids))
+        if class_indices.shape[0] == 0:
+            continue
+
+        original_labels = labels[class_indices].copy()
+        points = np.column_stack(
+            [vertex_data[axis][class_indices].astype(np.float64) for axis in ("x", "y", "z")]
+        )
+        log_scales = np.column_stack(
+            [
+                vertex_data[axis][class_indices].astype(np.float64)
+                for axis in ("scale_0", "scale_1", "scale_2")
+            ]
+        )
+        gaussian_scales = np.exp(np.clip(log_scales.max(axis=1), -20.0, 5.0))
+        finite_scales = gaussian_scales[np.isfinite(gaussian_scales)]
+        median_scale = float(np.median(finite_scales)) if finite_scales.shape[0] else 0.0
+        voxel_size = max(min_voxel_size, median_scale * voxel_scale_multiplier)
+        if max_voxel_size > 0:
+            voxel_size = min(voxel_size, max_voxel_size)
+
+        components, component_sizes, component_stats = voxel_components(points, voxel_size)
+        largest = int(component_sizes.max()) if component_sizes.shape[0] else 0
+        keep_threshold = max(
+            max(1, min_component_gaussians),
+            int(np.ceil(largest * max(0.0, min_component_ratio))),
+        )
+        kept_components = np.flatnonzero(component_sizes >= keep_threshold)
+        if kept_components.shape[0] == 0 and component_sizes.shape[0]:
+            kept_components = np.asarray([int(np.argmax(component_sizes))])
+        kept_components = kept_components[
+            np.argsort(component_sizes[kept_components], kind="stable")[::-1]
+        ]
+
+        labels[class_indices] = 0
+        instance_reports: list[dict[str, Any]] = []
+        for component_id in kept_components:
+            component_mask = components == component_id
+            assigned_indices = class_indices[component_mask]
+            source_ids, source_counts = np.unique(
+                original_labels[component_mask],
+                return_counts=True,
+            )
+            source_groups = [group_by_id[int(source_id)] for source_id in source_ids]
+            rebuilt_group = merged_component_group(
+                next_group_id,
+                group.class_name,
+                assigned_indices,
+                source_groups,
+                source_counts,
+            )
+            labels[assigned_indices] = next_group_id
+            rebuilt.append(rebuilt_group)
+
+            component_points = points[component_mask]
+            instance_reports.append(
+                {
+                    "temporary_id": next_group_id,
+                    "gaussian_count": int(assigned_indices.shape[0]),
+                    "source_label_ids": [int(value) for value in source_ids],
+                    "source_label_gaussian_counts": [int(value) for value in source_counts],
+                    "centroid": [float(value) for value in component_points.mean(axis=0)],
+                    "bounds_min": [float(value) for value in component_points.min(axis=0)],
+                    "bounds_max": [float(value) for value in component_points.max(axis=0)],
+                }
+            )
+            next_group_id += 1
+
+        kept_count = int(component_sizes[kept_components].sum()) if kept_components.shape[0] else 0
+        reports.append(
+            {
+                "class": group.class_name,
+                "before_group_count": len(class_groups),
+                "after_instance_count": int(kept_components.shape[0]),
+                "before_gaussians": int(class_indices.shape[0]),
+                "after_gaussians": kept_count,
+                "removed_gaussians": int(class_indices.shape[0] - kept_count),
+                "median_gaussian_scale": median_scale,
+                "voxel_size": voxel_size,
+                "component_keep_threshold": keep_threshold,
+                **component_stats,
+                "instances": instance_reports,
+            }
+        )
+
+    return labels, rebuilt, reports
 
 
 def prune_and_compact_groups(labels: np.ndarray, groups: list[SemanticGroup]) -> tuple[np.ndarray, list[SemanticGroup]]:
@@ -686,6 +859,12 @@ def main() -> None:
     parser.add_argument("--spatial-max-voxel-size", default=0.20, type=float)
     parser.add_argument("--spatial-min-component-gaussians", default=500, type=int)
     parser.add_argument("--spatial-min-component-ratio", default=0.01, type=float)
+    parser.add_argument("--consolidate-thing-instances", action="store_true")
+    parser.add_argument("--instance-voxel-scale-multiplier", default=4.0, type=float)
+    parser.add_argument("--instance-min-voxel-size", default=0.01, type=float)
+    parser.add_argument("--instance-max-voxel-size", default=0.20, type=float)
+    parser.add_argument("--instance-min-component-gaussians", default=500, type=int)
+    parser.add_argument("--instance-min-component-ratio", default=0.01, type=float)
     parser.add_argument("--iteration", default=30000, type=int)
     parser.add_argument("--min-proposal-gaussians", default=500, type=int)
     parser.add_argument("--max-proposal-gaussians", default=0, type=int)
@@ -775,6 +954,7 @@ def main() -> None:
         )
         labels, groups = prune_and_compact_groups(labels, groups)
 
+    vertex_data: np.memmap | None = None
     spatial_pruning: list[dict[str, Any]] = []
     spatial_tiny_pruned: list[dict[str, Any]] = []
     if args.spatial_prune_thing_islands:
@@ -798,6 +978,32 @@ def main() -> None:
             args.min_assigned_stuff_gaussians,
             args.min_label_score,
         )
+        labels, groups = prune_and_compact_groups(labels, groups)
+
+    instance_consolidation: list[dict[str, Any]] = []
+    if args.consolidate_thing_instances:
+        if vertex_data is None:
+            _, vertex_data = vertex_data_memmap(ply_path)
+        labels, groups, instance_consolidation = consolidate_thing_instances(
+            labels,
+            groups,
+            vertex_data,
+            args.instance_voxel_scale_multiplier,
+            args.instance_min_voxel_size,
+            args.instance_max_voxel_size,
+            args.instance_min_component_gaussians,
+            args.instance_min_component_ratio,
+        )
+        labels, groups = prune_and_compact_groups(labels, groups)
+        labels, groups, consolidated_tiny_pruned = prune_assigned_groups(
+            labels,
+            groups,
+            args.min_assigned_gaussians,
+            args.min_assigned_thing_gaussians,
+            args.min_assigned_stuff_gaussians,
+            args.min_label_score,
+        )
+        spatial_tiny_pruned.extend(consolidated_tiny_pruned)
         labels, groups = prune_and_compact_groups(labels, groups)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -848,6 +1054,12 @@ def main() -> None:
             "spatial_max_voxel_size": args.spatial_max_voxel_size,
             "spatial_min_component_gaussians": args.spatial_min_component_gaussians,
             "spatial_min_component_ratio": args.spatial_min_component_ratio,
+            "consolidate_thing_instances": args.consolidate_thing_instances,
+            "instance_voxel_scale_multiplier": args.instance_voxel_scale_multiplier,
+            "instance_min_voxel_size": args.instance_min_voxel_size,
+            "instance_max_voxel_size": args.instance_max_voxel_size,
+            "instance_min_component_gaussians": args.instance_min_component_gaussians,
+            "instance_min_component_ratio": args.instance_min_component_ratio,
         },
         "proposal_count": len(proposals),
         "group_count": len(groups),
@@ -861,6 +1073,14 @@ def main() -> None:
             "label_count": len(spatial_pruning),
             "removed_gaussian_count": sum(item["removed_gaussians"] for item in spatial_pruning),
             "labels": spatial_pruning,
+        },
+        "instance_consolidation": {
+            "enabled": args.consolidate_thing_instances,
+            "class_count": len(instance_consolidation),
+            "before_group_count": sum(item["before_group_count"] for item in instance_consolidation),
+            "after_instance_count": sum(item["after_instance_count"] for item in instance_consolidation),
+            "removed_gaussian_count": sum(item["removed_gaussians"] for item in instance_consolidation),
+            "classes": instance_consolidation,
         },
         "stuff_classes": sorted(stuff_classes),
         "label_histogram": histogram,

@@ -18,10 +18,19 @@ PROJECT_ROOT="${ROOT}/projects/pku-3dgs-vr"
 FLASHSPLAT_ROOT="${ROOT}/external/FlashSplat"
 MODEL_DIR="${ROOT}/data/3dgs_models/graphdeco/bicycle"
 TASK1_ROOT="${ROOT}/outputs/eyenavgs_task1"
-OUT_DIR="${TASK1_ROOT}/bicycle_semantic"
+OUTPUT_NAME="${OUTPUT_NAME:-bicycle_semantic}"
+OUT_DIR="${TASK1_ROOT}/${OUTPUT_NAME}"
 STAGE_ROOT="${OUT_DIR}/stages"
-GROUND_OUT_DIR="${STAGE_ROOT}/01_grounded_sam"
-PROPOSAL_DIR="${STAGE_ROOT}/02_flashsplat"
+TARGET_GROUND_OUT_DIR="${STAGE_ROOT}/01_grounded_sam"
+TARGET_PROPOSAL_DIR="${STAGE_ROOT}/02_flashsplat"
+REUSE_SOURCE_OUT="${REUSE_SOURCE_OUT:-}"
+if [ -n "${REUSE_SOURCE_OUT}" ]; then
+  GROUND_OUT_DIR="${REUSE_SOURCE_OUT}/stages/01_grounded_sam"
+  PROPOSAL_DIR="${REUSE_SOURCE_OUT}/stages/02_flashsplat"
+else
+  GROUND_OUT_DIR="${TARGET_GROUND_OUT_DIR}"
+  PROPOSAL_DIR="${TARGET_PROPOSAL_DIR}"
+fi
 FUSION_DIR="${STAGE_ROOT}/03_semantic_fusion"
 DELIVERABLE_DIR="${OUT_DIR}/deliverables"
 VISUALIZATION_DIR="${OUT_DIR}/visualizations"
@@ -56,6 +65,11 @@ SAM_ROOT="${SAM_ROOT:-${GROUNDED_SAM_ROOT}/segment_anything}"
 TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 export TOKENIZERS_PARALLELISM
 
+if [ -n "${REUSE_SOURCE_OUT}" ] && [ "${REUSE_SOURCE_OUT}" = "${OUT_DIR}" ]; then
+  echo "Refusing to reuse stages from the output directory that will be reset: ${OUT_DIR}" >&2
+  exit 2
+fi
+
 if [ "${RESET_OUTPUT}" = "1" ] && [ -d "${OUT_DIR}" ]; then
   case "${OUT_DIR}" in
     "${TASK1_ROOT}"/*) rm -rf -- "${OUT_DIR}" ;;
@@ -64,8 +78,7 @@ if [ "${RESET_OUTPUT}" = "1" ] && [ -d "${OUT_DIR}" ]; then
 fi
 
 mkdir -p \
-  "${GROUND_OUT_DIR}" \
-  "${PROPOSAL_DIR}" \
+  "${STAGE_ROOT}" \
   "${FUSION_DIR}" \
   "${DELIVERABLE_DIR}" \
   "${PLY_VIS_DIR}" \
@@ -75,6 +88,16 @@ mkdir -p \
   "${VALIDATION_DIR}" \
   "${RUN_LOG_DIR}" \
   "${TASK1_ROOT}/logs"
+
+if [ -n "${REUSE_SOURCE_OUT}" ]; then
+  test -f "${GROUND_OUT_DIR}/grounded_sam_manifest.json"
+  test -f "${PROPOSAL_DIR}/proposal_manifest.json"
+  test -f "${PROPOSAL_DIR}/class_evidence/class_evidence_manifest.json"
+  ln -s "${GROUND_OUT_DIR}" "${TARGET_GROUND_OUT_DIR}"
+  ln -s "${PROPOSAL_DIR}" "${TARGET_PROPOSAL_DIR}"
+else
+  mkdir -p "${GROUND_OUT_DIR}" "${PROPOSAL_DIR}"
+fi
 
 if command -v conda >/dev/null 2>&1; then
   eval "$(conda shell.bash hook)"
@@ -107,6 +130,7 @@ run_report() {
   echo "project=${PROJECT_ROOT}"
   echo "model=${MODEL_DIR}"
   echo "output=${OUT_DIR}"
+  echo "reuse_source_output=${REUSE_SOURCE_OUT:-<none>}"
   echo "render_max_width=${RENDER_MAX_WIDTH}"
   echo "semantic_camera_indices=${SEMANTIC_CAMERA_INDICES:-<evenly-spaced>}"
   echo "semantic_view_count=${SEMANTIC_VIEW_COUNT}"
@@ -116,46 +140,54 @@ run_report() {
   echo "min_assigned_gaussians=${MIN_ASSIGNED_GAUSSIANS}"
   echo "min_assigned_thing_gaussians=${MIN_ASSIGNED_THING_GAUSSIANS}"
   echo "min_assigned_stuff_gaussians=${MIN_ASSIGNED_STUFF_GAUSSIANS}"
+  echo "signed_class_evidence_min_positive_views=2"
+  echo "signed_class_evidence_min_ratio=0.50"
+  echo "consolidate_thing_instances=1"
   nvidia-smi
 } | tee "${RUN_LOG_DIR}/00_run_configuration.log"
 
-run_stage 01_grounded_sam \
-  python scripts/generate_grounded_sam_masks.py \
-    --model-path "${MODEL_DIR}" \
-    --output-dir "${GROUND_OUT_DIR}" \
-    --flashsplat-root "${FLASHSPLAT_ROOT}" \
-    --groundingdino-root "${GROUNDED_SAM_ROOT}" \
-    --groundingdino-config "${GROUNDINGDINO_CONFIG}" \
-    --groundingdino-checkpoint "${GROUNDINGDINO_CHECKPOINT}" \
-    --segment-anything-root "${SAM_ROOT}" \
-    --sam-checkpoint "${SAM_CHECKPOINT}" \
-    --class-config "${CLASS_CONFIG}" \
-    --iteration 30000 \
-    --max-width "${RENDER_MAX_WIDTH}" \
-    --camera-indices "${SEMANTIC_CAMERA_INDICES}" \
-    --count "${SEMANTIC_VIEW_COUNT}" \
-    --max-detections-per-view "${MAX_DETECTIONS_PER_VIEW}" \
-    --box-threshold "${BOX_THRESHOLD}" \
-    --text-threshold "${TEXT_THRESHOLD}" \
-    --min-mask-area 100 \
-    --max-mask-area-ratio 0.80
+if [ -n "${REUSE_SOURCE_OUT}" ]; then
+  echo "reused ${GROUND_OUT_DIR}" | tee "${RUN_LOG_DIR}/01_grounded_sam.log"
+  echo "reused ${PROPOSAL_DIR}" | tee "${RUN_LOG_DIR}/02_flashsplat.log"
+else
+  run_stage 01_grounded_sam \
+    python scripts/generate_grounded_sam_masks.py \
+      --model-path "${MODEL_DIR}" \
+      --output-dir "${GROUND_OUT_DIR}" \
+      --flashsplat-root "${FLASHSPLAT_ROOT}" \
+      --groundingdino-root "${GROUNDED_SAM_ROOT}" \
+      --groundingdino-config "${GROUNDINGDINO_CONFIG}" \
+      --groundingdino-checkpoint "${GROUNDINGDINO_CHECKPOINT}" \
+      --segment-anything-root "${SAM_ROOT}" \
+      --sam-checkpoint "${SAM_CHECKPOINT}" \
+      --class-config "${CLASS_CONFIG}" \
+      --iteration 30000 \
+      --max-width "${RENDER_MAX_WIDTH}" \
+      --camera-indices "${SEMANTIC_CAMERA_INDICES}" \
+      --count "${SEMANTIC_VIEW_COUNT}" \
+      --max-detections-per-view "${MAX_DETECTIONS_PER_VIEW}" \
+      --box-threshold "${BOX_THRESHOLD}" \
+      --text-threshold "${TEXT_THRESHOLD}" \
+      --min-mask-area 100 \
+      --max-mask-area-ratio 0.80
 
-run_stage 02_flashsplat \
-  python scripts/run_flashsplat_mask_proposals.py \
-    --model-path "${MODEL_DIR}" \
-    --sam-output-dir "${GROUND_OUT_DIR}" \
-    --output-dir "${PROPOSAL_DIR}" \
-    --manifest-name grounded_sam_manifest.json \
-    --mask-dir-name mask_stacks \
-    --flashsplat-root "${FLASHSPLAT_ROOT}" \
-    --iteration 30000 \
-    --max-width "${RENDER_MAX_WIDTH}" \
-    --mask-batch-size "${MASK_BATCH_SIZE}" \
-    --max-masks-per-view "${MAX_DETECTIONS_PER_VIEW}" \
-    --support-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
-    --write-class-evidence \
-    --class-evidence-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
-    --min-support-gaussians 250
+  run_stage 02_flashsplat \
+    python scripts/run_flashsplat_mask_proposals.py \
+      --model-path "${MODEL_DIR}" \
+      --sam-output-dir "${GROUND_OUT_DIR}" \
+      --output-dir "${PROPOSAL_DIR}" \
+      --manifest-name grounded_sam_manifest.json \
+      --mask-dir-name mask_stacks \
+      --flashsplat-root "${FLASHSPLAT_ROOT}" \
+      --iteration 30000 \
+      --max-width "${RENDER_MAX_WIDTH}" \
+      --mask-batch-size "${MASK_BATCH_SIZE}" \
+      --max-masks-per-view "${MAX_DETECTIONS_PER_VIEW}" \
+      --support-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
+      --write-class-evidence \
+      --class-evidence-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
+      --min-support-gaussians 250
+fi
 
 run_stage 03_semantic_fusion \
   python scripts/cluster_semantic_flashsplat_proposals.py \
@@ -186,6 +218,12 @@ run_stage 03_semantic_fusion \
     --spatial-max-voxel-size 0.20 \
     --spatial-min-component-gaussians 500 \
     --spatial-min-component-ratio 0.01 \
+    --consolidate-thing-instances \
+    --instance-voxel-scale-multiplier 4 \
+    --instance-min-voxel-size 0.01 \
+    --instance-max-voxel-size 0.20 \
+    --instance-min-component-gaussians 500 \
+    --instance-min-component-ratio 0.01 \
     --min-assigned-gaussians "${MIN_ASSIGNED_GAUSSIANS}" \
     --min-assigned-thing-gaussians "${MIN_ASSIGNED_THING_GAUSSIANS}" \
     --min-assigned-stuff-gaussians "${MIN_ASSIGNED_STUFF_GAUSSIANS}" \

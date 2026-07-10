@@ -28,13 +28,17 @@ gaze-target dataset:
 - GraphDeco official pretrained models downloaded and extracted on the cluster.
 - Current Task 1 model coverage: 8/12 EyeNavGS scenes matched; `nyc`,
   `london`, `berlin`, and `alameda` still need separate 3DGS model sources.
-- Bicycle semantic baseline completed on the cluster as Slurm job `92261` from
-  commit `7cbe179`: 50 views, 411 GroundingDINO + SAM masks, 399 FlashSplat
-  proposals, 6,131,954 Gaussians validated, and 33 nonzero labels.
-- Known bicycle-scene limitation: the semantic classes are visually plausible,
-  but the single foreground bicycle and bench are each split across multiple
-  same-class instance IDs. Instance consolidation is still required before
-  claiming persistent object identity.
+- Bicycle signed-evidence baseline completed on the cluster as Slurm job
+  `92344` from commit `385f8ba`: 50 views, 411 GroundingDINO + SAM masks, 399
+  FlashSplat proposals, 6,131,954 Gaussians validated, and 25 nonzero labels.
+- Job `92344` removed the bicycle-colored road streaks and bench-colored
+  vegetation patches visible in the prior spatial-only run while preserving the
+  bicycle and bench across all 50 validation views.
+- The accepted high-confidence result remains conservative: 60.25% of
+  Gaussians use label `0` (`unlabeled`), and small same-class fragments still
+  split the foreground bicycle and bench across multiple instance IDs.
+- Automatic connected-component instance consolidation is implemented but must
+  pass the cluster identity-test run before replacing the job `92344` baseline.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
@@ -62,10 +66,11 @@ The `bicycle` pilot has completed end to end:
 1. Original `point_cloud.ply` inspected.
 2. Fifty representative views rendered at 960-pixel width.
 3. GroundingDINO + SAM masks generated and exported as 8-bit binary PNGs.
-4. FlashSplat proposals fused using confidence-weighted multi-view evidence.
+4. FlashSplat proposals fused using signed confidence-weighted multi-view
+   evidence.
 5. Semantic PLY and `label_map.json` exported in the D1 format.
 6. Full and bicycle-versus-bench overlays visually checked.
 
 Task 1 is not complete: the hard minimum remains four fully labeled and
-validated scenes, and the current bicycle result still needs instance-identity
-consolidation if instance-level labels are required.
+validated scenes. The current bicycle result still needs validated instance
+consolidation and an explicit decision about acceptable unlabeled coverage.
