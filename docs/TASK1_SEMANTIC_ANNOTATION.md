@@ -306,6 +306,8 @@ Active semantic scripts:
   - creates instance labels such as `bicycle_01`, `tree_02`, `bench_01`
   - resolves ambiguous ownership using confidence-weighted multi-view support
   - penalizes one-view groups and uses class priority only as an exact tie-break
+  - the bicycle quality pass requires at least two proposals per group and a
+    minimum ownership quality of `0.08` to suppress one-view background leakage
   - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
 
 - `scripts/export_debug_label_colors.py`

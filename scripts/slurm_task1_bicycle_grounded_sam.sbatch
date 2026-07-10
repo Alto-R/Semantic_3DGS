@@ -169,12 +169,12 @@ run_stage 03_semantic_fusion \
     --scene bicycle \
     --min-proposal-gaussians 500 \
     --min-group-gaussians 1500 \
-    --min-group-proposals 1 \
+    --min-group-proposals 2 \
     --merge-iou 0.35 \
     --containment-threshold 0.70 \
     --max-groups 96 \
     --assignment-reliability-views 2 \
-    --assignment-min-quality 0.03 \
+    --assignment-min-quality 0.08 \
     --min-assigned-gaussians "${MIN_ASSIGNED_GAUSSIANS}" \
     --min-assigned-thing-gaussians "${MIN_ASSIGNED_THING_GAUSSIANS}" \
     --min-assigned-stuff-gaussians "${MIN_ASSIGNED_STUFF_GAUSSIANS}" \
