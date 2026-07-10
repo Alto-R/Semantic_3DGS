@@ -251,7 +251,8 @@ render selected 3DGS views
 -> run GroundingDINO with a scene vocabulary
 -> run SAM on GroundingDINO boxes to get semantic masks
 -> lift each semantic mask to sparse Gaussian supports with FlashSplat
--> fuse same-class 3D supports into persistent object/stuff labels
+-> discard negligible FlashSplat support and fuse same-class evidence across views
+-> assign Gaussian ownership by confidence-weighted multi-view agreement
 -> prune tiny/low-confidence final labels automatically
 -> export label_map.json, semantic_point_cloud.ply, and debug artifacts
 ```
@@ -294,6 +295,8 @@ Active semantic scripts:
   - loads either SAM-auto or GroundingDINO/SAM masks
   - batches mask IDs through FlashSplat
   - writes sparse Gaussian support files per semantic mask proposal
+  - rejects negligible raster contributions with a default support threshold of
+    `0.05`
   - preserves `class`, `phrase`, and confidence metadata
 
 - `scripts/cluster_semantic_flashsplat_proposals.py`
@@ -301,8 +304,8 @@ Active semantic scripts:
   - merges stuff classes such as `ground`, `road`, `sidewalk`, and `sky`
   - prunes tiny final labels after 3D assignment
   - creates instance labels such as `bicycle_01`, `tree_02`, `bench_01`
-  - applies class-aware ownership priority for ambiguous Gaussian supports;
-    the configured bicycle-before-bench rule protects thin bicycle geometry
+  - resolves ambiguous ownership using confidence-weighted multi-view support
+  - penalizes one-view groups and uses class priority only as an exact tie-break
   - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
 
 - `scripts/export_debug_label_colors.py`

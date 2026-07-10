@@ -39,6 +39,7 @@ SEMANTIC_CAMERA_INDICES="${SEMANTIC_CAMERA_INDICES:-}"
 SEMANTIC_VIEW_COUNT="${SEMANTIC_VIEW_COUNT:-50}"
 MAX_DETECTIONS_PER_VIEW="${MAX_DETECTIONS_PER_VIEW:-32}"
 MASK_BATCH_SIZE="${MASK_BATCH_SIZE:-4}"
+FLASHSPLAT_SUPPORT_THRESHOLD="${FLASHSPLAT_SUPPORT_THRESHOLD:-0.05}"
 CONTACT_THUMB_WIDTH="${CONTACT_THUMB_WIDTH:-360}"
 MIN_ASSIGNED_GAUSSIANS="${MIN_ASSIGNED_GAUSSIANS:-0}"
 MIN_ASSIGNED_THING_GAUSSIANS="${MIN_ASSIGNED_THING_GAUSSIANS:-5000}"
@@ -111,6 +112,7 @@ run_report() {
   echo "semantic_view_count=${SEMANTIC_VIEW_COUNT}"
   echo "max_detections_per_view=${MAX_DETECTIONS_PER_VIEW}"
   echo "mask_batch_size=${MASK_BATCH_SIZE}"
+  echo "flashsplat_support_threshold=${FLASHSPLAT_SUPPORT_THRESHOLD}"
   echo "min_assigned_gaussians=${MIN_ASSIGNED_GAUSSIANS}"
   echo "min_assigned_thing_gaussians=${MIN_ASSIGNED_THING_GAUSSIANS}"
   echo "min_assigned_stuff_gaussians=${MIN_ASSIGNED_STUFF_GAUSSIANS}"
@@ -150,6 +152,7 @@ run_stage 02_flashsplat \
     --max-width "${RENDER_MAX_WIDTH}" \
     --mask-batch-size "${MASK_BATCH_SIZE}" \
     --max-masks-per-view "${MAX_DETECTIONS_PER_VIEW}" \
+    --support-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
     --min-support-gaussians 250
 
 run_stage 03_semantic_fusion \
@@ -170,6 +173,8 @@ run_stage 03_semantic_fusion \
     --merge-iou 0.35 \
     --containment-threshold 0.70 \
     --max-groups 96 \
+    --assignment-reliability-views 2 \
+    --assignment-min-quality 0.03 \
     --min-assigned-gaussians "${MIN_ASSIGNED_GAUSSIANS}" \
     --min-assigned-thing-gaussians "${MIN_ASSIGNED_THING_GAUSSIANS}" \
     --min-assigned-stuff-gaussians "${MIN_ASSIGNED_STUFF_GAUSSIANS}" \

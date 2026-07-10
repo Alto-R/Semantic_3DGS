@@ -41,6 +41,8 @@ class SemanticGroup:
     scores: list[float] = field(default_factory=list)
     is_stuff: bool = False
     assigned_count: int = 0
+    assignment_reliability: float = 0.0
+    assignment_peak_quality: float = 0.0
 
     @property
     def gaussian_count(self) -> int:
@@ -264,16 +266,59 @@ def final_label_name(group: SemanticGroup, class_counts: dict[str, int], class_o
     return f"{group.class_name}_{class_ordinals[group.class_name]:02d}"
 
 
+def frame_supports_for_group(
+    group: SemanticGroup,
+    proposals_by_id: dict[int, SemanticProposal],
+) -> list[tuple[np.ndarray, float]]:
+    proposals_by_frame: dict[str, list[SemanticProposal]] = defaultdict(list)
+    for proposal_id in group.proposal_ids:
+        proposal = proposals_by_id[proposal_id]
+        frame_file = str(proposal.metadata.get("frame_file", proposal_id))
+        proposals_by_frame[frame_file].append(proposal)
+
+    frame_supports: list[tuple[np.ndarray, float]] = []
+    for frame_proposals in proposals_by_frame.values():
+        if len(frame_proposals) == 1:
+            indices = frame_proposals[0].indices
+        else:
+            indices = np.unique(np.concatenate([proposal.indices for proposal in frame_proposals]))
+        frame_supports.append((indices, max(proposal.score for proposal in frame_proposals)))
+    return frame_supports
+
+
 def assign_labels(
     vertex_count: int,
     groups: list[SemanticGroup],
+    proposals: list[SemanticProposal],
     priorities: dict[str, int],
+    reliability_views: float,
+    min_quality: float,
 ) -> np.ndarray:
     labels = np.zeros((vertex_count,), dtype=np.int32)
-    ordered = sorted(groups, key=lambda group: group_order_key(group, priorities), reverse=True)
-    for group in ordered:
-        unassigned = labels[group.indices] == 0
-        labels[group.indices[unassigned]] = group.group_id
+    best_quality = np.zeros((vertex_count,), dtype=np.float32)
+    proposals_by_id = {proposal.proposal_id: proposal for proposal in proposals}
+
+    for group in groups:
+        frame_supports = frame_supports_for_group(group, proposals_by_id)
+        if not frame_supports:
+            continue
+        evidence = np.zeros((vertex_count,), dtype=np.float32)
+        total_weight = sum(max(weight, 1e-6) for _, weight in frame_supports)
+        for indices, weight in frame_supports:
+            evidence[indices] += max(weight, 1e-6)
+
+        view_count = len(frame_supports)
+        reliability = 1.0 if reliability_views <= 0 else view_count / (view_count + reliability_views)
+        evidence *= reliability / max(total_weight, 1e-6)
+        group.assignment_reliability = float(reliability)
+        group.assignment_peak_quality = float(evidence.max())
+
+        # Priority resolves exact numerical ties only; multi-view evidence owns the decision.
+        tie_break = priorities.get(group.class_name, 0) * 1e-7
+        candidate_quality = evidence + np.float32(tie_break)
+        selected = (evidence >= min_quality) & (candidate_quality > best_quality)
+        labels[selected] = group.group_id
+        best_quality[selected] = candidate_quality[selected]
     return labels
 
 
@@ -404,6 +449,8 @@ def group_summary(group: SemanticGroup, name: str) -> dict[str, Any]:
         "source_view_count": len(group.source_frames),
         "score": group.score,
         "mean_score": group.mean_score,
+        "assignment_reliability": group.assignment_reliability,
+        "assignment_peak_quality": group.assignment_peak_quality,
         "proposal_ids": group.proposal_ids,
         "phrases": dict(group.phrases),
     }
@@ -417,6 +464,8 @@ def main() -> None:
     parser.add_argument("--class-config", type=Path)
     parser.add_argument("--stuff-classes", default="")
     parser.add_argument("--class-priority", default="")
+    parser.add_argument("--assignment-reliability-views", default=2.0, type=float)
+    parser.add_argument("--assignment-min-quality", default=0.03, type=float)
     parser.add_argument("--iteration", default=30000, type=int)
     parser.add_argument("--min-proposal-gaussians", default=500, type=int)
     parser.add_argument("--max-proposal-gaussians", default=0, type=int)
@@ -470,7 +519,14 @@ def main() -> None:
         args.max_groups,
         assignment_priorities,
     )
-    labels = assign_labels(vertex.count, groups, assignment_priorities)
+    labels = assign_labels(
+        vertex.count,
+        groups,
+        proposals,
+        assignment_priorities,
+        args.assignment_reliability_views,
+        args.assignment_min_quality,
+    )
     labels, groups = prune_and_compact_groups(labels, groups)
     labels, groups, pruned_groups = prune_assigned_groups(
         labels,
@@ -481,6 +537,16 @@ def main() -> None:
         args.min_label_score,
     )
     labels, groups = prune_and_compact_groups(labels, groups)
+    if pruned_groups:
+        labels = assign_labels(
+            vertex.count,
+            groups,
+            proposals,
+            assignment_priorities,
+            args.assignment_reliability_views,
+            args.assignment_min_quality,
+        )
+        labels, groups = prune_and_compact_groups(labels, groups)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     labels_path = args.labels_path or args.output_dir / "gaussian_labels.npy"
@@ -518,12 +584,16 @@ def main() -> None:
             "min_assigned_stuff_gaussians": args.min_assigned_stuff_gaussians,
             "min_label_score": args.min_label_score,
             "assignment_priority": assignment_priorities,
+            "assignment_mode": "confidence_weighted_multiview",
+            "assignment_reliability_views": args.assignment_reliability_views,
+            "assignment_min_quality": args.assignment_min_quality,
         },
         "proposal_count": len(proposals),
         "group_count": len(groups),
         "pruning": {
             "pruned_group_count": len(pruned_groups),
             "pruned_groups": pruned_groups,
+            "reassigned_after_pruning": bool(pruned_groups),
         },
         "stuff_classes": sorted(stuff_classes),
         "label_histogram": histogram,
