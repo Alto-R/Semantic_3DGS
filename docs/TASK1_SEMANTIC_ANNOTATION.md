@@ -256,7 +256,7 @@ render selected 3DGS views
 -> assign Gaussian ownership by confidence-weighted multi-view agreement
 -> prune tiny/low-confidence final labels automatically
 -> remove disconnected 3D islands from thing labels using adaptive Gaussian-scale voxels
--> rebuild same-class thing instances from connected 3D components
+-> merge accepted same-class thing IDs when connected in 3D without splitting them
 -> export label_map.json, semantic_point_cloud.ply, and debug artifacts
 ```
 
@@ -317,8 +317,10 @@ Active semantic scripts:
     minimum ownership quality of `0.08` to suppress one-view background leakage
   - removes small disconnected 3D components from thing labels while leaving
     ground, road, sky, vegetation, and other stuff classes unchanged
-  - consolidates same-class fragments that form one connected 3D component and
-    preserves disconnected components as separate persistent instance IDs
+  - consolidates accepted same-class IDs when a sufficiently large connected
+    3D component contains both IDs
+  - treats every accepted input instance as atomic, so consolidation cannot
+    split an existing label or reduce semantic coverage
   - records source-label contributions, component bounds, and before/after
     instance counts in `semantic_group_summary.json`
   - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
@@ -424,6 +426,15 @@ The foreground silhouettes remain stable across the 50-view contact sheet.
 The remaining known issues are conservative unlabeled coverage and fragmented
 same-class instance IDs; the identity-test run above validates the automatic
 connected-component consolidation before it becomes the new baseline.
+
+Identity-test job `92353` demonstrated why accepted labels must remain atomic:
+it merged `bicycle_01/02` into one 123,177-Gaussian bicycle and merged four bench
+fragments into one 120,971-Gaussian bench, with clean 50-view overlays. However,
+it also split 13 tree labels into 26 connected components. Subsequent minimum-
+size pruning increased the unlabeled count by 95,610, almost entirely from tree
+labels. Job `92353` is therefore diagnostic only. The corrected merge-only rule
+uses connected components to union source IDs but never subdivides an accepted
+source label.
 
 Example final label map:
 

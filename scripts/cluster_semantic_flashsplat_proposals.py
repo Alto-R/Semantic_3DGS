@@ -591,7 +591,7 @@ def consolidate_thing_instances(
     min_component_gaussians: int,
     min_component_ratio: float,
 ) -> tuple[np.ndarray, list[SemanticGroup], list[dict[str, Any]]]:
-    """Rebuild thing instances from connected components across same-class labels."""
+    """Merge connected same-class labels without splitting accepted instances."""
 
     required = {"x", "y", "z", "scale_0", "scale_1", "scale_2"}
     missing = sorted(required - set(vertex_data.dtype.names or ()))
@@ -645,23 +645,54 @@ def consolidate_thing_instances(
             max(1, min_component_gaussians),
             int(np.ceil(largest * max(0.0, min_component_ratio))),
         )
-        kept_components = np.flatnonzero(component_sizes >= keep_threshold)
-        if kept_components.shape[0] == 0 and component_sizes.shape[0]:
-            kept_components = np.asarray([int(np.argmax(component_sizes))])
-        kept_components = kept_components[
-            np.argsort(component_sizes[kept_components], kind="stable")[::-1]
-        ]
+        linking_components = np.flatnonzero(component_sizes >= keep_threshold)
+
+        parent = np.arange(len(class_groups), dtype=np.int64)
+
+        def find_root(index: int) -> int:
+            while parent[index] != index:
+                parent[index] = parent[parent[index]]
+                index = int(parent[index])
+            return index
+
+        def union(left: int, right: int) -> None:
+            left_root = find_root(left)
+            right_root = find_root(right)
+            if left_root != right_root:
+                parent[right_root] = left_root
+
+        group_position = {
+            candidate.group_id: position for position, candidate in enumerate(class_groups)
+        }
+        linked_component_count = 0
+        for component_id in linking_components:
+            source_ids = np.unique(original_labels[components == component_id])
+            if source_ids.shape[0] < 2:
+                continue
+            linked_component_count += 1
+            first = group_position[int(source_ids[0])]
+            for source_id in source_ids[1:]:
+                union(first, group_position[int(source_id)])
+
+        source_ids_by_root: dict[int, list[int]] = defaultdict(list)
+        for position, candidate in enumerate(class_groups):
+            source_ids_by_root[find_root(position)].append(candidate.group_id)
+        merged_source_sets = sorted(
+            source_ids_by_root.values(),
+            key=lambda source_ids: min(source_ids),
+        )
 
         labels[class_indices] = 0
         instance_reports: list[dict[str, Any]] = []
-        for component_id in kept_components:
-            component_mask = components == component_id
-            assigned_indices = class_indices[component_mask]
-            source_ids, source_counts = np.unique(
-                original_labels[component_mask],
+        for source_id_list in merged_source_sets:
+            source_ids = np.asarray(source_id_list, dtype=np.int32)
+            assigned_mask = np.isin(original_labels, source_ids)
+            assigned_indices = class_indices[assigned_mask]
+            counted_ids, source_counts = np.unique(
+                original_labels[assigned_mask],
                 return_counts=True,
             )
-            source_groups = [group_by_id[int(source_id)] for source_id in source_ids]
+            source_groups = [group_by_id[int(source_id)] for source_id in counted_ids]
             rebuilt_group = merged_component_group(
                 next_group_id,
                 group.class_name,
@@ -672,32 +703,32 @@ def consolidate_thing_instances(
             labels[assigned_indices] = next_group_id
             rebuilt.append(rebuilt_group)
 
-            component_points = points[component_mask]
+            instance_points = points[assigned_mask]
             instance_reports.append(
                 {
                     "temporary_id": next_group_id,
                     "gaussian_count": int(assigned_indices.shape[0]),
-                    "source_label_ids": [int(value) for value in source_ids],
+                    "source_label_ids": [int(value) for value in counted_ids],
                     "source_label_gaussian_counts": [int(value) for value in source_counts],
-                    "centroid": [float(value) for value in component_points.mean(axis=0)],
-                    "bounds_min": [float(value) for value in component_points.min(axis=0)],
-                    "bounds_max": [float(value) for value in component_points.max(axis=0)],
+                    "centroid": [float(value) for value in instance_points.mean(axis=0)],
+                    "bounds_min": [float(value) for value in instance_points.min(axis=0)],
+                    "bounds_max": [float(value) for value in instance_points.max(axis=0)],
                 }
             )
             next_group_id += 1
 
-        kept_count = int(component_sizes[kept_components].sum()) if kept_components.shape[0] else 0
         reports.append(
             {
                 "class": group.class_name,
                 "before_group_count": len(class_groups),
-                "after_instance_count": int(kept_components.shape[0]),
+                "after_instance_count": len(merged_source_sets),
                 "before_gaussians": int(class_indices.shape[0]),
-                "after_gaussians": kept_count,
-                "removed_gaussians": int(class_indices.shape[0] - kept_count),
+                "after_gaussians": int(class_indices.shape[0]),
+                "removed_gaussians": 0,
                 "median_gaussian_scale": median_scale,
                 "voxel_size": voxel_size,
                 "component_keep_threshold": keep_threshold,
+                "linking_component_count": linked_component_count,
                 **component_stats,
                 "instances": instance_reports,
             }

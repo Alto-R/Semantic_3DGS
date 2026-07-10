@@ -88,6 +88,19 @@ class InstanceConsolidationTest(unittest.TestCase):
         self.assertEqual(np.unique(consolidated).shape[0], 2)
         self.assertEqual(reports[0]["after_instance_count"], 2)
 
+    def test_disconnected_parts_of_one_accepted_instance_are_not_split(self) -> None:
+        labels = np.asarray([1, 1, 1, 1], dtype=np.int32)
+        groups = [thing_group(1, [0, 1, 2, 3])]
+        points = [(0.00, 0.0, 0.0), (0.02, 0.0, 0.0), (1.00, 0.0, 0.0), (1.02, 0.0, 0.0)]
+
+        consolidated, output_groups, reports = self.consolidate(labels, groups, points)
+
+        self.assertEqual(len(output_groups), 1)
+        self.assertEqual(np.unique(consolidated).shape[0], 1)
+        self.assertEqual(reports[0]["before_gaussians"], 4)
+        self.assertEqual(reports[0]["after_gaussians"], 4)
+        self.assertEqual(reports[0]["removed_gaussians"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

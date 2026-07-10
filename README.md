@@ -37,8 +37,13 @@ gaze-target dataset:
 - The accepted high-confidence result remains conservative: 60.25% of
   Gaussians use label `0` (`unlabeled`), and small same-class fragments still
   split the foreground bicycle and bench across multiple instance IDs.
-- Automatic connected-component instance consolidation is implemented but must
-  pass the cluster identity-test run before replacing the job `92344` baseline.
+- Identity-test job `92353` merged the bicycle and bench correctly, but its
+  first consolidation rule also split 13 accepted tree groups into 26
+  components and ultimately discarded 95,584 tree Gaussians. That result is
+  retained as a diagnostic, not accepted as the new baseline.
+- Consolidation now treats accepted instances as atomic: connected geometry may
+  merge same-class IDs but may not split them. This corrected rule must pass a
+  second identity-test run before replacing job `92344`.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
