@@ -254,6 +254,7 @@ render selected 3DGS views
 -> discard negligible FlashSplat support and fuse same-class evidence across views
 -> assign Gaussian ownership by confidence-weighted multi-view agreement
 -> prune tiny/low-confidence final labels automatically
+-> remove disconnected 3D islands from thing labels using adaptive Gaussian-scale voxels
 -> export label_map.json, semantic_point_cloud.ply, and debug artifacts
 ```
 
@@ -308,6 +309,8 @@ Active semantic scripts:
   - penalizes one-view groups and uses class priority only as an exact tie-break
   - the bicycle quality pass requires at least two proposals per group and a
     minimum ownership quality of `0.08` to suppress one-view background leakage
+  - removes small disconnected 3D components from thing labels while leaving
+    ground, road, sky, vegetation, and other stuff classes unchanged
   - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
 
 - `scripts/export_debug_label_colors.py`

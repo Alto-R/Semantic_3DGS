@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import numpy as np
+
 
 PLY_SCALAR_SIZES: Dict[str, int] = {
     "char": 1,
@@ -24,6 +26,25 @@ PLY_SCALAR_SIZES: Dict[str, int] = {
     "float32": 4,
     "double": 8,
     "float64": 8,
+}
+
+PLY_NUMPY_TYPES: Dict[str, str] = {
+    "char": "i1",
+    "uchar": "u1",
+    "int8": "i1",
+    "uint8": "u1",
+    "short": "i2",
+    "ushort": "u2",
+    "int16": "i2",
+    "uint16": "u2",
+    "int": "i4",
+    "uint": "u4",
+    "int32": "i4",
+    "uint32": "u4",
+    "float": "f4",
+    "float32": "f4",
+    "double": "f8",
+    "float64": "f8",
 }
 
 
@@ -143,3 +164,38 @@ def element_stride(element: PlyElement) -> int:
         stride += scalar_property_size(prop.data_type)
     return stride
 
+
+def vertex_data_memmap(path: Path, mode: str = "r") -> tuple[PlyHeader, np.memmap]:
+    """Memory-map scalar vertex properties from a binary PLY."""
+    header = read_ply_header(path)
+    if header.fmt not in {"binary_little_endian", "binary_big_endian"}:
+        raise ValueError(f"{path} must be a binary PLY")
+    if not header.elements or header.elements[0].name != "vertex":
+        raise ValueError(f"{path} must store vertex as its first PLY element")
+
+    vertex = header.elements[0]
+    endian = "<" if header.fmt == "binary_little_endian" else ">"
+    fields: list[tuple[str, str]] = []
+    for prop in vertex.properties:
+        if prop.is_list:
+            raise ValueError(f"Vertex list property is not supported: {prop.name}")
+        try:
+            code = PLY_NUMPY_TYPES[prop.data_type]
+        except KeyError as exc:
+            raise ValueError(f"Unsupported PLY scalar type: {prop.data_type}") from exc
+        fields.append((prop.name, code if code.endswith("1") else f"{endian}{code}"))
+
+    dtype = np.dtype(fields, align=False)
+    expected_stride = element_stride(vertex)
+    if dtype.itemsize != expected_stride:
+        raise ValueError(
+            f"Structured vertex dtype is {dtype.itemsize} bytes; expected {expected_stride}"
+        )
+    data = np.memmap(
+        path,
+        dtype=dtype,
+        mode=mode,
+        offset=header.header_bytes,
+        shape=(vertex.count,),
+    )
+    return header, data

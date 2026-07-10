@@ -175,6 +175,12 @@ run_stage 03_semantic_fusion \
     --max-groups 96 \
     --assignment-reliability-views 2 \
     --assignment-min-quality 0.08 \
+    --spatial-prune-thing-islands \
+    --spatial-voxel-scale-multiplier 4 \
+    --spatial-min-voxel-size 0.01 \
+    --spatial-max-voxel-size 0.20 \
+    --spatial-min-component-gaussians 500 \
+    --spatial-min-component-ratio 0.01 \
     --min-assigned-gaussians "${MIN_ASSIGNED_GAUSSIANS}" \
     --min-assigned-thing-gaussians "${MIN_ASSIGNED_THING_GAUSSIANS}" \
     --min-assigned-stuff-gaussians "${MIN_ASSIGNED_STUFF_GAUSSIANS}" \

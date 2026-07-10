@@ -113,6 +113,7 @@ def semantic_fusion_stage(paths: dict[str, Path]) -> dict[str, Any]:
             "pruned_group_count": pruning.get("pruned_group_count", 0),
             "pruned_groups": pruning.get("pruned_groups", []),
         },
+        "spatial_pruning": summary.get("spatial_pruning", {"enabled": False}),
         "groups": summary.get("groups", []),
     }
 

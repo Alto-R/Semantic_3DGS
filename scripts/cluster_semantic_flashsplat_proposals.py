@@ -13,10 +13,17 @@ from typing import Any
 import numpy as np
 
 from add_labels_from_npy import write_ply_with_labels
-from ply_utils import read_ply_header
+from ply_utils import read_ply_header, vertex_data_memmap
 
 
 DEFAULT_STUFF_CLASSES = {"ground", "road", "sidewalk", "sky", "vegetation", "terrain"}
+VOXEL_NEIGHBOR_OFFSETS = [
+    (dx, dy, dz)
+    for dx in (-1, 0, 1)
+    for dy in (-1, 0, 1)
+    for dz in (-1, 0, 1)
+    if (dx, dy, dz) > (0, 0, 0)
+]
 
 
 @dataclass
@@ -322,6 +329,142 @@ def assign_labels(
     return labels
 
 
+def voxel_component_membership(
+    points: np.ndarray,
+    voxel_size: float,
+    min_component_gaussians: int,
+    min_component_ratio: float,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    if voxel_size <= 0:
+        raise ValueError("voxel_size must be positive")
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("points must have shape (N, 3)")
+    if points.shape[0] == 0:
+        return np.zeros((0,), dtype=bool), {
+            "component_count": 0,
+            "kept_component_count": 0,
+            "largest_component_gaussians": 0,
+            "component_keep_threshold": 0,
+        }
+
+    voxel_coordinates = np.floor(points / voxel_size).astype(np.int64)
+    voxels, inverse, voxel_counts = np.unique(
+        voxel_coordinates,
+        axis=0,
+        return_inverse=True,
+        return_counts=True,
+    )
+    parent = np.arange(voxels.shape[0], dtype=np.int64)
+
+    def find_root(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = int(parent[index])
+        return index
+
+    def union(left: int, right: int) -> None:
+        left_root = find_root(left)
+        right_root = find_root(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    voxel_lookup = {tuple(int(value) for value in voxel): index for index, voxel in enumerate(voxels)}
+    for index, voxel in enumerate(voxels):
+        x, y, z = (int(value) for value in voxel)
+        for dx, dy, dz in VOXEL_NEIGHBOR_OFFSETS:
+            neighbor = voxel_lookup.get((x + dx, y + dy, z + dz))
+            if neighbor is not None:
+                union(index, neighbor)
+
+    voxel_roots = np.fromiter(
+        (find_root(index) for index in range(voxels.shape[0])),
+        dtype=np.int64,
+        count=voxels.shape[0],
+    )
+    component_sizes = np.bincount(
+        voxel_roots,
+        weights=voxel_counts,
+        minlength=voxels.shape[0],
+    ).astype(np.int64)
+    active_roots = np.flatnonzero(component_sizes > 0)
+    largest = int(component_sizes[active_roots].max())
+    keep_threshold = max(
+        max(1, min_component_gaussians),
+        int(np.ceil(largest * max(0.0, min_component_ratio))),
+    )
+    kept_roots = active_roots[component_sizes[active_roots] >= keep_threshold]
+    if kept_roots.shape[0] == 0:
+        kept_roots = np.asarray([active_roots[np.argmax(component_sizes[active_roots])]])
+    point_roots = voxel_roots[inverse]
+    keep = np.isin(point_roots, kept_roots)
+    return keep, {
+        "voxel_count": int(voxels.shape[0]),
+        "component_count": int(active_roots.shape[0]),
+        "kept_component_count": int(kept_roots.shape[0]),
+        "largest_component_gaussians": largest,
+        "component_keep_threshold": keep_threshold,
+    }
+
+
+def prune_thing_label_islands(
+    labels: np.ndarray,
+    groups: list[SemanticGroup],
+    vertex_data: np.memmap,
+    voxel_scale_multiplier: float,
+    min_voxel_size: float,
+    max_voxel_size: float,
+    min_component_gaussians: int,
+    min_component_ratio: float,
+) -> tuple[np.ndarray, list[dict[str, Any]]]:
+    required = {"x", "y", "z", "scale_0", "scale_1", "scale_2"}
+    missing = sorted(required - set(vertex_data.dtype.names or ()))
+    if missing:
+        raise ValueError(f"PLY is missing spatial-pruning properties: {missing}")
+
+    reports: list[dict[str, Any]] = []
+    for group in groups:
+        if group.is_stuff:
+            continue
+        indices = np.flatnonzero(labels == group.group_id)
+        if indices.shape[0] == 0:
+            continue
+        points = np.column_stack(
+            [vertex_data[axis][indices].astype(np.float64) for axis in ("x", "y", "z")]
+        )
+        log_scales = np.column_stack(
+            [vertex_data[axis][indices].astype(np.float64) for axis in ("scale_0", "scale_1", "scale_2")]
+        )
+        gaussian_scales = np.exp(np.clip(log_scales.max(axis=1), -20.0, 5.0))
+        median_scale = float(np.median(gaussian_scales[np.isfinite(gaussian_scales)]))
+        voxel_size = max(min_voxel_size, median_scale * voxel_scale_multiplier)
+        if max_voxel_size > 0:
+            voxel_size = min(voxel_size, max_voxel_size)
+
+        keep, component_stats = voxel_component_membership(
+            points,
+            voxel_size,
+            min_component_gaussians,
+            min_component_ratio,
+        )
+        removed_indices = indices[~keep]
+        labels[removed_indices] = 0
+        group.assigned_count = int(keep.sum())
+        reports.append(
+            {
+                "id": group.group_id,
+                "class": group.class_name,
+                "before_gaussians": int(indices.shape[0]),
+                "after_gaussians": int(keep.sum()),
+                "removed_gaussians": int((~keep).sum()),
+                "removed_ratio": float((~keep).sum() / max(indices.shape[0], 1)),
+                "median_gaussian_scale": median_scale,
+                "voxel_size": voxel_size,
+                **component_stats,
+            }
+        )
+    return labels, reports
+
+
 def prune_and_compact_groups(labels: np.ndarray, groups: list[SemanticGroup]) -> tuple[np.ndarray, list[SemanticGroup]]:
     histogram = {int(label): int(count) for label, count in zip(*np.unique(labels, return_counts=True))}
     active_groups = [group for group in groups if histogram.get(group.group_id, 0) > 0]
@@ -466,6 +609,12 @@ def main() -> None:
     parser.add_argument("--class-priority", default="")
     parser.add_argument("--assignment-reliability-views", default=2.0, type=float)
     parser.add_argument("--assignment-min-quality", default=0.03, type=float)
+    parser.add_argument("--spatial-prune-thing-islands", action="store_true")
+    parser.add_argument("--spatial-voxel-scale-multiplier", default=4.0, type=float)
+    parser.add_argument("--spatial-min-voxel-size", default=0.01, type=float)
+    parser.add_argument("--spatial-max-voxel-size", default=0.20, type=float)
+    parser.add_argument("--spatial-min-component-gaussians", default=500, type=int)
+    parser.add_argument("--spatial-min-component-ratio", default=0.01, type=float)
     parser.add_argument("--iteration", default=30000, type=int)
     parser.add_argument("--min-proposal-gaussians", default=500, type=int)
     parser.add_argument("--max-proposal-gaussians", default=0, type=int)
@@ -548,6 +697,31 @@ def main() -> None:
         )
         labels, groups = prune_and_compact_groups(labels, groups)
 
+    spatial_pruning: list[dict[str, Any]] = []
+    spatial_tiny_pruned: list[dict[str, Any]] = []
+    if args.spatial_prune_thing_islands:
+        _, vertex_data = vertex_data_memmap(ply_path)
+        labels, spatial_pruning = prune_thing_label_islands(
+            labels,
+            groups,
+            vertex_data,
+            args.spatial_voxel_scale_multiplier,
+            args.spatial_min_voxel_size,
+            args.spatial_max_voxel_size,
+            args.spatial_min_component_gaussians,
+            args.spatial_min_component_ratio,
+        )
+        labels, groups = prune_and_compact_groups(labels, groups)
+        labels, groups, spatial_tiny_pruned = prune_assigned_groups(
+            labels,
+            groups,
+            args.min_assigned_gaussians,
+            args.min_assigned_thing_gaussians,
+            args.min_assigned_stuff_gaussians,
+            args.min_label_score,
+        )
+        labels, groups = prune_and_compact_groups(labels, groups)
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
     labels_path = args.labels_path or args.output_dir / "gaussian_labels.npy"
     label_map_path = args.label_map_path or args.output_dir / "label_map.json"
@@ -587,13 +761,25 @@ def main() -> None:
             "assignment_mode": "confidence_weighted_multiview",
             "assignment_reliability_views": args.assignment_reliability_views,
             "assignment_min_quality": args.assignment_min_quality,
+            "spatial_prune_thing_islands": args.spatial_prune_thing_islands,
+            "spatial_voxel_scale_multiplier": args.spatial_voxel_scale_multiplier,
+            "spatial_min_voxel_size": args.spatial_min_voxel_size,
+            "spatial_max_voxel_size": args.spatial_max_voxel_size,
+            "spatial_min_component_gaussians": args.spatial_min_component_gaussians,
+            "spatial_min_component_ratio": args.spatial_min_component_ratio,
         },
         "proposal_count": len(proposals),
         "group_count": len(groups),
         "pruning": {
-            "pruned_group_count": len(pruned_groups),
-            "pruned_groups": pruned_groups,
+            "pruned_group_count": len(pruned_groups) + len(spatial_tiny_pruned),
+            "pruned_groups": pruned_groups + spatial_tiny_pruned,
             "reassigned_after_pruning": bool(pruned_groups),
+        },
+        "spatial_pruning": {
+            "enabled": args.spatial_prune_thing_islands,
+            "label_count": len(spatial_pruning),
+            "removed_gaussian_count": sum(item["removed_gaussians"] for item in spatial_pruning),
+            "labels": spatial_pruning,
         },
         "stuff_classes": sorted(stuff_classes),
         "label_histogram": histogram,
