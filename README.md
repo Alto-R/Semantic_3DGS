@@ -28,6 +28,13 @@ gaze-target dataset:
 - GraphDeco official pretrained models downloaded and extracted on the cluster.
 - Current Task 1 model coverage: 8/12 EyeNavGS scenes matched; `nyc`,
   `london`, `berlin`, and `alameda` still need separate 3DGS model sources.
+- Bicycle semantic baseline completed on the cluster as Slurm job `92261` from
+  commit `7cbe179`: 50 views, 411 GroundingDINO + SAM masks, 399 FlashSplat
+  proposals, 6,131,954 Gaussians validated, and 33 nonzero labels.
+- Known bicycle-scene limitation: the semantic classes are visually plausible,
+  but the single foreground bicycle and bench are each split across multiple
+  same-class instance IDs. Instance consolidation is still required before
+  claiming persistent object identity.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
@@ -50,12 +57,15 @@ See:
 
 ## First Milestone
 
-Run one pilot scene end to end, preferably `bicycle` if the required 3DGS model
-and camera/render metadata are available:
+The `bicycle` pilot has completed end to end:
 
-1. Inspect the original `point_cloud.ply`.
-2. Render representative views.
-3. Generate masks.
-4. Run FlashSplat baseline.
-5. Convert labels into project format.
-6. Validate with semantic overlay renders.
+1. Original `point_cloud.ply` inspected.
+2. Fifty representative views rendered at 960-pixel width.
+3. GroundingDINO + SAM masks generated and exported as 8-bit binary PNGs.
+4. FlashSplat proposals fused using confidence-weighted multi-view evidence.
+5. Semantic PLY and `label_map.json` exported in the D1 format.
+6. Full and bicycle-versus-bench overlays visually checked.
+
+Task 1 is not complete: the hard minimum remains four fully labeled and
+validated scenes, and the current bicycle result still needs instance-identity
+consolidation if instance-level labels are required.

@@ -138,6 +138,20 @@ Check cluster capabilities:
 bash scripts/cluster_check.sh
 ```
 
+## Slurm Submission Checkpoint
+
+Codex must not execute `sbatch` directly. Before every GPU run, Codex should:
+
+1. finish and verify the code/config changes;
+2. state the target commit, node/partition, important parameters, expected
+   output directory, and whether existing output will be reset or archived;
+3. provide the exact `sbatch` command for Dhana to run;
+4. stop and wait for confirmation or a later prompt that the job has finished;
+5. inspect logs and outputs only after Dhana confirms the run state.
+
+Read-only scheduler commands such as `squeue`, `sacct`, and `sinfo` remain safe
+for Codex to run while diagnosing or validating a user-submitted job.
+
 Current cluster facts:
 
 - Login node: `login02`
@@ -149,6 +163,13 @@ Current cluster facts:
 - Verified higher-VRAM smoke tests:
   - job `91793` ran on `rtx8000` with a Quadro RTX 8000, 49 GB VRAM
   - job `91794` ran on `l40gpu002` with an NVIDIA L40, 46 GB VRAM
+- Verified Task 1 semantic run: job `92261` completed on `rtx8000` using the
+  current FlashSplat CUDA extension and 50-view configuration.
+- L40 limitation: job `92259` failed during the first FlashSplat render with an
+  impossible 130 TB allocation request while roughly 35 GB remained free. This
+  indicates incompatibility in the current rasterizer/CUDA build on L40, not
+  ordinary VRAM exhaustion. Use `rtx8000` until that extension is rebuilt and
+  separately validated for the L40 architecture.
 - `/lab` is nearly full: 32T total, about 624G free during setup on 2026-07-07
 
 Submit a GPU smoke test:
