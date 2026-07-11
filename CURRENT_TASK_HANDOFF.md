@@ -346,7 +346,7 @@ Debug visualization facts:
 - Subsequent size pruning discarded 95,584 tree Gaussians.
 - Retained as a diagnostic only, not accepted.
 
-### Job 92369 - Accepted Bicycle Identity Baseline
+### Job 92369 - Preserved 50-View Bicycle Baseline
 
 - Commit: `95ef1d6`.
 - Runtime: 2m06s, reusing job 92344 masks/proposals.
@@ -375,20 +375,58 @@ tree IDs:                8
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic_identity_test_v2
 ```
 
-- Non-destructive accepted pointer, created and verified:
+- Its original output remains preserved:
 
 ```text
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle
--> ../bicycle_semantic_identity_test_v2
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/bicycle_semantic_identity_test_v2
 ```
 
 The accepted source job 92344 output was verified unchanged after reuse runs.
 
+### Job 92426 - Current Accepted Targeted-Camera Baseline
+
+- Code commits: `c16ff73`, `ef2eb52`.
+- Runtime: 9m05s on the configured RTX 8000.
+- Automatic selection: 144 safe unused cameras, 100 rendered candidates, 20
+  additions, 70 final cameras.
+- 669 raw detections, 599 kept GroundingDINO + SAM masks, 583 FlashSplat
+  proposals; 566 proposals survived fusion filtering.
+- Structural validation: `ok`.
+- Exact accepted metrics:
+
+```text
+total Gaussians:       6,131,954
+unlabeled:             3,580,841
+unlabeled ratio:       0.5839641001873138
+nonzero labels:        15
+bicycle_01:              119,570
+bench_01:                139,727
+tree total:            1,096,092
+tree IDs:                      8
+```
+
+- Same original 50 cameras: pooled visible coverage `0.9242405890153753`,
+  minimum `0.7281843725791416`, median `0.9428833326768293`.
+- Added 20 cameras: pooled visible coverage `0.8244914556006355`, minimum
+  `0.7465320176993474`, median `0.8209549506965508`.
+- Per-Gaussian comparison versus job 92369: 253,800 gained labels from label 0,
+  139,975 lost to label 0, and 37,579 changed semantic class.
+- The largest class change was 10,229 fence-to-bench Gaussians. This matches the
+  earlier `bench fence` detector ambiguity and the clean focused overlays.
+- Focused and full 70-view contact sheets show no obvious red road streaks,
+  blue vegetation leakage, or implausible tree expansion.
+- Current non-destructive accepted pointer:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle
+-> ../bicycle_semantic_targeted_v1
+```
+
 ## 9. Measured Visible Coverage
 
-The accepted bicycle result has clean rendered overlays but 60.25% of raw
-Gaussians are label 0. The nonzero-label Gaussian ratio is therefore only
-`0.3974733013326583`. Raw Gaussian count overstates the apparent practical gap
+The accepted bicycle result has clean rendered overlays but 58.40% of raw
+Gaussians are label 0. The nonzero-label Gaussian ratio is
+`0.4160358998126862`. Raw Gaussian count overstates the apparent practical gap
 because many Gaussians can be hidden, redundant, low-opacity, or not dominant
 in the rendered views.
 
@@ -405,18 +443,18 @@ The generated report is:
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle/validation/visible_overlay_coverage.json
 ```
 
-Top-level measured metrics:
+Top-level measured metrics for the current 70-view accepted output:
 
 ```text
-frame count:                    50
-evaluated pixels:              30,464,400
-overlay-changed pixels:        28,162,913
-overlay-changed ratio:         0.9244532306561101
-frame ratio min:               0.7032191672903455
-frame ratio p10:               0.7895937553340949
-frame ratio median:            0.9522204606031959
-frame ratio p90:               0.9990764630191306
-frame ratio max:               0.9996783130473602
+frame count:                    70
+evaluated pixels:              42,650,160
+overlay-changed pixels:        38,203,490
+overlay-changed ratio:         0.895740836611164
+frame ratio min:               0.7281843725791416
+frame ratio p10:               0.7737812003518861
+frame ratio median:            0.8987268746471291
+frame ratio p90:               0.9985289386956578
+frame ratio max:               0.9995568598101391
 difference threshold:          2
 excluded border pixels:        1
 ```
@@ -442,44 +480,32 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the implemented automatic targeted-camera comparison at the
-   user-controlled scheduler checkpoint below; Codex must not submit it.
-2. Compare its low-end visible coverage, label retention, leakage, and instance
-   stability against accepted job `92369`.
-3. Inspect the bicycle frames near the 70.32% baseline minimum and determine
-   whether their unchanged regions matter for recorded gaze targets.
-4. Define a downstream gaze-hit acceptance criterion before introducing any
+1. Define a downstream gaze-hit acceptance criterion for the current accepted
+   bicycle result before introducing any
    automatic propagation/refinement stage.
-5. Generalize the bicycle-specific scheduled script to configurable `SCENE`,
+2. Generalize the bicycle-specific scheduled script to configurable `SCENE`,
    `MODEL_DIR`, output name, class config, and optional focus classes.
-6. Prepare scene-specific automatic vocabularies for the next matched scenes.
-7. Run one next-scene pilot through the user-controlled `sbatch` checkpoint.
-8. Reach at least four fully labeled and visually validated scenes.
-9. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
+3. Prepare scene-specific automatic vocabularies for the next matched scenes.
+4. Run one next-scene pilot through the user-controlled `sbatch` checkpoint.
+5. Reach at least four fully labeled and visually validated scenes.
+6. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
    claiming all 12 scenes.
 
 Do not call Task 1 complete merely because bicycle passes. The hard minimum is
 four validated scenes, and the visible-coverage proxy is not a substitute for
 semantic or gaze-hit validation.
 
-### Automatic targeted-view scheduler checkpoint
+### Completed automatic targeted-view checkpoint
 
-The implementation automatically projection-screens unused cameras, renders
-accepted labels on a pose-diverse candidate pool, measures candidate overlay
-coverage, selects 20 low-coverage/pose-diverse additions, and reruns the full
-pipeline on the original 50 plus those additions. It is implemented but has not
-yet been run or accepted.
-
-Dhana must submit this exact command from the cluster checkout:
+Job `92426` was submitted by Dhana with:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 sbatch --export=ALL,OUTPUT_NAME=bicycle_semantic_targeted_v1,AUTO_TARGET_VIEW_COUNT=20,TARGET_CANDIDATE_COUNT=100,TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle scripts/slurm_task1_bicycle_grounded_sam.sbatch
 ```
 
-Do not set `REUSE_SOURCE_OUT`; targeted views require new 2D masks, FlashSplat
-proposals, and signed class evidence. Do not change the accepted bicycle pointer
-until the comparison passes.
+The comparison passed and the accepted pointer now targets
+`bicycle_semantic_targeted_v1`. No repeat submission is currently required.
 
 ## 12. Important Files
 

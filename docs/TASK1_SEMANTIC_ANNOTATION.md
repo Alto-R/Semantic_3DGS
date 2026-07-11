@@ -312,9 +312,23 @@ validation/camera_selection/targeted_camera_selection.json
 validation/camera_selection/final_camera_indices.txt
 ```
 
-The targeted result is experimental until its structural metrics, label
-retention, overlay leakage, low-end visible coverage, and downstream gaze-hit
-behavior are compared against accepted job `92369`.
+Targeted-camera job `92426` completed in 9m05s and passed structural validation.
+The selector found 144 safe unused cameras, rendered a 100-camera candidate
+pool, and added 20 views automatically. The run produced 599 kept masks and 583
+FlashSplat proposals across 70 cameras.
+
+Compared on the same original 50 cameras, pooled visible coverage changed only
+from `0.9244532306561101` to `0.9242405890153753`, while the worst original view
+improved from `0.7032191672903455` to `0.7281843725791416`. The 20 deliberately
+difficult additions measured `0.8244914556006355` pooled coverage, with minimum
+`0.7465320176993474`. Focused and full contact sheets show no obvious return of
+the bicycle-colored road streaks or bench-colored vegetation leakage.
+
+Per-Gaussian comparison found 253,800 gains from baseline label 0 and 139,975
+losses to label 0, a net increase of 113,825 labeled Gaussians. Of the 37,579
+class changes, the largest was 10,229 baseline fence Gaussians reassigned to
+bench; the accepted overlays indicate this corrects the earlier `bench fence`
+ambiguity. Job `92426` is therefore accepted as the current bicycle baseline.
 
 For a short smoke run with three selected cameras:
 
@@ -478,7 +492,8 @@ labels. Job `92353` is therefore diagnostic only. The corrected merge-only rule
 uses connected components to union source IDs but never subdivides an accepted
 source label.
 
-Corrected identity-test job `92369` passed all acceptance checks:
+Corrected identity-test job `92369` passed all acceptance checks and remains the
+preserved 50-view comparison baseline:
 
 - one `bicycle_01` with 123,197 Gaussians
 - one `bench_01` with 120,977 Gaussians
@@ -487,11 +502,22 @@ Corrected identity-test job `92369` passed all acceptance checks:
 - clean bicycle/bench overlays across the same 50 views
 - structural validation status `ok`
 
-The accepted output is exposed without copying large artifacts:
+Automatic targeted-camera job `92426` is the current accepted bicycle output:
+
+- 70 views: the original 50 plus 20 automatically selected additions
+- one `bicycle_01` with 119,570 Gaussians
+- one `bench_01` with 139,727 Gaussians
+- eight tree IDs totaling 1,096,092 Gaussians
+- 3,580,841 unlabeled Gaussians (`0.5839641001873138`)
+- structural validation status `ok`
+- clean focused and full semantic contact sheets
+
+The accepted output is exposed without copying large artifacts, while the job
+`92369` directory remains unchanged:
 
 ```text
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle
--> ../bicycle_semantic_identity_test_v2
+-> ../bicycle_semantic_targeted_v1
 ```
 
 Raw Gaussian coverage is not the same as rendered surface coverage. The
@@ -501,7 +527,7 @@ proxy, not semantic ground truth: it measures where a visible overlay changed a
 rendered pixel and may undercount labels whose palette color resembles the
 original RGB value.
 
-For accepted bicycle job `92369`, the report measured 28,162,913 changed pixels
+For comparison bicycle job `92369`, the report measured 28,162,913 changed pixels
 out of 30,464,400 across 50 views: a pooled visible-coverage proxy of
 `0.9244532306561101`. Per-frame coverage ranged from `0.7032191672903455` to
 `0.9996783130473602`, with median `0.9522204606031959` and p10/p90 values of
@@ -512,6 +538,13 @@ semantic correctness, representative gaze coverage, or equivalence between a
 changed pixel and a labeled Gaussian. Do not add label propagation solely to
 reduce the raw label-0 count; first inspect the low-coverage views and measure
 downstream gaze-hit behavior.
+
+For accepted job `92426`, the full 70-view report measures
+`0.895740836611164` pooled visible coverage. This lower aggregate is expected
+because the selector deliberately adds difficult views. On the common original
+50 cameras, coverage is `0.9242405890153753`; the 20 additions measure
+`0.8244914556006355`. Compare like-for-like camera subsets rather than treating
+the 50-view and 70-view pooled values as directly interchangeable.
 
 Example final label map:
 

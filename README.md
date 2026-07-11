@@ -28,31 +28,30 @@ gaze-target dataset:
 - GraphDeco official pretrained models downloaded and extracted on the cluster.
 - Current Task 1 model coverage: 8/12 EyeNavGS scenes matched; `nyc`,
   `london`, `berlin`, and `alameda` still need separate 3DGS model sources.
-- Bicycle identity baseline accepted from Slurm job `92369` and commit
-  `95ef1d6`: 50 views, 411 GroundingDINO + SAM masks, 399 FlashSplat proposals,
-  6,131,954 Gaussians validated, and 16 nonzero labels.
+- Bicycle identity baseline job `92369` established the first accepted result
+  at commit `95ef1d6`: 50 views, 411 GroundingDINO + SAM masks, 399 FlashSplat
+  proposals, and 6,131,954 validated Gaussians.
 - Job `92344` removed the bicycle-colored road streaks and bench-colored
   vegetation patches visible in the prior spatial-only run while preserving the
   bicycle and bench across all 50 validation views.
-- Job `92369` consolidates the foreground into one 123,197-Gaussian bicycle and
-  one 120,977-Gaussian bench while retaining all 932,516 tree-labeled
-  Gaussians from the signed-evidence source.
-- The accepted high-confidence result remains conservative in 3D: 60.25% of
-  raw Gaussians use label `0` (`unlabeled`), so 39.75% carry nonzero labels.
-  The 50-view overlay-difference proxy nevertheless measures 92.45% visible
-  image-space coverage (median frame 95.22%; range 70.32%-99.97%). This argues
-  against adding label propagation solely because of the raw unlabeled ratio;
-  low-coverage views and downstream gaze-hit behavior still require validation.
-- Automatic targeted camera expansion is implemented but not yet accepted: it
-  projection-screens unused cameras, renders the accepted labels on a diverse
-  candidate pool, measures candidate overlay coverage, and adds low-coverage,
-  pose-diverse views to the original 50 before rerunning the full pipeline.
+- Automatic targeted-camera job `92426` is the current accepted bicycle result:
+  it screened 144 safe unused cameras, evaluated a 100-camera candidate pool,
+  automatically added 20 low-coverage/pose-diverse views, and validated a
+  70-view run with 599 GroundingDINO + SAM masks and 583 FlashSplat proposals.
+- Job `92426` retains one 119,570-Gaussian bicycle, one 139,727-Gaussian bench,
+  and eight tree IDs totaling 1,096,092 Gaussians. The apparent fence label in
+  job `92369` was reassigned primarily to the bench, matching the clean focused
+  overlays and the detector's earlier `bench fence` ambiguity.
+- The current result remains conservative in 3D: 58.40% of raw Gaussians use
+  label `0`, down from 60.25%. On the same original 50 cameras, visible coverage
+  is effectively unchanged at 92.42% while the worst frame improves from
+  70.32% to 72.82%. The 20 difficult additions measure 82.45% pooled coverage.
 - Identity-test job `92353` merged the bicycle and bench correctly, but its
   first consolidation rule also split 13 accepted tree groups into 26
   components and ultimately discarded 95,584 tree Gaussians. That result is
   retained as a diagnostic, not accepted as the new baseline.
-- Consolidation now treats accepted instances as atomic: connected geometry may
-  merge same-class IDs but may not split them. Job `92369` passed this check and
+- Consolidation treats accepted instances as atomic: connected geometry may
+  merge same-class IDs but may not split them. Job `92426` passed this check and
   is exposed at `outputs/eyenavgs_task1/accepted/bicycle` on the cluster.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
@@ -87,6 +86,5 @@ The `bicycle` pilot has completed end to end:
 6. Full and bicycle-versus-bench overlays visually checked.
 
 Task 1 is not complete: the hard minimum remains four fully labeled and
-validated scenes. Before scaling the bicycle policy, inspect its low-coverage
-views, run the targeted-view comparison, and validate whether the remaining
-image-space gaps affect gaze targets.
+validated scenes. The next work is a downstream gaze-hit acceptance criterion,
+then generalizing the accepted bicycle workflow to the next matched scenes.
