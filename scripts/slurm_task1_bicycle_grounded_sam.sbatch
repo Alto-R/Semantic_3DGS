@@ -295,21 +295,29 @@ run_stage 09_bicycle_bench_overlays \
     --count "${SEMANTIC_VIEW_COUNT}" \
     --focus-classes bicycle,bench
 
-run_stage 10_contact_sheets \
+run_stage 10_visible_coverage \
+  python scripts/measure_overlay_coverage.py \
+    --rgb-dir "${GROUND_OUT_DIR}/rgb_renders" \
+    --overlay-dir "${SEMANTIC_OVERLAY_DIR}" \
+    --output "${VALIDATION_DIR}/visible_overlay_coverage.json" \
+    --difference-threshold 2 \
+    --exclude-border 1
+
+run_stage 11_contact_sheets \
   python scripts/make_contact_sheet.py \
     --image-dir "${GROUND_OUT_DIR}/overlays" \
     --output "${CONTACT_DIR}/grounded_sam.png" \
     --columns 5 \
     --thumb-width "${CONTACT_THUMB_WIDTH}"
 
-run_stage 11_semantic_contact_sheet \
+run_stage 12_semantic_contact_sheet \
   python scripts/make_contact_sheet.py \
     --image-dir "${SEMANTIC_OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/semantic_labels.png" \
     --columns 5 \
     --thumb-width "${CONTACT_THUMB_WIDTH}"
 
-run_stage 12_bicycle_bench_contact_sheet \
+run_stage 13_bicycle_bench_contact_sheet \
   python scripts/make_contact_sheet.py \
     --image-dir "${FOCUS_OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/bicycle_vs_bench.png" \
@@ -318,13 +326,14 @@ run_stage 12_bicycle_bench_contact_sheet \
 
 run_report \
   "${VALIDATION_DIR}/task1_validation.json" \
-  13_task1_validation \
+  14_task1_validation \
   python scripts/validate_task1_outputs.py \
     --labels-npy "${FUSION_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
-    --semantic-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply"
+    --semantic-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
+    --visible-coverage "${VALIDATION_DIR}/visible_overlay_coverage.json"
 
-run_stage 14_pipeline_summary \
+run_stage 15_pipeline_summary \
   python scripts/summarize_task1_semantic_run.py \
     --output-dir "${OUT_DIR}" \
     --summary-path "${VALIDATION_DIR}/pipeline_run_summary.json"

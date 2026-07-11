@@ -391,6 +391,7 @@ stages/03_semantic_fusion/semantic_group_summary.json
 visualizations/ply/*.json
 validation/task1_validation.json
 validation/pipeline_run_summary.json
+validation/visible_overlay_coverage.json
 ```
 
 `RESET_OUTPUT=1` is the batch-script default. It recreates the scene output
@@ -435,6 +436,29 @@ size pruning increased the unlabeled count by 95,610, almost entirely from tree
 labels. Job `92353` is therefore diagnostic only. The corrected merge-only rule
 uses connected components to union source IDs but never subdivides an accepted
 source label.
+
+Corrected identity-test job `92369` passed all acceptance checks:
+
+- one `bicycle_01` with 123,197 Gaussians
+- one `bench_01` with 120,977 Gaussians
+- all 932,516 tree-labeled Gaussians retained and consolidated from 13 to 8 IDs
+- 3,694,666 unlabeled Gaussians, exactly matching job `92344`
+- clean bicycle/bench overlays across the same 50 views
+- structural validation status `ok`
+
+The accepted output is exposed without copying large artifacts:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle
+-> ../bicycle_semantic_identity_test_v2
+```
+
+Raw Gaussian coverage is not the same as rendered surface coverage. The
+pipeline therefore writes `validation/visible_overlay_coverage.json`, comparing
+the original RGB renders with their semantic overlays. This is an image-space
+proxy, not semantic ground truth: it measures where a visible overlay changed a
+rendered pixel and may undercount labels whose palette color resembles the
+original RGB value.
 
 Example final label map:
 

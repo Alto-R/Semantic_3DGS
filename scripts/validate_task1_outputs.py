@@ -71,6 +71,7 @@ def main() -> None:
     parser.add_argument("--labels-npy", required=True, type=Path)
     parser.add_argument("--label-map", required=True, type=Path)
     parser.add_argument("--semantic-ply", type=Path)
+    parser.add_argument("--visible-coverage", type=Path)
     parser.add_argument("--max-unlabeled-ratio", default=1.0, type=float)
     parser.add_argument("--allow-object-candidate", action="store_true")
     args = parser.parse_args()
@@ -98,12 +99,23 @@ def main() -> None:
     if args.semantic_ply:
         ply_summary = validate_semantic_ply(args.semantic_ply, expected_count=int(labels.shape[0]))
 
+    visible_coverage = None
+    if args.visible_coverage:
+        coverage_report = json.loads(args.visible_coverage.read_text(encoding="utf-8"))
+        if int(coverage_report.get("frame_count", 0)) <= 0:
+            raise ValueError(f"{args.visible_coverage} has no measured frames")
+        visible_coverage = {
+            "path": str(args.visible_coverage),
+            **{key: value for key, value in coverage_report.items() if key != "frames"},
+        }
+
     summary = {
         "scene": label_map["scene"],
         "label_count": int(labels.shape[0]),
         "final_label_count": len(histogram),
         "label_histogram": {str(label): count for label, count in histogram.items()},
         "unlabeled_ratio": unlabeled_ratio,
+        "visible_coverage": visible_coverage,
         "semantic_ply": ply_summary,
         "status": "ok",
     }

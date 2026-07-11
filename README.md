@@ -28,22 +28,25 @@ gaze-target dataset:
 - GraphDeco official pretrained models downloaded and extracted on the cluster.
 - Current Task 1 model coverage: 8/12 EyeNavGS scenes matched; `nyc`,
   `london`, `berlin`, and `alameda` still need separate 3DGS model sources.
-- Bicycle signed-evidence baseline completed on the cluster as Slurm job
-  `92344` from commit `385f8ba`: 50 views, 411 GroundingDINO + SAM masks, 399
-  FlashSplat proposals, 6,131,954 Gaussians validated, and 25 nonzero labels.
+- Bicycle identity baseline accepted from Slurm job `92369` and commit
+  `95ef1d6`: 50 views, 411 GroundingDINO + SAM masks, 399 FlashSplat proposals,
+  6,131,954 Gaussians validated, and 16 nonzero labels.
 - Job `92344` removed the bicycle-colored road streaks and bench-colored
   vegetation patches visible in the prior spatial-only run while preserving the
   bicycle and bench across all 50 validation views.
-- The accepted high-confidence result remains conservative: 60.25% of
-  Gaussians use label `0` (`unlabeled`), and small same-class fragments still
-  split the foreground bicycle and bench across multiple instance IDs.
+- Job `92369` consolidates the foreground into one 123,197-Gaussian bicycle and
+  one 120,977-Gaussian bench while retaining all 932,516 tree-labeled
+  Gaussians from the signed-evidence source.
+- The accepted high-confidence result remains conservative: 60.25% of raw
+  Gaussians use label `0` (`unlabeled`). Image-space visible coverage is now
+  measured separately before deciding whether label propagation is necessary.
 - Identity-test job `92353` merged the bicycle and bench correctly, but its
   first consolidation rule also split 13 accepted tree groups into 26
   components and ultimately discarded 95,584 tree Gaussians. That result is
   retained as a diagnostic, not accepted as the new baseline.
 - Consolidation now treats accepted instances as atomic: connected geometry may
-  merge same-class IDs but may not split them. This corrected rule must pass a
-  second identity-test run before replacing job `92344`.
+  merge same-class IDs but may not split them. Job `92369` passed this check and
+  is exposed at `outputs/eyenavgs_task1/accepted/bicycle` on the cluster.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
@@ -77,5 +80,5 @@ The `bicycle` pilot has completed end to end:
 6. Full and bicycle-versus-bench overlays visually checked.
 
 Task 1 is not complete: the hard minimum remains four fully labeled and
-validated scenes. The current bicycle result still needs validated instance
-consolidation and an explicit decision about acceptable unlabeled coverage.
+validated scenes. The bicycle result still needs an explicit decision about
+acceptable visible and raw unlabeled coverage before scaling the same policy.

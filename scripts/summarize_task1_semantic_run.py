@@ -151,6 +151,7 @@ def validation_stage(paths: dict[str, Path]) -> dict[str, Any]:
         "status": validation.get("status", "missing"),
         "label_count": validation.get("label_count"),
         "unlabeled_ratio": validation.get("unlabeled_ratio"),
+        "visible_coverage": validation.get("visible_coverage"),
         "semantic_ply": validation.get("semantic_ply", {}),
     }
 
