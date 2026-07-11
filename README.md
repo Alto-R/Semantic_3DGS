@@ -53,6 +53,12 @@ gaze-target dataset:
 - Consolidation treats accepted instances as atomic: connected geometry may
   merge same-class IDs but may not split them. Job `92426` passed this check and
   is exposed at `outputs/eyenavgs_task1/accepted/bicycle` on the cluster.
+- The accepted workflow is now scene-configurable through
+  `scripts/slurm_task1_semantic_scene.sbatch`; the historical bicycle script is
+  a compatibility wrapper. `train` is the next pilot because its matched model
+  is the smallest remaining one (1,026,508 Gaussians) and provides 301 cameras.
+  Its automatic vocabulary includes train, railroad track, platform, outdoor
+  structure, and background classes.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
@@ -87,4 +93,4 @@ The `bicycle` pilot has completed end to end:
 
 Task 1 is not complete: the hard minimum remains four fully labeled and
 validated scenes. The next work is a downstream gaze-hit acceptance criterion,
-then generalizing the accepted bicycle workflow to the next matched scenes.
+plus the user-controlled 50-view `train` pilot through the generalized workflow.

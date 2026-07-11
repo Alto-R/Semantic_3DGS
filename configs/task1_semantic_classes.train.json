@@ -1,0 +1,90 @@
+{
+  "assignment_priority": [
+    "train",
+    "person",
+    "car",
+    "railroad_track",
+    "sign",
+    "pole",
+    "fence",
+    "building",
+    "tree",
+    "railway_platform",
+    "ground",
+    "road",
+    "vegetation",
+    "sky"
+  ],
+  "classes": [
+    {
+      "class": "train",
+      "type": "thing",
+      "prompts": ["train", "locomotive", "railway train"]
+    },
+    {
+      "class": "railroad_track",
+      "type": "stuff",
+      "prompts": ["railroad track", "train track", "railway track", "rails"]
+    },
+    {
+      "class": "railway_platform",
+      "type": "stuff",
+      "prompts": ["railway platform", "train platform", "platform"]
+    },
+    {
+      "class": "car",
+      "type": "thing",
+      "prompts": ["car", "vehicle"]
+    },
+    {
+      "class": "person",
+      "type": "thing",
+      "prompts": ["person", "pedestrian"]
+    },
+    {
+      "class": "building",
+      "type": "thing",
+      "prompts": ["building", "house", "station building"]
+    },
+    {
+      "class": "tree",
+      "type": "thing",
+      "prompts": ["tree"]
+    },
+    {
+      "class": "fence",
+      "type": "thing",
+      "prompts": ["fence", "railing"]
+    },
+    {
+      "class": "pole",
+      "type": "thing",
+      "prompts": ["pole", "utility pole", "lamp post"]
+    },
+    {
+      "class": "sign",
+      "type": "thing",
+      "prompts": ["sign", "railway sign", "traffic sign"]
+    },
+    {
+      "class": "ground",
+      "type": "stuff",
+      "prompts": ["ground", "terrain", "gravel"]
+    },
+    {
+      "class": "road",
+      "type": "stuff",
+      "prompts": ["road", "street"]
+    },
+    {
+      "class": "vegetation",
+      "type": "stuff",
+      "prompts": ["vegetation", "bush", "grass", "plant"]
+    },
+    {
+      "class": "sky",
+      "type": "stuff",
+      "prompts": ["sky"]
+    }
+  ]
+}

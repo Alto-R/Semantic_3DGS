@@ -330,6 +330,51 @@ class changes, the largest was 10,229 baseline fence Gaussians reassigned to
 bench; the accepted overlays indicate this corrects the earlier `bench fence`
 ambiguity. Job `92426` is therefore accepted as the current bicycle baseline.
 
+### Scene-Configurable Workflow And Train Pilot
+
+`scripts/slurm_task1_semantic_scene.sbatch` generalizes the accepted pipeline
+with configurable `SCENE`, `MODEL_DIR`, `OUTPUT_NAME`, `CLASS_CONFIG`,
+`FOCUS_CLASSES`, and `FOCUS_NAME`. The existing bicycle script exports bicycle
+defaults and delegates to this generic scheduler, preserving its old command.
+
+When `CLASS_CONFIG` is not provided, the generic script first looks for:
+
+```text
+configs/task1_semantic_classes.<scene>.json
+```
+
+It falls back to `configs/task1_semantic_classes.example.json`. Focus artifacts
+are optional and use scene-neutral filenames.
+
+The next pilot is `train`. Its official matched model has 1,026,508 Gaussians
+and 301 cameras, making it the lowest-cost remaining scene for validating the
+generalized workflow. The tracked vocabulary is:
+
+```text
+configs/task1_semantic_classes.train.json
+```
+
+Dhana must submit this initial 50-view baseline from the cluster checkout:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+SCENE=train \
+OUTPUT_NAME=train_semantic_baseline_v1 \
+FOCUS_CLASSES='train,railroad_track' \
+FOCUS_NAME=train_vs_track \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
+```
+
+Expected output:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/train_semantic_baseline_v1
+```
+
+Do not enable `AUTO_TARGET_VIEW_COUNT` on this first train run. Automatic
+targeted expansion requires a completed and accepted same-scene baseline via
+`TARGET_SELECTION_SOURCE`; bicycle evidence must not be reused for train.
+
 For a short smoke run with three selected cameras:
 
 ```bash

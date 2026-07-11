@@ -123,7 +123,7 @@ def semantic_fusion_stage(paths: dict[str, Path]) -> dict[str, Any]:
     }
 
 
-def export_stage(paths: dict[str, Path]) -> dict[str, Any]:
+def export_stage(paths: dict[str, Path], focus_name: str) -> dict[str, Any]:
     deliverables = paths["deliverables"]
     visualizations = paths["visualizations"]
     ply_dir = visualizations / "ply" if (visualizations / "ply").exists() else visualizations
@@ -135,9 +135,10 @@ def export_stage(paths: dict[str, Path]) -> dict[str, Any]:
         "label_map": file_record(deliverables / "label_map.json"),
         "debug_color_ply": file_record(ply_dir / "semantic_point_cloud_rgb_debug.ply"),
         "supersplat_debug_ply": file_record(ply_dir / "semantic_point_cloud_supersplat_debug.ply"),
-        "bicycle_bench_debug_ply": file_record(ply_dir / "bicycle_vs_bench_supersplat_debug.ply"),
+        "focus_name": focus_name,
+        "focus_debug_ply": file_record(ply_dir / f"{focus_name}_supersplat_debug.ply"),
         "semantic_overlay_dir": file_record(overlay_root / "semantic_labels"),
-        "bicycle_bench_overlay_dir": file_record(overlay_root / "bicycle_vs_bench"),
+        "focus_overlay_dir": file_record(overlay_root / focus_name),
         "contact_sheet_dir": file_record(contact_root),
     }
 
@@ -156,7 +157,7 @@ def validation_stage(paths: dict[str, Path]) -> dict[str, Any]:
     }
 
 
-def build_summary(output_dir: Path) -> dict[str, Any]:
+def build_summary(output_dir: Path, focus_name: str = "focus_classes") -> dict[str, Any]:
     paths = run_paths(output_dir)
     return {
         "output_dir": str(output_dir),
@@ -165,7 +166,7 @@ def build_summary(output_dir: Path) -> dict[str, Any]:
             "groundingdino_sam": grounded_sam_stage(paths),
             "flashsplat": flashsplat_stage(paths),
             "semantic_fusion_pruning": semantic_fusion_stage(paths),
-            "exports": export_stage(paths),
+            "exports": export_stage(paths, focus_name),
             "validation": validation_stage(paths),
         },
     }
@@ -176,9 +177,10 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--summary-name", default="pipeline_run_summary.json")
     parser.add_argument("--summary-path", type=Path)
+    parser.add_argument("--focus-name", default="focus_classes")
     args = parser.parse_args()
 
-    summary = build_summary(args.output_dir)
+    summary = build_summary(args.output_dir, args.focus_name)
     summary_path = args.summary_path or args.output_dir / args.summary_name
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")

@@ -480,14 +480,16 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Define a downstream gaze-hit acceptance criterion for the current accepted
-   bicycle result before introducing any
-   automatic propagation/refinement stage.
-2. Generalize the bicycle-specific scheduled script to configurable `SCENE`,
-   `MODEL_DIR`, output name, class config, and optional focus classes.
-3. Prepare scene-specific automatic vocabularies for the next matched scenes.
-4. Run one next-scene pilot through the user-controlled `sbatch` checkpoint.
-5. Reach at least four fully labeled and visually validated scenes.
+1. Run the prepared 50-view `train` pilot through the user-controlled scheduler
+   checkpoint below; Codex must not submit it.
+2. Inspect structural validation, class/instance counts, visible coverage, and
+   focused/full contact sheets before creating `accepted/train`.
+3. If the baseline passes, run same-scene automatic targeted expansion using
+   the accepted train output; never reuse bicycle masks or labels.
+4. Define a downstream gaze-hit acceptance criterion for accepted scenes before
+   introducing any automatic propagation/refinement stage.
+5. Prepare vocabularies and runs for at least two more matched scenes to reach
+   the four-scene minimum.
 6. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
    claiming all 12 scenes.
 
@@ -507,6 +509,28 @@ sbatch --export=ALL,OUTPUT_NAME=bicycle_semantic_targeted_v1,AUTO_TARGET_VIEW_CO
 The comparison passed and the accepted pointer now targets
 `bicycle_semantic_targeted_v1`. No repeat submission is currently required.
 
+### Train baseline scheduler checkpoint
+
+The accepted scheduler is now generalized in
+`scripts/slurm_task1_semantic_scene.sbatch`. `train` is the next pilot because
+its matched model has 1,026,508 Gaussians and 301 cameras. Its scene-specific
+automatic vocabulary is `configs/task1_semantic_classes.train.json`.
+
+Dhana must submit:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+SCENE=train \
+OUTPUT_NAME=train_semantic_baseline_v1 \
+FOCUS_CLASSES='train,railroad_track' \
+FOCUS_NAME=train_vs_track \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
+```
+
+This is an initial evenly spaced 50-view baseline. Do not set
+`AUTO_TARGET_VIEW_COUNT` or `TARGET_SELECTION_SOURCE` yet; targeted selection
+requires an accepted train baseline and must remain scene-local.
+
 ## 12. Important Files
 
 ```text
@@ -515,6 +539,7 @@ docs/WORKFLOW.md
 docs/TASK1_SEMANTIC_ANNOTATION.md
 docs/EXTERNAL_REPOS.md
 configs/task1_semantic_classes.example.json
+configs/task1_semantic_classes.train.json
 scripts/generate_grounded_sam_masks.py
 scripts/run_flashsplat_mask_proposals.py
 scripts/cluster_semantic_flashsplat_proposals.py
@@ -524,8 +549,10 @@ scripts/select_targeted_cameras.py
 scripts/validate_task1_outputs.py
 scripts/summarize_task1_semantic_run.py
 scripts/slurm_task1_bicycle_grounded_sam.sbatch
+scripts/slurm_task1_semantic_scene.sbatch
 tests/test_semantic_fusion.py
 tests/test_overlay_coverage.py
+tests/test_scene_configuration.py
 ```
 
 External repository commit pins are recorded in `docs/EXTERNAL_REPOS.md`.
