@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
-from plyfile import PlyData
 
 
 def unique_indices(frames: Iterable[dict[str, Any]]) -> list[int]:
@@ -100,6 +99,8 @@ def min_pose_distance(
 
 
 def sample_scene_geometry(ply_path: Path, sample_count: int) -> tuple[np.ndarray, np.ndarray]:
+    from plyfile import PlyData
+
     if sample_count <= 0:
         raise ValueError("--sample-count must be positive")
     ply = PlyData.read(ply_path, mmap=True)
