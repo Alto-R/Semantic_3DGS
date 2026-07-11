@@ -3,8 +3,10 @@
 Last updated: 2026-07-11 (Asia/Shanghai)
 
 This file is the authoritative compact handoff for continuing the current work
-in a fresh Codex task. Read it before running commands. Then inspect the current
-Git and cluster state rather than assuming every interrupted operation finished.
+in a fresh Codex task launched directly in the canonical Git repository. Treat
+the current workspace/repository root as authoritative, read this file before
+running commands, and inspect Git and cluster state rather than assuming every
+interrupted operation finished.
 
 ## 1. User And Operating Rules
 
@@ -38,15 +40,21 @@ Canonical Git repository:
 C:\Users\dhana\PROJECTS\PKU 3DGS VR
 ```
 
-Writable staging workspace used by Codex sandboxing:
+The fresh Codex task is expected to start with this directory as its workspace
+and current working directory. Use repository-relative paths and edit files
+directly in this checkout.
+
+Historical staging workspace used by the previous Codex task:
 
 ```text
 C:\Users\dhana\Documents\PKU 3DGS VR
 ```
 
-The Documents directory is not the canonical Git checkout. Apply manual edits
-there when required by sandboxing, test them, then copy only the changed files
-to the canonical `PROJECTS` repository and commit there.
+The Documents directory is not the canonical Git checkout. Do not use it in the
+fresh task when the canonical repository is writable. It is listed only to
+explain old temporary files and paths in the prior run history. All new edits,
+tests, Git commands, and commits should operate directly in the current
+canonical repository.
 
 PowerShell currently tries to load a profile that is blocked by execution
 policy. For local `shell_command` calls, set:
@@ -408,8 +416,8 @@ Use `login: false` for local PowerShell commands.
 ### Step 1: Verify local and cluster Git state
 
 ```powershell
-git -C "C:\Users\dhana\PROJECTS\PKU 3DGS VR" status --short
-git -C "C:\Users\dhana\PROJECTS\PKU 3DGS VR" log -3 --oneline
+git status --short
+git log -3 --oneline
 ```
 
 ```bash
@@ -521,10 +529,10 @@ External repository commit pins are recorded in `docs/EXTERNAL_REPOS.md`.
 Start the new Codex task with:
 
 ```text
-Continue the work described in CURRENT_TASK_HANDOFF.md in the canonical repo
-C:\Users\dhana\PROJECTS\PKU 3DGS VR. Read the entire handoff first. Verify
-local and cluster state before acting. Never submit sbatch yourself; give me the
-exact command and stop at scheduler checkpoints. Use login:false for local
-PowerShell and minimize tool round trips. Begin with the interrupted visible
-coverage check in Section 10.
+You are already running in the canonical PKU 3DGS VR Git repository. Read
+CURRENT_TASK_HANDOFF.md completely before acting and use repository-relative
+paths. Verify local and cluster state first. Never submit sbatch yourself; give
+me the exact command and stop at scheduler checkpoints. Use login:false for
+local PowerShell and minimize tool round trips. Begin with the interrupted
+visible coverage check in Section 10.
 ```
