@@ -73,6 +73,7 @@ def main() -> None:
     parser.add_argument("--labels-npy", required=True, type=Path)
     parser.add_argument("--label-map", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--rgb-output-dir", type=Path)
     parser.add_argument(
         "--flashsplat-root",
         default="/lab/haoq_lab/cse12312032/external/FlashSplat",
@@ -95,6 +96,8 @@ def main() -> None:
         raise FileNotFoundError(args.label_map)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    if args.rgb_output_dir is not None:
+        args.rgb_output_dir.mkdir(parents=True, exist_ok=True)
     labels = np.load(args.labels_npy).astype(np.int32)
     label_map = json.loads(args.label_map.read_text(encoding="utf-8"))
     label_items = load_label_items(args.label_map)
@@ -117,6 +120,7 @@ def main() -> None:
         "ply_path": str(ply_path),
         "labels_npy": str(args.labels_npy),
         "label_map": str(args.label_map),
+        "rgb_output_dir": str(args.rgb_output_dir) if args.rgb_output_dir is not None else None,
         "label_ids": label_ids,
         "focus_classes": sorted(focus_classes),
         "palette": palette_records(label_ids, label_items),
@@ -138,6 +142,8 @@ def main() -> None:
             base_rgb = tensor_to_rgb_array(base["render"])
             label_rgb = tensor_to_rgb_array(labels_render["render"])
             filename = camera_filename(output_index, camera_json)
+            if args.rgb_output_dir is not None:
+                Image.fromarray(base_rgb, mode="RGB").save(args.rgb_output_dir / filename)
             save_overlay(base_rgb, label_rgb, args.output_dir / filename, args.overlay_alpha)
             manifest["frames"].append(
                 {

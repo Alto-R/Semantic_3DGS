@@ -40,12 +40,19 @@ FOCUS_OVERLAY_DIR="${VISUALIZATION_DIR}/overlays/bicycle_vs_bench"
 CONTACT_DIR="${VISUALIZATION_DIR}/contact_sheets"
 VALIDATION_DIR="${OUT_DIR}/validation"
 RUN_LOG_DIR="${OUT_DIR}/logs"
+TARGET_SELECTION_DIR="${VALIDATION_DIR}/camera_selection"
 
 CLASS_CONFIG="${CLASS_CONFIG:-${PROJECT_ROOT}/configs/task1_semantic_classes.example.json}"
 RENDER_MAX_WIDTH="${RENDER_MAX_WIDTH:-960}"
 # An empty camera list enables evenly spaced sampling by SEMANTIC_VIEW_COUNT.
 SEMANTIC_CAMERA_INDICES="${SEMANTIC_CAMERA_INDICES:-}"
 SEMANTIC_VIEW_COUNT="${SEMANTIC_VIEW_COUNT:-50}"
+AUTO_TARGET_VIEW_COUNT="${AUTO_TARGET_VIEW_COUNT:-0}"
+TARGET_SELECTION_SOURCE="${TARGET_SELECTION_SOURCE:-${TASK1_ROOT}/accepted/bicycle}"
+TARGET_CANDIDATE_COUNT="${TARGET_CANDIDATE_COUNT:-100}"
+TARGET_PROJECTION_SAMPLE_COUNT="${TARGET_PROJECTION_SAMPLE_COUNT:-50000}"
+TARGET_PROJECTION_MARGIN="${TARGET_PROJECTION_MARGIN:-1.5}"
+TARGET_LOW_COVERAGE_QUANTILE="${TARGET_LOW_COVERAGE_QUANTILE:-0.35}"
 MAX_DETECTIONS_PER_VIEW="${MAX_DETECTIONS_PER_VIEW:-32}"
 MASK_BATCH_SIZE="${MASK_BATCH_SIZE:-4}"
 FLASHSPLAT_SUPPORT_THRESHOLD="${FLASHSPLAT_SUPPORT_THRESHOLD:-0.05}"
@@ -70,6 +77,11 @@ if [ -n "${REUSE_SOURCE_OUT}" ] && [ "${REUSE_SOURCE_OUT}" = "${OUT_DIR}" ]; the
   exit 2
 fi
 
+if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ] && [ -n "${REUSE_SOURCE_OUT}" ]; then
+  echo "Automatic targeted views require newly generated masks and proposals; REUSE_SOURCE_OUT must be empty." >&2
+  exit 2
+fi
+
 if [ "${RESET_OUTPUT}" = "1" ] && [ -d "${OUT_DIR}" ]; then
   case "${OUT_DIR}" in
     "${TASK1_ROOT}"/*) rm -rf -- "${OUT_DIR}" ;;
@@ -86,6 +98,7 @@ mkdir -p \
   "${FOCUS_OVERLAY_DIR}" \
   "${CONTACT_DIR}" \
   "${VALIDATION_DIR}" \
+  "${TARGET_SELECTION_DIR}" \
   "${RUN_LOG_DIR}" \
   "${TASK1_ROOT}/logs"
 
@@ -124,6 +137,67 @@ run_report() {
   "$@" | tee "${output_path}" "${RUN_LOG_DIR}/${log_name}.log"
 }
 
+if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
+  BASELINE_MANIFEST="${TARGET_SELECTION_SOURCE}/stages/01_grounded_sam/grounded_sam_manifest.json"
+  BASELINE_LABELS="${TARGET_SELECTION_SOURCE}/stages/03_semantic_fusion/gaussian_labels.npy"
+  BASELINE_LABEL_MAP="${TARGET_SELECTION_SOURCE}/deliverables/label_map.json"
+  test -f "${BASELINE_MANIFEST}"
+  test -f "${TARGET_SELECTION_SOURCE}/validation/visible_overlay_coverage.json"
+  test -f "${BASELINE_LABELS}"
+  test -f "${BASELINE_LABEL_MAP}"
+
+  run_stage 00a_screen_target_candidates \
+    python scripts/select_targeted_cameras.py screen \
+      --model-path "${MODEL_DIR}" \
+      --baseline-manifest "${BASELINE_MANIFEST}" \
+      --output "${TARGET_SELECTION_DIR}/candidate_screen.json" \
+      --indices-output "${TARGET_SELECTION_DIR}/candidate_indices.txt" \
+      --iteration 30000 \
+      --sample-count "${TARGET_PROJECTION_SAMPLE_COUNT}" \
+      --candidate-count "${TARGET_CANDIDATE_COUNT}" \
+      --projection-margin "${TARGET_PROJECTION_MARGIN}"
+
+  CANDIDATE_CAMERA_INDICES="$(tr -d '\r\n' < "${TARGET_SELECTION_DIR}/candidate_indices.txt")"
+  test -n "${CANDIDATE_CAMERA_INDICES}"
+
+  run_stage 00b_render_target_candidates \
+    python scripts/render_auto_label_overlays.py \
+      --model-path "${MODEL_DIR}" \
+      --labels-npy "${BASELINE_LABELS}" \
+      --label-map "${BASELINE_LABEL_MAP}" \
+      --output-dir "${TARGET_SELECTION_DIR}/candidate_overlays" \
+      --rgb-output-dir "${TARGET_SELECTION_DIR}/candidate_rgb" \
+      --flashsplat-root "${FLASHSPLAT_ROOT}" \
+      --iteration 30000 \
+      --max-width "${RENDER_MAX_WIDTH}" \
+      --camera-indices "${CANDIDATE_CAMERA_INDICES}" \
+      --count "${TARGET_CANDIDATE_COUNT}"
+
+  run_stage 00c_measure_target_candidates \
+    python scripts/measure_overlay_coverage.py \
+      --rgb-dir "${TARGET_SELECTION_DIR}/candidate_rgb" \
+      --overlay-dir "${TARGET_SELECTION_DIR}/candidate_overlays" \
+      --output "${TARGET_SELECTION_DIR}/candidate_visible_coverage.json" \
+      --difference-threshold 2 \
+      --exclude-border 1
+
+  run_stage 00d_select_targeted_cameras \
+    python scripts/select_targeted_cameras.py select \
+      --model-path "${MODEL_DIR}" \
+      --baseline-manifest "${BASELINE_MANIFEST}" \
+      --candidate-manifest "${TARGET_SELECTION_DIR}/candidate_overlays/label_overlay_manifest.json" \
+      --coverage-report "${TARGET_SELECTION_DIR}/candidate_visible_coverage.json" \
+      --output "${TARGET_SELECTION_DIR}/targeted_camera_selection.json" \
+      --indices-output "${TARGET_SELECTION_DIR}/final_camera_indices.txt" \
+      --additional-count "${AUTO_TARGET_VIEW_COUNT}" \
+      --low-coverage-quantile "${TARGET_LOW_COVERAGE_QUANTILE}" \
+      --coverage-weight 0.8 \
+      --novelty-weight 0.2
+
+  SEMANTIC_CAMERA_INDICES="$(tr -d '\r\n' < "${TARGET_SELECTION_DIR}/final_camera_indices.txt")"
+  SEMANTIC_VIEW_COUNT="$(awk -F, '{print NF}' "${TARGET_SELECTION_DIR}/final_camera_indices.txt")"
+fi
+
 {
   echo "job=${SLURM_JOB_ID:-local}"
   echo "host=$(hostname)"
@@ -134,6 +208,12 @@ run_report() {
   echo "render_max_width=${RENDER_MAX_WIDTH}"
   echo "semantic_camera_indices=${SEMANTIC_CAMERA_INDICES:-<evenly-spaced>}"
   echo "semantic_view_count=${SEMANTIC_VIEW_COUNT}"
+  echo "auto_target_view_count=${AUTO_TARGET_VIEW_COUNT}"
+  echo "target_selection_source=${TARGET_SELECTION_SOURCE}"
+  echo "target_candidate_count=${TARGET_CANDIDATE_COUNT}"
+  echo "target_projection_sample_count=${TARGET_PROJECTION_SAMPLE_COUNT}"
+  echo "target_projection_margin=${TARGET_PROJECTION_MARGIN}"
+  echo "target_low_coverage_quantile=${TARGET_LOW_COVERAGE_QUANTILE}"
   echo "max_detections_per_view=${MAX_DETECTIONS_PER_VIEW}"
   echo "mask_batch_size=${MASK_BATCH_SIZE}"
   echo "flashsplat_support_threshold=${FLASHSPLAT_SUPPORT_THRESHOLD}"

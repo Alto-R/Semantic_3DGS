@@ -442,21 +442,44 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Inspect the bicycle frames near the 70.32% minimum and determine whether
-   their unchanged regions matter for recorded gaze targets.
-2. Define a downstream gaze-hit acceptance criterion before introducing any
+1. Run the implemented automatic targeted-camera comparison at the
+   user-controlled scheduler checkpoint below; Codex must not submit it.
+2. Compare its low-end visible coverage, label retention, leakage, and instance
+   stability against accepted job `92369`.
+3. Inspect the bicycle frames near the 70.32% baseline minimum and determine
+   whether their unchanged regions matter for recorded gaze targets.
+4. Define a downstream gaze-hit acceptance criterion before introducing any
    automatic propagation/refinement stage.
-3. Generalize the bicycle-specific scheduled script to configurable `SCENE`,
+5. Generalize the bicycle-specific scheduled script to configurable `SCENE`,
    `MODEL_DIR`, output name, class config, and optional focus classes.
-4. Prepare scene-specific automatic vocabularies for the next matched scenes.
-5. Run one next-scene pilot through the user-controlled `sbatch` checkpoint.
-6. Reach at least four fully labeled and visually validated scenes.
-7. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
+6. Prepare scene-specific automatic vocabularies for the next matched scenes.
+7. Run one next-scene pilot through the user-controlled `sbatch` checkpoint.
+8. Reach at least four fully labeled and visually validated scenes.
+9. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
    claiming all 12 scenes.
 
 Do not call Task 1 complete merely because bicycle passes. The hard minimum is
 four validated scenes, and the visible-coverage proxy is not a substitute for
 semantic or gaze-hit validation.
+
+### Automatic targeted-view scheduler checkpoint
+
+The implementation automatically projection-screens unused cameras, renders
+accepted labels on a pose-diverse candidate pool, measures candidate overlay
+coverage, selects 20 low-coverage/pose-diverse additions, and reruns the full
+pipeline on the original 50 plus those additions. It is implemented but has not
+yet been run or accepted.
+
+Dhana must submit this exact command from the cluster checkout:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+sbatch --export=ALL,OUTPUT_NAME=bicycle_semantic_targeted_v1,AUTO_TARGET_VIEW_COUNT=20,TARGET_CANDIDATE_COUNT=100,TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle scripts/slurm_task1_bicycle_grounded_sam.sbatch
+```
+
+Do not set `REUSE_SOURCE_OUT`; targeted views require new 2D masks, FlashSplat
+proposals, and signed class evidence. Do not change the accepted bicycle pointer
+until the comparison passes.
 
 ## 12. Important Files
 
@@ -471,6 +494,7 @@ scripts/run_flashsplat_mask_proposals.py
 scripts/cluster_semantic_flashsplat_proposals.py
 scripts/render_auto_label_overlays.py
 scripts/measure_overlay_coverage.py
+scripts/select_targeted_cameras.py
 scripts/validate_task1_outputs.py
 scripts/summarize_task1_semantic_run.py
 scripts/slurm_task1_bicycle_grounded_sam.sbatch

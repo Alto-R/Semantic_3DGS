@@ -275,6 +275,47 @@ cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 sbatch scripts/slurm_task1_bicycle_grounded_sam.sbatch
 ```
 
+### Automatic Targeted Camera Expansion
+
+The scheduled workflow can automatically expand the accepted 50-view bicycle
+baseline. It does not require a person to choose camera IDs:
+
+1. Sample the model geometry and measure projection characteristics for every
+   unused camera.
+2. Anchor safety thresholds to the 50 cameras that already rendered
+   successfully, rejecting candidate views with substantially worse near-plane,
+   frustum, or projected-scale behavior.
+3. Choose a pose-diverse pool of safe candidates.
+4. Render the accepted semantic labels and matching RGB images from those
+   candidates.
+5. Measure candidate image-space overlay coverage.
+6. Select the lowest-coverage candidates with an 80/20 coverage-need versus
+   pose-novelty score, then append them to the original 50 camera indices.
+7. Run GroundingDINO, SAM, FlashSplat lifting, signed fusion, export, and
+   validation on the combined camera set.
+
+The first comparison is configured for 100 screened candidates and 20 targeted
+additions, producing a 70-view semantic run:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+sbatch --export=ALL,OUTPUT_NAME=bicycle_semantic_targeted_v1,AUTO_TARGET_VIEW_COUNT=20,TARGET_CANDIDATE_COUNT=100,TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle scripts/slurm_task1_bicycle_grounded_sam.sbatch
+```
+
+Do not set `REUSE_SOURCE_OUT` for this experiment: the added views require new
+masks, proposals, and class evidence. Selection records are written under:
+
+```text
+validation/camera_selection/candidate_screen.json
+validation/camera_selection/candidate_visible_coverage.json
+validation/camera_selection/targeted_camera_selection.json
+validation/camera_selection/final_camera_indices.txt
+```
+
+The targeted result is experimental until its structural metrics, label
+retention, overlay leakage, low-end visible coverage, and downstream gaze-hit
+behavior are compared against accepted job `92369`.
+
 For a short smoke run with three selected cameras:
 
 ```bash

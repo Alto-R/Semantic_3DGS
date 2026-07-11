@@ -43,6 +43,10 @@ gaze-target dataset:
   image-space coverage (median frame 95.22%; range 70.32%-99.97%). This argues
   against adding label propagation solely because of the raw unlabeled ratio;
   low-coverage views and downstream gaze-hit behavior still require validation.
+- Automatic targeted camera expansion is implemented but not yet accepted: it
+  projection-screens unused cameras, renders the accepted labels on a diverse
+  candidate pool, measures candidate overlay coverage, and adds low-coverage,
+  pose-diverse views to the original 50 before rerunning the full pipeline.
 - Identity-test job `92353` merged the bicycle and bench correctly, but its
   first consolidation rule also split 13 accepted tree groups into 26
   components and ultimately discarded 95,584 tree Gaussians. That result is
@@ -84,4 +88,5 @@ The `bicycle` pilot has completed end to end:
 
 Task 1 is not complete: the hard minimum remains four fully labeled and
 validated scenes. Before scaling the bicycle policy, inspect its low-coverage
-views and validate whether the remaining image-space gaps affect gaze targets.
+views, run the targeted-view comparison, and validate whether the remaining
+image-space gaps affect gaze targets.
