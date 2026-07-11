@@ -145,10 +145,9 @@ Its predecessor is:
 95ef1d6 Preserve accepted instances during consolidation
 ```
 
-The local/GitHub push of `7b866fc` succeeded. A batched cluster synchronization
-was started, but the batch later timed out during the coverage measurement and
-did not return intermediate outputs. Therefore the fresh task must verify the
-cluster HEAD instead of assuming it reached `7b866fc`.
+The cluster checkout was verified at `95ef1d6`, then fast-forwarded through
+`42edce6` before the CPU-only coverage measurement. The coverage-recording
+documentation commit was also synchronized after it was pushed.
 
 ## 4. Research Goal And Task 1 Contract
 
@@ -385,12 +384,13 @@ tree IDs:                8
 
 The accepted source job 92344 output was verified unchanged after reuse runs.
 
-## 9. Current Coverage Question
+## 9. Measured Visible Coverage
 
 The accepted bicycle result has clean rendered overlays but 60.25% of raw
-Gaussians are label 0. Raw Gaussian count may overstate practical gaze-target
-coverage because many Gaussians can be hidden, redundant, low-opacity, or not
-dominant in the rendered views.
+Gaussians are label 0. The nonzero-label Gaussian ratio is therefore only
+`0.3974733013326583`. Raw Gaussian count overstates the apparent practical gap
+because many Gaussians can be hidden, redundant, low-opacity, or not dominant
+in the rendered views.
 
 Commit `7b866fc` adds:
 
@@ -399,70 +399,53 @@ scripts/measure_overlay_coverage.py
 tests/test_overlay_coverage.py
 ```
 
-The tool compares each original RGB render with its semantic overlay and
-reports the fraction of pixels changed by a visible semantic overlay across all
-50 cameras. This is explicitly an image-space proxy, not semantic ground truth,
-and may undercount palette colors close to the original RGB.
+The generated report is:
 
-The previous Codex task attempted to sync `7b866fc` and run this command in one
-large batched tool operation. The operation timed out after about 34 seconds
-during the coverage step and returned no intermediate outputs. It may have
-partially completed. Do not guess.
-
-## 10. First Actions In The Fresh Task
-
-Use `login: false` for local PowerShell commands.
-
-### Step 1: Verify local and cluster Git state
-
-```powershell
-git status --short
-git log -3 --oneline
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle/validation/visible_overlay_coverage.json
 ```
 
-```bash
-ssh -p 10022 cse12312032@172.18.34.25 \
-  'git -C /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr rev-parse --short HEAD'
+Top-level measured metrics:
+
+```text
+frame count:                    50
+evaluated pixels:              30,464,400
+overlay-changed pixels:        28,162,913
+overlay-changed ratio:         0.9244532306561101
+frame ratio min:               0.7032191672903455
+frame ratio p10:               0.7895937553340949
+frame ratio median:            0.9522204606031959
+frame ratio p90:               0.9990764630191306
+frame ratio max:               0.9996783130473602
+difference threshold:          2
+excluded border pixels:        1
 ```
 
-Expected local/GitHub functional commit is `7b866fc`. Verify cluster HEAD.
+This is measured image-space evidence that visible coverage is much higher than
+the raw nonzero-label Gaussian ratio. It does not establish semantic correctness
+or gaze-target hit rate, and palette similarity or opacity blending can
+undercount changed pixels. Any render/compositing difference unrelated to the
+semantic tint could instead overcount them. The current evidence does not
+justify a new propagation stage solely to reduce the raw label-0 count. Inspect
+the lowest-coverage views and downstream gaze hits before changing the policy.
 
-### Step 2: Check whether the interrupted coverage report exists
+## 10. Completed Coverage Checkpoint
 
-```bash
-ssh -p 10022 cse12312032@172.18.34.25 \
-  'test -f /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle/validation/visible_overlay_coverage.json && cat /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle/validation/visible_overlay_coverage.json'
-```
-
-If it exists and is valid, summarize its top-level metrics. Do not print all 50
-frame records unless needed.
-
-### Step 3: If missing, ensure cluster code is synced, then run CPU coverage
-
-This command is CPU-only and does not use `sbatch`. Allow a timeout of at least
-120 seconds because the earlier 30-second timeout was too short for reading 100
-full-size PNGs through the Conda environment.
-
-```bash
-cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
-conda run -n gaussian_grouping_true \
-  python scripts/measure_overlay_coverage.py \
-  --rgb-dir /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle/stages/01_grounded_sam/rgb_renders \
-  --overlay-dir /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle/visualizations/overlays/semantic_labels \
-  --output /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/bicycle/validation/visible_overlay_coverage.json \
-  --difference-threshold 2 \
-  --exclude-border 1
-```
-
-After measuring coverage, decide based on evidence whether the pipeline needs a
-new label-propagation stage. Do not infer this from raw unlabeled Gaussian count
-alone.
+- Local checkout was clean at `42edce6`; its recent history included
+  `42edce6`, `13a61eb`, and `7b866fc`.
+- Cluster checkout was initially `95ef1d6`; the interrupted synchronization had
+  not completed.
+- No report existed before the retry.
+- The cluster checkout was clean and fast-forwarded to `42edce6` before the
+  CPU-only measurement.
+- The report above was created successfully without `sbatch`.
 
 ## 11. Next Engineering Milestones
 
-1. Finish and record image-space visible coverage for accepted bicycle.
-2. Decide whether conservative label 0 coverage is acceptable for gaze-target
-   experiments or whether automatic propagation/refinement is required.
+1. Inspect the bicycle frames near the 70.32% minimum and determine whether
+   their unchanged regions matter for recorded gaze targets.
+2. Define a downstream gaze-hit acceptance criterion before introducing any
+   automatic propagation/refinement stage.
 3. Generalize the bicycle-specific scheduled script to configurable `SCENE`,
    `MODEL_DIR`, output name, class config, and optional focus classes.
 4. Prepare scene-specific automatic vocabularies for the next matched scenes.
@@ -472,8 +455,8 @@ alone.
    claiming all 12 scenes.
 
 Do not call Task 1 complete merely because bicycle passes. The hard minimum is
-four validated scenes, and raw/visible unlabeled policy still needs an explicit
-decision.
+four validated scenes, and the visible-coverage proxy is not a substitute for
+semantic or gaze-hit validation.
 
 ## 12. Important Files
 

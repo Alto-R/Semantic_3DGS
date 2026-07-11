@@ -460,6 +460,18 @@ proxy, not semantic ground truth: it measures where a visible overlay changed a
 rendered pixel and may undercount labels whose palette color resembles the
 original RGB value.
 
+For accepted bicycle job `92369`, the report measured 28,162,913 changed pixels
+out of 30,464,400 across 50 views: a pooled visible-coverage proxy of
+`0.9244532306561101`. Per-frame coverage ranged from `0.7032191672903455` to
+`0.9996783130473602`, with median `0.9522204606031959` and p10/p90 values of
+`0.7895937553340949`/`0.9990764630191306`. This is substantially higher than
+the raw nonzero-label Gaussian ratio of `0.3974733013326583` (the complement of
+the `0.6025266986673417` unlabeled ratio). The measurement does not establish
+semantic correctness, representative gaze coverage, or equivalence between a
+changed pixel and a labeled Gaussian. Do not add label propagation solely to
+reduce the raw label-0 count; first inspect the low-coverage views and measure
+downstream gaze-hit behavior.
+
 Example final label map:
 
 ```json

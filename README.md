@@ -37,9 +37,12 @@ gaze-target dataset:
 - Job `92369` consolidates the foreground into one 123,197-Gaussian bicycle and
   one 120,977-Gaussian bench while retaining all 932,516 tree-labeled
   Gaussians from the signed-evidence source.
-- The accepted high-confidence result remains conservative: 60.25% of raw
-  Gaussians use label `0` (`unlabeled`). Image-space visible coverage is now
-  measured separately before deciding whether label propagation is necessary.
+- The accepted high-confidence result remains conservative in 3D: 60.25% of
+  raw Gaussians use label `0` (`unlabeled`), so 39.75% carry nonzero labels.
+  The 50-view overlay-difference proxy nevertheless measures 92.45% visible
+  image-space coverage (median frame 95.22%; range 70.32%-99.97%). This argues
+  against adding label propagation solely because of the raw unlabeled ratio;
+  low-coverage views and downstream gaze-hit behavior still require validation.
 - Identity-test job `92353` merged the bicycle and bench correctly, but its
   first consolidation rule also split 13 accepted tree groups into 26
   components and ultimately discarded 95,584 tree Gaussians. That result is
@@ -80,5 +83,5 @@ The `bicycle` pilot has completed end to end:
 6. Full and bicycle-versus-bench overlays visually checked.
 
 Task 1 is not complete: the hard minimum remains four fully labeled and
-validated scenes. The bicycle result still needs an explicit decision about
-acceptable visible and raw unlabeled coverage before scaling the same policy.
+validated scenes. Before scaling the bicycle policy, inspect its low-coverage
+views and validate whether the remaining image-space gaps affect gaze targets.
