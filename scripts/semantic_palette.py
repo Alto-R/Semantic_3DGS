@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import colorsys
 import json
+import math
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -68,6 +70,8 @@ STUFF_CLASSES = {
     "window",
 }
 
+MIN_LABEL_DELTA_E = 30.0
+
 
 def load_label_items(path: Path | None) -> dict[int, dict[str, Any]]:
     if path is None or not path.exists():
@@ -86,6 +90,103 @@ def fallback_color(label_id: int) -> tuple[float, float, float]:
     return colorsys.hsv_to_rgb(hue, 0.78, 0.96)
 
 
+def _linear_srgb(channel: float) -> float:
+    return channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+
+
+def lab_for_rgb(rgb: tuple[float, float, float]) -> tuple[float, float, float]:
+    red, green, blue = (_linear_srgb(channel) for channel in rgb)
+    x = (0.4124564 * red + 0.3575761 * green + 0.1804375 * blue) / 0.95047
+    y = 0.2126729 * red + 0.7151522 * green + 0.0721750 * blue
+    z = (0.0193339 * red + 0.1191920 * green + 0.9503041 * blue) / 1.08883
+
+    delta = 6.0 / 29.0
+
+    def transform(value: float) -> float:
+        if value > delta**3:
+            return value ** (1.0 / 3.0)
+        return value / (3.0 * delta**2) + 4.0 / 29.0
+
+    fx, fy, fz = transform(x), transform(y), transform(z)
+    return 116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)
+
+
+def color_distance(
+    first: tuple[float, float, float],
+    second: tuple[float, float, float],
+) -> float:
+    first_lab = lab_for_rgb(first)
+    second_lab = lab_for_rgb(second)
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(first_lab, second_lab)))
+
+
+def _candidate_colors() -> tuple[tuple[float, float, float], ...]:
+    colors: list[tuple[float, float, float]] = []
+    for hue_index in range(48):
+        hue = hue_index / 48.0
+        for saturation, value in ((0.95, 0.95), (0.72, 0.98), (0.88, 0.72)):
+            colors.append(colorsys.hsv_to_rgb(hue, saturation, value))
+    return tuple(colors)
+
+
+DISPLAY_COLOR_CANDIDATES = _candidate_colors()
+
+
+def _label_signature(
+    label_items: dict[int, dict[str, Any]],
+) -> tuple[tuple[int, str, str], ...]:
+    return tuple(
+        sorted(
+            (
+                int(label_id),
+                str(item.get("class", "unlabeled" if int(label_id) == 0 else "unknown")).lower(),
+                str(item.get("name", "")),
+            )
+            for label_id, item in label_items.items()
+        )
+    )
+
+
+@lru_cache(maxsize=128)
+def _palette_from_signature(
+    signature: tuple[tuple[int, str, str], ...],
+) -> dict[int, tuple[float, float, float]]:
+    palette: dict[int, tuple[float, float, float]] = {}
+    used_colors: list[tuple[float, float, float]] = []
+
+    if any(label_id == 0 for label_id, _, _ in signature):
+        palette[0] = CLASS_COLORS["unlabeled"]
+        used_colors.append(palette[0])
+
+    for label_id, class_name, _ in signature:
+        if label_id == 0:
+            continue
+
+        preferred = CLASS_COLORS.get(class_name, fallback_color(label_id))
+        preferred_distance = min(
+            (color_distance(preferred, used) for used in used_colors),
+            default=float("inf"),
+        )
+        if preferred_distance >= MIN_LABEL_DELTA_E:
+            selected = preferred
+        else:
+            selected = max(
+                DISPLAY_COLOR_CANDIDATES,
+                key=lambda candidate: min(color_distance(candidate, used) for used in used_colors),
+            )
+        palette[label_id] = selected
+        used_colors.append(selected)
+
+    return palette
+
+
+def label_palette(
+    label_items: dict[int, dict[str, Any]],
+) -> dict[int, tuple[float, float, float]]:
+    """Return deterministic colors separated across every label in one output."""
+    return dict(_palette_from_signature(_label_signature(label_items)))
+
+
 def rgb_for_label(
     label_id: int,
     label_items: dict[int, dict[str, Any]] | None = None,
@@ -96,18 +197,11 @@ def rgb_for_label(
     if focus_classes and class_name not in focus_classes:
         return CLASS_COLORS["unlabeled"]
 
-    base = CLASS_COLORS.get(class_name, fallback_color(label_id))
-    if label_id == 0 or class_name in STUFF_CLASSES:
-        return base
-
-    # Keep instances in the same color family while making adjacent instances distinguishable.
-    name = str(item.get("name", ""))
-    try:
-        instance = int(name.rsplit("_", 1)[1])
-    except (IndexError, ValueError):
-        instance = label_id
-    factor = (1.0, 0.78, 0.90, 0.68)[(max(instance, 1) - 1) % 4]
-    return tuple(min(1.0, max(0.0, channel * factor)) for channel in base)
+    if label_items:
+        palette = _palette_from_signature(_label_signature(label_items))
+        if label_id in palette:
+            return palette[label_id]
+    return CLASS_COLORS.get(class_name, fallback_color(label_id))
 
 
 def rgb8_for_label(

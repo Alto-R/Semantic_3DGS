@@ -517,7 +517,11 @@ Active semantic scripts:
   - can focus selected classes while dimming all other labels
 
 - `scripts/semantic_palette.py`
-  - provides one class-aware palette shared by overlays and debug PLYs
+  - provides one deterministic label-aware palette shared by overlays and debug
+    PLYs
+  - preserves configured class colors when they remain perceptually separated
+  - replaces collisions through farthest-point selection in CIELAB space with
+    a target Delta E of 30, including separate hues for same-class instances
   - uses red for bicycle and blue for bench in every validation artifact
 
 - `scripts/summarize_task1_semantic_run.py`

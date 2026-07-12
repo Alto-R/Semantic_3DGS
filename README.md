@@ -95,6 +95,11 @@ gaze-target dataset:
   spill onto adjacent cabinet/wall geometry, so this remains an accepted
   baseline rather than a semantic-ground-truth claim. Automatic targeted-view
   expansion is the next room checkpoint.
+- SuperSplat inspection exposed a display-palette collision: curtain and chair
+  were separate labels but used similar purple shades. Debug PLYs and overlays
+  now allocate deterministic per-label colors with a CIELAB separation target,
+  including distinct colors for multiple instances of one class. This changes
+  only visualization colors, not semantic IDs or Gaussian ownership.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`

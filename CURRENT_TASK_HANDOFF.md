@@ -676,6 +676,21 @@ sbatch --export=ALL,SCENE,OUTPUT_NAME,AUTO_TARGET_VIEW_COUNT,TARGET_CANDIDATE_CO
 The selector will preserve the accepted 50 views and automatically add 20
 low-coverage, pose-diverse unused cameras.
 
+SuperSplat inspection of the accepted baseline exposed a visualization issue,
+not a confirmed semantic-label error: `curtain` used RGB `(133, 61, 173)`, while
+the two `chair` instances used `(143, 51, 219)` and `(111, 40, 171)`. The shared
+purple family made curtain/chair separation difficult to inspect. Palette
+generation now keeps the configured class colors as preferred anchors but
+automatically replaces collisions using deterministic farthest-point selection
+in CIELAB space, targeting Delta E >= 30 across all labels in an output. This
+also gives repeated instances different hues rather than darker variants of one
+hue. The semantic PLY labels and Gaussian ownership are unchanged.
+
+The targeted room run above will use the new palette for all 70 views. Because
+the overlay-difference coverage proxy depends on tint color, compare original
+and added views within that run; do not interpret a change from job `92492` as
+semantic improvement unless the visual evidence also supports it.
+
 ## 12. Important Files
 
 ```text
