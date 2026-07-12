@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from cluster_semantic_flashsplat_proposals import (  # noqa: E402
     SemanticGroup,
+    assigned_prune_threshold,
     consolidate_thing_instances,
 )
 
@@ -100,6 +101,34 @@ class InstanceConsolidationTest(unittest.TestCase):
         self.assertEqual(reports[0]["before_gaussians"], 4)
         self.assertEqual(reports[0]["after_gaussians"], 4)
         self.assertEqual(reports[0]["removed_gaussians"], 0)
+
+
+class AssignedPruneThresholdTest(unittest.TestCase):
+    def test_class_threshold_can_lower_stuff_default(self) -> None:
+        group = thing_group(1, [0])
+        group.class_name = "sky"
+        group.is_stuff = True
+
+        threshold = assigned_prune_threshold(group, 0, 5000, 10000, {"sky": 8000})
+
+        self.assertEqual(threshold, 8000)
+
+    def test_class_threshold_can_raise_thing_default(self) -> None:
+        group = thing_group(1, [0])
+        group.class_name = "building"
+
+        threshold = assigned_prune_threshold(group, 0, 5000, 10000, {"building": 8000})
+
+        self.assertEqual(threshold, 8000)
+
+    def test_global_threshold_remains_a_floor(self) -> None:
+        group = thing_group(1, [0])
+        group.class_name = "sky"
+        group.is_stuff = True
+
+        threshold = assigned_prune_threshold(group, 9000, 5000, 10000, {"sky": 8000})
+
+        self.assertEqual(threshold, 9000)
 
 
 if __name__ == "__main__":

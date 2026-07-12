@@ -346,34 +346,43 @@ configs/task1_semantic_classes.<scene>.json
 It falls back to `configs/task1_semantic_classes.example.json`. Focus artifacts
 are optional and use scene-neutral filenames.
 
-The next pilot is `train`. Its official matched model has 1,026,508 Gaussians
-and 301 cameras, making it the lowest-cost remaining scene for validating the
-generalized workflow. The tracked vocabulary is:
+The `train` pilot uses an official matched model with 1,026,508 Gaussians and
+301 cameras. The tracked vocabulary is:
 
 ```text
 configs/task1_semantic_classes.train.json
 ```
 
-Dhana must submit this initial 50-view baseline from the cluster checkout:
-
-```bash
-cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
-SCENE=train \
-OUTPUT_NAME=train_semantic_baseline_v1 \
-FOCUS_CLASSES='train,railroad_track' \
-FOCUS_NAME=train_vs_track \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
-```
-
-Expected output:
+The initial 50-view job `92467` completed structurally, but pruned its strongly
+supported sky group because 8,451 assigned Gaussians fell below the default
+10,000-Gaussian stuff threshold. Reuse job `92469` lowered that threshold to
+8,000 and is the accepted baseline:
 
 ```text
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/train_semantic_baseline_v1
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/train
+  -> ../train_semantic_baseline_v2
 ```
 
-Do not enable `AUTO_TARGET_VIEW_COUNT` on this first train run. Automatic
-targeted expansion requires a completed and accepted same-scene baseline via
-`TARGET_SELECTION_SOURCE`; bicycle evidence must not be reused for train.
+Job `92469` retains two train instances of 428,735 and 18,476 Gaussians and adds
+an 8,462-Gaussian sky label without admitting any previously pruned thing
+group. The final unlabeled ratio is `0.4414675774567758`. Across the 50 source
+views, the overlay-difference proxy is `0.9931697851099566` pooled with a
+minimum of `0.9473586105137582`. Visual QA shows coherent train labeling and
+corrected sky ownership. These coverage numbers measure visible semantic tint;
+they are not semantic ground truth or gaze-hit accuracy.
+
+Automatic targeted expansion must use this accepted train result as its
+scene-local `TARGET_SELECTION_SOURCE`; bicycle evidence must not be reused.
+Job `92470` performed that expansion and added 20 low-coverage/pose-diverse
+cameras. It remains diagnostic because its default stuff threshold pruned sky
+at 8,941 Gaussians and a 6,831-Gaussian shipping-container false positive was
+retained as `building`.
+
+Class entries may define `min_assigned_gaussians` to override the thing/stuff
+category cutoff while preserving the global minimum as a floor. The train
+config sets `sky` and `building` to 8,000. This retains the supported sky group
+while pruning the false building group in a reuse correction that does not
+repeat camera selection, GroundingDINO/SAM, or FlashSplat.
 
 For a short smoke run with three selected cameras:
 

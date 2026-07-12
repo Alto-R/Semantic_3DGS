@@ -480,17 +480,15 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared 50-view `train` pilot through the user-controlled scheduler
-   checkpoint below; Codex must not submit it.
-2. Inspect structural validation, class/instance counts, visible coverage, and
-   focused/full contact sheets before creating `accepted/train`.
-3. If the baseline passes, run same-scene automatic targeted expansion using
-   the accepted train output; never reuse bicycle masks or labels.
-4. Define a downstream gaze-hit acceptance criterion for accepted scenes before
+1. Run the prepared reuse correction for train targeted job `92470`; Codex must
+   not submit it.
+2. Compare the corrected 70-view result against accepted job `92469` and
+   diagnostic job `92470` before changing the accepted pointer.
+3. Define a downstream gaze-hit acceptance criterion for accepted scenes before
    introducing any automatic propagation/refinement stage.
-5. Prepare vocabularies and runs for at least two more matched scenes to reach
+4. Prepare vocabularies and runs for at least two more matched scenes to reach
    the four-scene minimum.
-6. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
+5. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
    claiming all 12 scenes.
 
 Do not call Task 1 complete merely because bicycle passes. The hard minimum is
@@ -509,27 +507,70 @@ sbatch --export=ALL,OUTPUT_NAME=bicycle_semantic_targeted_v1,AUTO_TARGET_VIEW_CO
 The comparison passed and the accepted pointer now targets
 `bicycle_semantic_targeted_v1`. No repeat submission is currently required.
 
-### Train baseline scheduler checkpoint
+### Accepted train baseline and targeted scheduler checkpoint
 
-The accepted scheduler is now generalized in
-`scripts/slurm_task1_semantic_scene.sbatch`. `train` is the next pilot because
-its matched model has 1,026,508 Gaussians and 301 cameras. Its scene-specific
-automatic vocabulary is `configs/task1_semantic_classes.train.json`.
+Jobs `92467` and `92469` completed successfully. Job `92467` produced a valid
+initial result, but its 10,000-Gaussian stuff cutoff pruned a sky group supported
+by 43 of 50 source views. Reuse job `92469` lowered that cutoff to 8,000 and is
+accepted as `train_semantic_baseline_v2`.
 
-Dhana must submit:
+Measured accepted metrics:
+
+```text
+Gaussians:                     1,026,508
+final labels including 0:            10
+unlabeled ratio:               0.4414675774567758
+visible frame count:                         50
+evaluated pixels:              25,482,800
+overlay-changed pixels:        25,308,747
+overlay-changed ratio:         0.9931697851099566
+frame ratio min:               0.9473586105137582
+frame ratio p10:               0.9799849310122907
+frame ratio median:            0.998994419765489
+frame ratio p90:               0.9999923477796789
+frame ratio max:               1.0
+```
+
+The two train instances are unchanged from job `92467` at 428,735 and 18,476
+Gaussians. The 8,462-Gaussian sky label replaces the pruned group, while no
+rejected thing group crossed its unchanged 5,000-Gaussian cutoff. Full and
+train-versus-track contact sheets show coherent train coverage and corrected
+sky ownership. The overlay-difference ratio is an image-space visibility proxy,
+not semantic ground truth or gaze-hit accuracy.
+
+The accepted cluster pointer is:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/train
+  -> ../train_semantic_baseline_v2
+```
+
+Targeted expansion job `92470` completed successfully with 70 views, but it is
+diagnostic rather than accepted. The selected 20 cameras are useful: their
+pooled overlay-difference proxy is `0.9681440030137975` with a minimum of
+`0.9091445994945611`. However, the run used the default 10,000-Gaussian stuff
+cutoff, pruned sky at 8,941 Gaussians, and returned the earlier background
+leakage. It also promoted a 6,831-Gaussian `building` group that visual QA shows
+is the long shipping container.
+
+The fusion code now reads optional per-class `min_assigned_gaussians` overrides
+from the scene config. Train sets both `sky` and `building` to 8,000: sky can be
+retained below the generic stuff cutoff, while the false building remains below
+its stricter thing threshold. The next user-controlled scheduler checkpoint
+reuses all masks and proposals from job `92470`:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 SCENE=train \
-OUTPUT_NAME=train_semantic_baseline_v1 \
+OUTPUT_NAME=train_semantic_targeted_v2 \
+REUSE_SOURCE_OUT=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/train_semantic_targeted_v1 \
 FOCUS_CLASSES='train,railroad_track' \
 FOCUS_NAME=train_vs_track \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
+sbatch --export=ALL,SCENE,OUTPUT_NAME,REUSE_SOURCE_OUT,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
 ```
 
-This is an initial evenly spaced 50-view baseline. Do not set
-`AUTO_TARGET_VIEW_COUNT` or `TARGET_SELECTION_SOURCE` yet; targeted selection
-requires an accepted train baseline and must remain scene-local.
+Do not set `AUTO_TARGET_VIEW_COUNT` for this correction; camera selection and
+detection are already complete.
 
 ## 12. Important Files
 

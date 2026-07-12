@@ -128,6 +128,23 @@ def load_assignment_priorities(path: Path | None, override: str) -> dict[str, in
     return {class_name: len(names) - index for index, class_name in enumerate(names)}
 
 
+def load_class_min_assigned_gaussians(path: Path | None) -> dict[str, int]:
+    if path is None or not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    classes = data.get("classes", data) if isinstance(data, dict) else data
+    thresholds: dict[str, int] = {}
+    for item in classes:
+        if not isinstance(item, dict) or "min_assigned_gaussians" not in item:
+            continue
+        class_name = normalize_class_name(item.get("class", item.get("name", "")))
+        threshold = int(item["min_assigned_gaussians"])
+        if threshold < 0:
+            raise ValueError(f"min_assigned_gaussians must be non-negative for {class_name}")
+        thresholds[class_name] = threshold
+    return thresholds
+
+
 def load_class_evidence(path: Path | None) -> dict[str, ClassEvidence] | None:
     if path is None:
         return None
@@ -761,8 +778,12 @@ def assigned_prune_threshold(
     min_assigned_gaussians: int,
     min_assigned_thing_gaussians: int,
     min_assigned_stuff_gaussians: int,
+    class_min_assigned_gaussians: dict[str, int] | None = None,
 ) -> int:
     threshold = max(0, min_assigned_gaussians)
+    class_thresholds = class_min_assigned_gaussians or {}
+    if group.class_name in class_thresholds:
+        return max(threshold, class_thresholds[group.class_name])
     if group.is_stuff:
         threshold = max(threshold, max(0, min_assigned_stuff_gaussians))
     else:
@@ -777,6 +798,7 @@ def prune_assigned_groups(
     min_assigned_thing_gaussians: int,
     min_assigned_stuff_gaussians: int,
     min_label_score: float,
+    class_min_assigned_gaussians: dict[str, int] | None = None,
 ) -> tuple[np.ndarray, list[SemanticGroup], list[dict[str, Any]]]:
     kept: list[SemanticGroup] = []
     pruned: list[dict[str, Any]] = []
@@ -787,6 +809,7 @@ def prune_assigned_groups(
             min_assigned_gaussians,
             min_assigned_thing_gaussians,
             min_assigned_stuff_gaussians,
+            class_min_assigned_gaussians,
         )
         reasons: list[str] = []
         if threshold > 0 and group.assigned_count < threshold:
@@ -933,6 +956,7 @@ def main() -> None:
 
     stuff_classes = load_stuff_classes(args.class_config, args.stuff_classes)
     assignment_priorities = load_assignment_priorities(args.class_config, args.class_priority)
+    class_min_assigned_gaussians = load_class_min_assigned_gaussians(args.class_config)
     class_evidence = load_class_evidence(args.class_evidence_dir)
     proposals = load_proposals(
         manifest_path,
@@ -969,6 +993,7 @@ def main() -> None:
         args.min_assigned_thing_gaussians,
         args.min_assigned_stuff_gaussians,
         args.min_label_score,
+        class_min_assigned_gaussians,
     )
     labels, groups = prune_and_compact_groups(labels, groups)
     if pruned_groups:
@@ -1008,6 +1033,7 @@ def main() -> None:
             args.min_assigned_thing_gaussians,
             args.min_assigned_stuff_gaussians,
             args.min_label_score,
+            class_min_assigned_gaussians,
         )
         labels, groups = prune_and_compact_groups(labels, groups)
 
@@ -1033,6 +1059,7 @@ def main() -> None:
             args.min_assigned_thing_gaussians,
             args.min_assigned_stuff_gaussians,
             args.min_label_score,
+            class_min_assigned_gaussians,
         )
         spatial_tiny_pruned.extend(consolidated_tiny_pruned)
         labels, groups = prune_and_compact_groups(labels, groups)
@@ -1071,6 +1098,7 @@ def main() -> None:
             "min_assigned_gaussians": args.min_assigned_gaussians,
             "min_assigned_thing_gaussians": args.min_assigned_thing_gaussians,
             "min_assigned_stuff_gaussians": args.min_assigned_stuff_gaussians,
+            "class_min_assigned_gaussians": class_min_assigned_gaussians,
             "min_label_score": args.min_label_score,
             "assignment_priority": assignment_priorities,
             "assignment_mode": "confidence_weighted_multiview",
