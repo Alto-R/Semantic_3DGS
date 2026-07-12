@@ -691,6 +691,45 @@ the overlay-difference coverage proxy depends on tint color, compare original
 and added views within that run; do not interpret a change from job `92492` as
 semantic improvement unless the visual evidence also supports it.
 
+Job `92498` (`room_semantic_targeted_v1`) completed in 7 minutes 50 seconds and
+structurally validated all 1,593,376 Gaussians across 70 semantic and 70 focused
+overlays. It produced 21 nonzero labels, an unlabeled ratio of
+`0.6529877442612415`, a pooled overlay-difference proxy of
+`0.8067012463456203`, and minimum `0.6063147492490233`. The new palette clearly
+separates the yellow curtain from the purple and cyan chairs.
+
+The same visual QA exposed a semantic error hidden by the old colors: focused
+overlays consistently color coffee/side-table geometry as television. The
+accepted TV groups are dominated by ambiguous phrases such as
+`television stand table desk`, while several groups supported by the specific
+`television tv television screen` phrase were individually pruned below the
+global 5,000-Gaussian object cutoff. Job `92498` is diagnostic; do not advance
+`accepted/room` from `room_semantic_baseline_v2`.
+
+The correction is generic rather than scene-threshold-specific:
+
+- exact prompt matches wholly contained in a more specific compound are ignored
+  (`floor` inside `floor speaker`), preserving the compound class;
+- phrases that still match unrelated classes are rejected as `unknown` instead
+  of assigned to the first configured class;
+- connected same-class fragments are consolidated before the global object-size
+  cutoff so one valid object is judged by its connected union.
+
+After the correction commit is pushed and the cluster checkout synchronized,
+Dhana must submit a fresh detection run; do not reuse masks or proposals:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+SCENE=room \
+OUTPUT_NAME=room_semantic_targeted_v2 \
+AUTO_TARGET_VIEW_COUNT=20 \
+TARGET_CANDIDATE_COUNT=100 \
+TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/room \
+FOCUS_CLASSES='piano,television' \
+FOCUS_NAME=piano_vs_television \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,AUTO_TARGET_VIEW_COUNT,TARGET_CANDIDATE_COUNT,TARGET_SELECTION_SOURCE,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
+```
+
 ## 12. Important Files
 
 ```text

@@ -100,6 +100,15 @@ gaze-target dataset:
   now allocate deterministic per-label colors with a CIELAB separation target,
   including distinct colors for multiple instances of one class. This changes
   only visualization colors, not semantic IDs or Gaussian ownership.
+- Targeted room job `92498` validated all 70 views and reduced the unlabeled
+  ratio to 65.30%, but the separated colors exposed a real cross-class error:
+  ambiguous phrases such as `television stand table desk` were assigned to the
+  first matching class and colored coffee/side-table geometry as television.
+  The run is diagnostic and `accepted/room` remains on the 50-view baseline.
+- Phrase resolution now rejects unrelated multi-class matches while preserving
+  specific compounds such as `floor speaker`. Connected same-class fragments
+  are also consolidated before the global object-size cutoff so valid parts of
+  one object are evaluated together without adding class-specific thresholds.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`

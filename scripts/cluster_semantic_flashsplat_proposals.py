@@ -994,6 +994,26 @@ def main() -> None:
         args.class_evidence_min_ratio,
     )
     labels, groups = prune_and_compact_groups(labels, groups)
+
+    # Merge connected same-class fragments before applying the per-instance
+    # size cutoff. Otherwise several valid fragments of one object can each be
+    # discarded even when their connected union is large enough to retain.
+    vertex_data: np.memmap | None = None
+    instance_consolidation: list[dict[str, Any]] = []
+    if args.consolidate_thing_instances:
+        _, vertex_data = vertex_data_memmap(ply_path)
+        labels, groups, instance_consolidation = consolidate_thing_instances(
+            labels,
+            groups,
+            vertex_data,
+            args.instance_voxel_scale_multiplier,
+            args.instance_min_voxel_size,
+            args.instance_max_voxel_size,
+            args.instance_min_component_gaussians,
+            args.instance_min_component_ratio,
+        )
+        labels, groups = prune_and_compact_groups(labels, groups)
+
     labels, groups, pruned_groups = prune_assigned_groups(
         labels,
         groups,
@@ -1020,7 +1040,6 @@ def main() -> None:
         )
         labels, groups = prune_and_compact_groups(labels, groups)
 
-    vertex_data: np.memmap | None = None
     spatial_pruning: list[dict[str, Any]] = []
     spatial_tiny_pruned: list[dict[str, Any]] = []
     if args.spatial_prune_thing_islands:
@@ -1047,35 +1066,6 @@ def main() -> None:
             args.adaptive_stuff_min_view_ratio,
             args.adaptive_stuff_threshold_ratio,
         )
-        labels, groups = prune_and_compact_groups(labels, groups)
-
-    instance_consolidation: list[dict[str, Any]] = []
-    if args.consolidate_thing_instances:
-        if vertex_data is None:
-            _, vertex_data = vertex_data_memmap(ply_path)
-        labels, groups, instance_consolidation = consolidate_thing_instances(
-            labels,
-            groups,
-            vertex_data,
-            args.instance_voxel_scale_multiplier,
-            args.instance_min_voxel_size,
-            args.instance_max_voxel_size,
-            args.instance_min_component_gaussians,
-            args.instance_min_component_ratio,
-        )
-        labels, groups = prune_and_compact_groups(labels, groups)
-        labels, groups, consolidated_tiny_pruned = prune_assigned_groups(
-            labels,
-            groups,
-            args.min_assigned_gaussians,
-            args.min_assigned_thing_gaussians,
-            args.min_assigned_stuff_gaussians,
-            args.min_label_score,
-            total_source_view_count,
-            args.adaptive_stuff_min_view_ratio,
-            args.adaptive_stuff_threshold_ratio,
-        )
-        spatial_tiny_pruned.extend(consolidated_tiny_pruned)
         labels, groups = prune_and_compact_groups(labels, groups)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)

@@ -124,11 +124,28 @@ def text_prompt_from_specs(specs: list[ClassSpec], text_prompt: str | None) -> s
 
 def class_from_phrase(phrase: str, specs: list[ClassSpec]) -> str:
     normalized_phrase = normalize_text(phrase)
+    exact_matches: list[tuple[str, frozenset[str]]] = []
     for spec in specs:
-        for prompt in sorted(spec.prompts, key=len, reverse=True):
+        for prompt in spec.prompts:
             normalized_prompt = normalize_text(prompt)
             if normalized_prompt and re.search(rf"\b{re.escape(normalized_prompt)}\b", normalized_phrase):
-                return spec.name
+                exact_matches.append((spec.name, frozenset(normalized_prompt.split())))
+
+    if exact_matches:
+        # GroundingDINO sometimes emits a span containing several configured
+        # prompts. Ignore a short match only when it is wholly contained in a
+        # longer matched prompt ("floor" inside "floor speaker"). If unrelated
+        # classes remain ("television stand table desk"), reject the ambiguous
+        # phrase instead of assigning it to whichever class appears first.
+        maximal_matches = [
+            (class_name, prompt_tokens)
+            for class_name, prompt_tokens in exact_matches
+            if not any(prompt_tokens < other_tokens for _, other_tokens in exact_matches)
+        ]
+        matched_classes = {class_name for class_name, _ in maximal_matches}
+        if len(matched_classes) == 1:
+            return next(iter(matched_classes))
+        return "unknown"
 
     # GroundingDINO can return only one token from a configured multiword
     # prompt (for example, "acoustic" for "acoustic guitar"). Resolve a

@@ -13,6 +13,7 @@ from cluster_semantic_flashsplat_proposals import (  # noqa: E402
     SemanticGroup,
     assigned_prune_threshold,
     consolidate_thing_instances,
+    prune_assigned_groups,
 )
 
 
@@ -101,6 +102,25 @@ class InstanceConsolidationTest(unittest.TestCase):
         self.assertEqual(reports[0]["before_gaussians"], 4)
         self.assertEqual(reports[0]["after_gaussians"], 4)
         self.assertEqual(reports[0]["removed_gaussians"], 0)
+
+    def test_connected_fragments_are_merged_before_size_pruning(self) -> None:
+        labels = np.asarray([1, 1, 1, 2, 2, 2], dtype=np.int32)
+        groups = [thing_group(1, [0, 1, 2]), thing_group(2, [3, 4, 5])]
+        points = [(index * 0.02, 0.0, 0.0) for index in range(6)]
+
+        consolidated, output_groups, _ = self.consolidate(labels, groups, points)
+        retained, kept, pruned = prune_assigned_groups(
+            consolidated,
+            output_groups,
+            min_assigned_gaussians=0,
+            min_assigned_thing_gaussians=5,
+            min_assigned_stuff_gaussians=10,
+            min_label_score=0.0,
+        )
+
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(pruned, [])
+        self.assertEqual(np.count_nonzero(retained), 6)
 
 
 class AssignedPruneThresholdTest(unittest.TestCase):

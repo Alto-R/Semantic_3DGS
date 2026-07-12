@@ -454,6 +454,20 @@ semantic ground truth or gaze-hit accuracy.
 The next room checkpoint is a fresh 20-view automatic targeted expansion from
 the accepted baseline; it must not reuse the old masks or proposals.
 
+Targeted job `92498` completed structurally with 70 views, 21 nonzero labels,
+and an unlabeled ratio of `0.6529877442612415`. Its pooled overlay-difference
+proxy is `0.8067012463456203`, with minimum `0.6063147492490233`. The separated
+palette confirms that curtain and chair are distinct, but it also reveals table
+geometry colored as television. The offending TV groups are dominated by
+multi-class detector phrases such as `television stand table desk`; the run is
+diagnostic and is not the accepted room result.
+
+Phrase resolution now removes shorter matches contained within a specific
+compound prompt, then rejects any phrase that still spans unrelated configured
+classes. Fusion also consolidates connected same-class fragments before the
+global thing-size cutoff. These are scene-neutral precision and ordering fixes,
+not per-class thresholds. A fresh detection run is required.
+
 For a short smoke run with three selected cameras:
 
 ```bash
