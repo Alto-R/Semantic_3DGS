@@ -46,6 +46,15 @@ class SceneConfigurationTest(unittest.TestCase):
         self.assertIn("guitar", class_names)
         self.assertTrue(class_names.issubset(CLASS_COLORS))
 
+    def test_truck_class_config_is_complete_and_prioritized(self) -> None:
+        config = self.assert_scene_config("truck")
+        class_names = {item["class"] for item in config["classes"]}
+        self.assertTrue({"truck", "wheel", "building", "ground", "sky"}.issubset(class_names))
+        class_types = {item["class"]: item["type"] for item in config["classes"]}
+        self.assertEqual(class_types["truck"], "thing")
+        self.assertEqual(class_types["wheel"], "thing")
+        self.assertEqual(class_types["building"], "stuff")
+
     def test_train_focus_classes_have_stable_palette_colors(self) -> None:
         self.assertIn("train", CLASS_COLORS)
         self.assertIn("railroad_track", CLASS_COLORS)

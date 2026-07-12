@@ -39,27 +39,29 @@ class SemanticPaletteTest(unittest.TestCase):
     def test_palette_is_deterministic(self) -> None:
         self.assertEqual(label_palette(self.labels), label_palette(dict(reversed(self.labels.items()))))
 
-    def test_room_vocabulary_meets_separation_target(self) -> None:
-        config_path = ROOT / "configs" / "task1_semantic_classes.room.json"
-        classes = json.loads(config_path.read_text(encoding="utf-8"))["classes"]
-        labels = {0: {"id": 0, "name": "unlabeled", "class": "unlabeled"}}
-        labels.update(
-            {
-                label_id: {
-                    "id": label_id,
-                    "name": f"{item['class']}_01",
-                    "class": item["class"],
-                }
-                for label_id, item in enumerate(classes, 1)
-            }
-        )
-        palette = label_palette(labels)
-        distances = [
-            color_distance(palette[first_id], palette[second_id])
-            for first_index, first_id in enumerate(sorted(palette))
-            for second_id in sorted(palette)[first_index + 1 :]
-        ]
-        self.assertGreaterEqual(min(distances), MIN_LABEL_DELTA_E)
+    def test_scene_vocabularies_meet_separation_target(self) -> None:
+        for scene in ("room", "truck"):
+            with self.subTest(scene=scene):
+                config_path = ROOT / "configs" / f"task1_semantic_classes.{scene}.json"
+                classes = json.loads(config_path.read_text(encoding="utf-8"))["classes"]
+                labels = {0: {"id": 0, "name": "unlabeled", "class": "unlabeled"}}
+                labels.update(
+                    {
+                        label_id: {
+                            "id": label_id,
+                            "name": f"{item['class']}_01",
+                            "class": item["class"],
+                        }
+                        for label_id, item in enumerate(classes, 1)
+                    }
+                )
+                palette = label_palette(labels)
+                distances = [
+                    color_distance(palette[first_id], palette[second_id])
+                    for first_index, first_id in enumerate(sorted(palette))
+                    for second_id in sorted(palette)[first_index + 1 :]
+                ]
+                self.assertGreaterEqual(min(distances), MIN_LABEL_DELTA_E)
 
 
 if __name__ == "__main__":

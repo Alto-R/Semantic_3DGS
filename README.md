@@ -109,6 +109,18 @@ gaze-target dataset:
   specific compounds such as `floor speaker`. Connected same-class fragments
   are also consolidated before the global object-size cutoff so valid parts of
   one object are evaluated together without adding class-specific thresholds.
+- Corrected targeted room job `92513` is accepted at
+  `outputs/eyenavgs_task1/accepted/room -> ../room_semantic_targeted_v2`.
+  It validates 1,593,376 Gaussians across 70 views, retains a clean
+  7,779-Gaussian television and a separate 9,054-Gaussian table, and removes the
+  table-as-television failure from job `92498`.
+- Accepted room visible-tint coverage is 81.38% pooled. The original 50 views
+  measure 84.22% with a 62.24% minimum; the 20 automatically selected difficult
+  views measure 74.28% with a 35.03% minimum. The lowest view is dominated by
+  unlabeled wall/ceiling rather than visible class leakage.
+- `truck` is the fourth-scene pilot: 2,541,226 Gaussians and 251 cameras. Its
+  scene configuration prioritizes the truck and wheels while retaining common
+  outdoor context. The first checkpoint is an evenly spaced 50-view baseline.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`

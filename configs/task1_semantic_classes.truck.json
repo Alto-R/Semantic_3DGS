@@ -1,0 +1,90 @@
+{
+  "assignment_priority": [
+    "wheel",
+    "truck",
+    "person",
+    "sign",
+    "pole",
+    "fence",
+    "building",
+    "door",
+    "window",
+    "tree",
+    "vegetation",
+    "ground",
+    "road",
+    "sky"
+  ],
+  "classes": [
+    {
+      "class": "truck",
+      "type": "thing",
+      "prompts": ["truck", "pickup truck", "flatbed truck", "vehicle"]
+    },
+    {
+      "class": "wheel",
+      "type": "thing",
+      "prompts": ["wheel", "tire", "truck wheel"]
+    },
+    {
+      "class": "person",
+      "type": "thing",
+      "prompts": ["person", "pedestrian"]
+    },
+    {
+      "class": "sign",
+      "type": "thing",
+      "prompts": ["sign", "traffic sign"]
+    },
+    {
+      "class": "pole",
+      "type": "thing",
+      "prompts": ["pole", "utility pole", "lamp post"]
+    },
+    {
+      "class": "fence",
+      "type": "stuff",
+      "prompts": ["fence", "railing"]
+    },
+    {
+      "class": "building",
+      "type": "stuff",
+      "prompts": ["building", "house", "shed"]
+    },
+    {
+      "class": "door",
+      "type": "stuff",
+      "prompts": ["door", "doorway"]
+    },
+    {
+      "class": "window",
+      "type": "stuff",
+      "prompts": ["window"]
+    },
+    {
+      "class": "tree",
+      "type": "thing",
+      "prompts": ["tree"]
+    },
+    {
+      "class": "vegetation",
+      "type": "stuff",
+      "prompts": ["vegetation", "bush", "grass", "plant"]
+    },
+    {
+      "class": "ground",
+      "type": "stuff",
+      "prompts": ["ground", "pavement", "gravel", "dirt"]
+    },
+    {
+      "class": "road",
+      "type": "stuff",
+      "prompts": ["road", "street"]
+    },
+    {
+      "class": "sky",
+      "type": "stuff",
+      "prompts": ["sky"]
+    }
+  ]
+}

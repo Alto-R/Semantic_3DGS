@@ -480,16 +480,14 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared 20-view automatic targeted expansion for the accepted
-   `room` baseline through the user-controlled scheduler checkpoint below;
-   Codex must not submit it.
-2. Compare the added room views against the original 50, inspect the full and
-   piano-versus-television contact sheets, and advance `accepted/room` only if
-   the expansion remains visually coherent.
+1. Run the prepared 50-view `truck` baseline through the user-controlled
+   scheduler checkpoint below; Codex must not submit it.
+2. Inspect truck structure, class/instance counts, coverage, and full/focused
+   contact sheets before creating `accepted/truck`.
 3. Define a downstream gaze-hit acceptance criterion for accepted scenes before
    introducing any automatic propagation/refinement stage.
-4. Prepare and validate at least one additional matched scene after room to
-   reach the four-scene minimum.
+4. Complete truck baseline and targeted validation to reach the four-scene
+   minimum.
 5. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
    claiming all 12 scenes.
 
@@ -715,8 +713,8 @@ The correction is generic rather than scene-threshold-specific:
 - connected same-class fragments are consolidated before the global object-size
   cutoff so one valid object is judged by its connected union.
 
-After the correction commit is pushed and the cluster checkout synchronized,
-Dhana must submit a fresh detection run; do not reuse masks or proposals:
+The fresh-detection correction checkpoint was submitted without reusing masks
+or proposals:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
@@ -730,6 +728,57 @@ FOCUS_NAME=piano_vs_television \
 sbatch --export=ALL,SCENE,OUTPUT_NAME,AUTO_TARGET_VIEW_COUNT,TARGET_CANDIDATE_COUNT,TARGET_SELECTION_SOURCE,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
 ```
 
+Corrected job `92513` (`room_semantic_targeted_v2`) completed in 7 minutes 29
+seconds and is accepted at:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/room
+  -> ../room_semantic_targeted_v2
+```
+
+Accepted room metrics:
+
+```text
+Gaussians:                     1,593,376
+final labels including 0:            19
+unlabeled ratio:               0.6658127146386038
+visible frame count:                         70
+evaluated pixels:              42,784,280
+overlay-changed pixels:        34,818,911
+overlay-changed ratio:         0.8138248674513162
+frame ratio min:               0.3502791212099397
+frame ratio p10:               0.7028190260534944
+frame ratio median:            0.8283044613582372
+frame ratio p90:               0.9061864778371869
+frame ratio max:               0.9661700512431202
+```
+
+The original 50 views measure `0.8422301555618091` pooled with minimum
+`0.6223584924182434`. The 20 targeted additions measure
+`0.742811647175084` pooled with minimum `0.3502791212099397`. The lowest view,
+added camera 35, is dominated by unlabeled wall/ceiling. Visual QA passes: the
+TV is a 7,779-Gaussian group supported by 36 views and only specific television
+phrases; table geometry is a separate 9,054-Gaussian label. Curtain/chair colors
+and semantics remain distinct. These coverage values are tint proxies, not
+semantic ground truth or gaze-hit accuracy.
+
+`truck` is the smallest remaining EyeNavGS-matched model: 2,541,226 Gaussians
+and 251 cameras. Its tracked vocabulary is
+`configs/task1_semantic_classes.truck.json`. The initial baseline uses 50 evenly
+spaced cameras and truck-versus-wheel focused artifacts. Dhana must submit:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+SCENE=truck \
+OUTPUT_NAME=truck_semantic_baseline_v1 \
+FOCUS_CLASSES='truck,wheel' \
+FOCUS_NAME=truck_vs_wheel \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
+```
+
+Do not set `AUTO_TARGET_VIEW_COUNT`, `TARGET_SELECTION_SOURCE`, or
+`REUSE_SOURCE_OUT` for this initial truck baseline.
+
 ## 12. Important Files
 
 ```text
@@ -740,6 +789,7 @@ docs/EXTERNAL_REPOS.md
 configs/task1_semantic_classes.example.json
 configs/task1_semantic_classes.train.json
 configs/task1_semantic_classes.room.json
+configs/task1_semantic_classes.truck.json
 scripts/generate_grounded_sam_masks.py
 scripts/run_flashsplat_mask_proposals.py
 scripts/cluster_semantic_flashsplat_proposals.py

@@ -468,6 +468,31 @@ classes. Fusion also consolidates connected same-class fragments before the
 global thing-size cutoff. These are scene-neutral precision and ordering fixes,
 not per-class thresholds. A fresh detection run is required.
 
+Corrected job `92513` is accepted at:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/room
+  -> ../room_semantic_targeted_v2
+```
+
+It validates all 1,593,376 Gaussians across 70 views with 18 nonzero labels and
+an unlabeled ratio of `0.6658127146386038`. The pooled overlay-difference proxy
+is `0.8138248674513162`. Original views measure `0.8422301555618091` pooled
+with minimum `0.6223584924182434`; added views measure `0.742811647175084`
+pooled with minimum `0.3502791212099397`. Visual QA confirms a clean television
+label, a separate table label, and distinct curtain/chair semantics.
+
+### Truck baseline
+
+`truck` is the fourth-scene pilot, with 2,541,226 Gaussians and 251 cameras.
+Its vocabulary is:
+
+```text
+configs/task1_semantic_classes.truck.json
+```
+
+The initial run uses 50 evenly spaced views and truck-versus-wheel focus.
+
 For a short smoke run with three selected cameras:
 
 ```bash
