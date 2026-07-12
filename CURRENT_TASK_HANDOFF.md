@@ -480,10 +480,10 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared reuse correction for train targeted job `92470`; Codex must
-   not submit it.
-2. Compare the corrected 70-view result against accepted job `92469` and
-   diagnostic job `92470` before changing the accepted pointer.
+1. Run the prepared final 70-view validation reuse for corrected train job
+   `92482`; Codex must not submit it.
+2. Compare the complete result against accepted job `92469` and diagnostic jobs
+   `92470`/`92482` before changing the accepted pointer.
 3. Define a downstream gaze-hit acceptance criterion for accepted scenes before
    introducing any automatic propagation/refinement stage.
 4. Prepare vocabularies and runs for at least two more matched scenes to reach
@@ -559,22 +559,34 @@ stuff and all thing groups retain their existing thresholds. On job `92470`'s
 evidence, sky has 59/70-view support and an automatic 7,500 cutoff, so its 8,941
 Gaussians survive. Building has only 14/70-view support and remains at 10,000,
 so the 6,831-Gaussian shipping-container false positive is pruned. `building`
-is part of the canonical stuff ontology rather than an object instance. The
-next user-controlled scheduler checkpoint reuses all masks and proposals from
-job `92470`:
+is part of the canonical stuff ontology rather than an object instance.
+
+Corrected reuse job `92482` (`train_semantic_targeted_v2`) confirmed the fusion
+behavior: sky is retained at 8,943 Gaussians, building is pruned at 9,505, the
+unlabeled ratio is `0.42898447941954665`, and the first 50 corrected contact
+views are visually clean. It is not accepted because reuse mode defaulted to 50
+evenly spaced overlay cameras instead of inheriting all 70 cameras from the
+source manifest. Its 50-view overlay-difference proxy is
+`0.9955632426577927`, with minimum `0.9564372831870909`.
+
+Reuse mode now reads both camera indices and count from the reused
+`grounded_sam_manifest.json` whenever no explicit camera list is supplied. The
+next user-controlled checkpoint reuses job `92470`'s masks/proposals and must
+produce 70 overlays:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 SCENE=train \
-OUTPUT_NAME=train_semantic_targeted_v2 \
+OUTPUT_NAME=train_semantic_targeted_v3 \
 REUSE_SOURCE_OUT=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/train_semantic_targeted_v1 \
 FOCUS_CLASSES='train,railroad_track' \
 FOCUS_NAME=train_vs_track \
 sbatch --export=ALL,SCENE,OUTPUT_NAME,REUSE_SOURCE_OUT,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
 ```
 
-Do not set `AUTO_TARGET_VIEW_COUNT` for this correction; camera selection and
-detection are already complete.
+Do not set `AUTO_TARGET_VIEW_COUNT`, `SEMANTIC_CAMERA_INDICES`, or
+`SEMANTIC_VIEW_COUNT`; the selected cameras, masks, and proposals are already
+recorded in the reused manifest.
 
 ## 12. Important Files
 

@@ -388,6 +388,14 @@ object-instance labeling. For job `92470`, the rule retains sky (59/70 views,
 false building (14/70 views, 6,831 Gaussians, threshold 10,000) without repeating
 camera selection, GroundingDINO/SAM, or FlashSplat.
 
+Corrected reuse job `92482` confirmed the automatic fusion outcome, with 8,943
+sky Gaussians retained and the 9,505-Gaussian merged building candidate pruned.
+Its first 50 overlays are visually clean. The run also exposed a generic reuse
+validation issue: an empty camera list previously fell back to 50 evenly spaced
+cameras instead of the reused manifest's 70 cameras. Reuse mode now inherits
+the exact camera-index list and view count from `grounded_sam_manifest.json`
+unless the caller explicitly supplies a camera list.
+
 For a short smoke run with three selected cameras:
 
 ```bash

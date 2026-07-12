@@ -70,8 +70,11 @@ gaze-target dataset:
   a shipping container as `building`. Fusion now adapts the stuff cutoff from
   multi-view support for every scene: a stuff group seen in at least half the
   source views uses 75% of the normal cutoff. `building` is treated consistently
-  as stuff rather than an object instance. A reuse run of the 70-view
-  masks/proposals is the next scheduler checkpoint.
+  as stuff rather than an object instance. Corrected reuse job `92482` validated
+  that fusion result, but its overlays exposed a reuse-mode bug: validation
+  defaulted to 50 evenly spaced cameras instead of inheriting all 70 manifest
+  cameras. Reuse mode now infers both camera indices and count from the reused
+  Grounded-SAM manifest; a final validation reuse is the next checkpoint.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`

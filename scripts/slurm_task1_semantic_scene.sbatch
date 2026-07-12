@@ -88,6 +88,18 @@ test -d "${MODEL_DIR}"
 test -f "${MODEL_DIR}/cameras.json"
 test -f "${CLASS_CONFIG}"
 
+if [ -n "${REUSE_SOURCE_OUT}" ] && [ -z "${SEMANTIC_CAMERA_INDICES}" ]; then
+  REUSE_GROUND_MANIFEST="${GROUND_OUT_DIR}/grounded_sam_manifest.json"
+  test -f "${REUSE_GROUND_MANIFEST}"
+  command -v jq >/dev/null 2>&1
+  SEMANTIC_CAMERA_INDICES="$(jq -r '[.frames[].camera_index] | join(",")' "${REUSE_GROUND_MANIFEST}")"
+  SEMANTIC_VIEW_COUNT="$(jq -r '.frames | length' "${REUSE_GROUND_MANIFEST}")"
+  if [ -z "${SEMANTIC_CAMERA_INDICES}" ] || [ "${SEMANTIC_VIEW_COUNT}" -le 0 ]; then
+    echo "Could not infer reuse cameras from ${REUSE_GROUND_MANIFEST}" >&2
+    exit 2
+  fi
+fi
+
 if [ -n "${REUSE_SOURCE_OUT}" ] && [ "${REUSE_SOURCE_OUT}" = "${OUT_DIR}" ]; then
   echo "Refusing to reuse stages from the output directory that will be reset: ${OUT_DIR}" >&2
   exit 2
