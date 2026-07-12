@@ -64,6 +64,7 @@ class SceneConfigurationTest(unittest.TestCase):
             summary = build_summary(Path(temporary_directory), "train_vs_track")
 
         exports = summary["stages"]["exports"]
+        self.assertNotIn("debug_color_ply", exports)
         self.assertEqual(exports["focus_name"], "train_vs_track")
         self.assertTrue(exports["focus_debug_ply"]["path"].endswith("train_vs_track_supersplat_debug.ply"))
         self.assertTrue(exports["focus_overlay_dir"]["path"].endswith("train_vs_track"))

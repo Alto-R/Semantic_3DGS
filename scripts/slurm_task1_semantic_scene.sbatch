@@ -366,19 +366,6 @@ run_report \
   04_semantic_ply_inspection \
   python scripts/inspect_ply.py "${DELIVERABLE_DIR}/semantic_point_cloud.ply" --json
 
-run_stage 05_rgb_debug_ply \
-  python scripts/export_debug_label_colors.py \
-    --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
-    --label-map "${DELIVERABLE_DIR}/label_map.json" \
-    --output-ply "${PLY_VIS_DIR}/semantic_point_cloud_rgb_debug.ply" \
-    --metadata-json "${PLY_VIS_DIR}/semantic_point_cloud_rgb_debug.json" \
-    --overwrite
-
-run_report \
-  "${VALIDATION_DIR}/semantic_point_cloud_rgb_debug_inspection.json" \
-  05_rgb_debug_ply_inspection \
-  python scripts/inspect_ply.py "${PLY_VIS_DIR}/semantic_point_cloud_rgb_debug.ply" --json
-
 run_stage 06_supersplat_debug_ply \
   python scripts/export_supersplat_label_colors.py \
     --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \

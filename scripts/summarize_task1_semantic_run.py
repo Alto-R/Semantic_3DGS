@@ -133,7 +133,6 @@ def export_stage(paths: dict[str, Path], focus_name: str) -> dict[str, Any]:
         "name": "Semantic PLY and debug exports",
         "semantic_ply": file_record(deliverables / "semantic_point_cloud.ply"),
         "label_map": file_record(deliverables / "label_map.json"),
-        "debug_color_ply": file_record(ply_dir / "semantic_point_cloud_rgb_debug.ply"),
         "supersplat_debug_ply": file_record(ply_dir / "semantic_point_cloud_supersplat_debug.ply"),
         "focus_name": focus_name,
         "focus_debug_ply": file_record(ply_dir / f"{focus_name}_supersplat_debug.ply"),

@@ -544,8 +544,10 @@ Active semantic scripts:
   - writes final D1-style `semantic_point_cloud.ply` and `label_map.json`
 
 - `scripts/export_debug_label_colors.py`
+  - retained only as an optional legacy utility; the scheduled pipeline no
+    longer calls it because the output duplicates the SuperSplat debug PLY
   - appends `red`, `green`, and `blue` properties to a separate debug PLY
-  - useful for generic PLY viewers that read vertex RGB columns
+  - may be invoked manually for a generic PLY viewer that requires vertex RGB
   - keeps the final deliverable PLY contract unchanged
 
 - `scripts/export_supersplat_label_colors.py`
@@ -589,7 +591,6 @@ bicycle_semantic/
     label_map.json
   visualizations/
     ply/
-      semantic_point_cloud_rgb_debug.ply
       semantic_point_cloud_supersplat_debug.ply
       bicycle_vs_bench_supersplat_debug.ply
     overlays/

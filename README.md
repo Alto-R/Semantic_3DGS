@@ -135,6 +135,11 @@ Large files are intentionally excluded from Git. Keep EyeNavGS data, 3DGS model
 folders, rendered frames, masks, checkpoints, and third-party repo clones outside
 tracked files.
 
+Future semantic runs no longer generate the redundant
+`semantic_point_cloud_rgb_debug.ply` export or its JSON inspection. SuperSplat
+debug PLYs remain the supported colorized 3D visualization, while
+`deliverables/semantic_point_cloud.ply` remains the required labeled output.
+
 See:
 
 - `docs/WORKFLOW.md` for local/cluster setup and command conventions.
