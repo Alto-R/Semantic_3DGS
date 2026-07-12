@@ -27,6 +27,39 @@ CLASS_COLORS: dict[str, tuple[float, float, float]] = {
     "pole": (0.96, 0.88, 0.12),
     "sign": (0.94, 0.22, 0.16),
     "fence": (0.08, 0.78, 0.72),
+    "guitar": (0.12, 0.76, 0.72),
+    "chair": (0.56, 0.20, 0.86),
+    "sofa": (0.10, 0.38, 0.92),
+    "table": (0.76, 0.34, 0.10),
+    "lamp": (0.98, 0.82, 0.10),
+    "indoor_plant": (0.12, 0.68, 0.28),
+    "cabinet": (0.72, 0.52, 0.18),
+    "bookshelf": (0.04, 0.58, 0.62),
+    "picture_frame": (0.90, 0.18, 0.64),
+    "rug": (0.76, 0.16, 0.24),
+    "door": (0.48, 0.26, 0.12),
+    "window": (0.16, 0.70, 0.94),
+    "wall": (0.68, 0.70, 0.74),
+    "floor": (0.66, 0.46, 0.28),
+    "ceiling": (0.88, 0.86, 0.72),
+}
+
+STUFF_CLASSES = {
+    "building",
+    "ceiling",
+    "door",
+    "floor",
+    "ground",
+    "railroad_track",
+    "railway_platform",
+    "road",
+    "rug",
+    "sidewalk",
+    "sky",
+    "terrain",
+    "vegetation",
+    "wall",
+    "window",
 }
 
 
@@ -58,7 +91,7 @@ def rgb_for_label(
         return CLASS_COLORS["unlabeled"]
 
     base = CLASS_COLORS.get(class_name, fallback_color(label_id))
-    if label_id == 0 or class_name in {"ground", "road", "sidewalk", "sky", "vegetation", "terrain"}:
+    if label_id == 0 or class_name in STUFF_CLASSES:
         return base
 
     # Keep instances in the same color family while making adjacent instances distinguishable.

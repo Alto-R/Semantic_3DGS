@@ -480,14 +480,14 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared final 70-view validation reuse for corrected train job
-   `92482`; Codex must not submit it.
-2. Compare the complete result against accepted job `92469` and diagnostic jobs
-   `92470`/`92482` before changing the accepted pointer.
+1. Run the prepared 50-view `room` baseline through the user-controlled
+   scheduler checkpoint below; Codex must not submit it.
+2. Inspect room structure, class/instance counts, coverage, and full/focused
+   contact sheets before creating `accepted/room`.
 3. Define a downstream gaze-hit acceptance criterion for accepted scenes before
    introducing any automatic propagation/refinement stage.
-4. Prepare vocabularies and runs for at least two more matched scenes to reach
-   the four-scene minimum.
+4. Prepare and validate at least one additional matched scene after room to
+   reach the four-scene minimum.
 5. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
    claiming all 12 scenes.
 
@@ -507,7 +507,7 @@ sbatch --export=ALL,OUTPUT_NAME=bicycle_semantic_targeted_v1,AUTO_TARGET_VIEW_CO
 The comparison passed and the accepted pointer now targets
 `bicycle_semantic_targeted_v1`. No repeat submission is currently required.
 
-### Accepted train baseline and targeted scheduler checkpoint
+### Accepted train result and room scheduler checkpoint
 
 Jobs `92467` and `92469` completed successfully. Job `92467` produced a valid
 initial result, but its 10,000-Gaussian stuff cutoff pruned a sky group supported
@@ -538,7 +538,7 @@ train-versus-track contact sheets show coherent train coverage and corrected
 sky ownership. The overlay-difference ratio is an image-space visibility proxy,
 not semantic ground truth or gaze-hit accuracy.
 
-The accepted cluster pointer is:
+The original accepted cluster pointer was:
 
 ```text
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/train
@@ -570,23 +570,55 @@ source manifest. Its 50-view overlay-difference proxy is
 `0.9955632426577927`, with minimum `0.9564372831870909`.
 
 Reuse mode now reads both camera indices and count from the reused
-`grounded_sam_manifest.json` whenever no explicit camera list is supplied. The
-next user-controlled checkpoint reuses job `92470`'s masks/proposals and must
-produce 70 overlays:
+`grounded_sam_manifest.json` whenever no explicit camera list is supplied.
+Final job `92483` (`train_semantic_targeted_v3`) produced all 70 semantic and 70
+focused overlays, with fusion files byte-identical to job `92482`. Visual QA of
+the original and added views passed, so the accepted pointer is now:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/train
+  -> ../train_semantic_targeted_v3
+```
+
+Accepted train metrics:
+
+```text
+Gaussians:                     1,026,508
+final labels including 0:            10
+unlabeled ratio:               0.42898447941954665
+visible frame count:                         70
+evaluated pixels:              35,675,920
+overlay-changed pixels:        35,328,138
+overlay-changed ratio:         0.9902516319130663
+frame ratio min:               0.8961593702418886
+frame ratio p10:               0.9668847222440234
+frame ratio median:            0.9974080556296796
+frame ratio p90:               0.9999646820600563
+frame ratio max:               1.0
+```
+
+The original 50 views measure `0.9955632426577927` pooled with minimum
+`0.9564372831870909`. The 20 targeted additions measure
+`0.9769726050512503` pooled with minimum `0.8961593702418886`. The final labels
+retain train instances of 429,100 and 20,633 Gaussians, 8,943 sky Gaussians,
+and no building label. These overlay differences are visibility proxies, not
+semantic ground truth or gaze-hit accuracy.
+
+`room` is the next pilot: 1,593,376 Gaussians and 311 cameras. Its tracked
+indoor vocabulary is `configs/task1_semantic_classes.room.json`, with stable
+palette colors and sofa/table focused QA. Dhana must submit:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
-SCENE=train \
-OUTPUT_NAME=train_semantic_targeted_v3 \
-REUSE_SOURCE_OUT=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/train_semantic_targeted_v1 \
-FOCUS_CLASSES='train,railroad_track' \
-FOCUS_NAME=train_vs_track \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,REUSE_SOURCE_OUT,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
+SCENE=room \
+OUTPUT_NAME=room_semantic_baseline_v1 \
+FOCUS_CLASSES='sofa,table' \
+FOCUS_NAME=sofa_vs_table \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
 ```
 
-Do not set `AUTO_TARGET_VIEW_COUNT`, `SEMANTIC_CAMERA_INDICES`, or
-`SEMANTIC_VIEW_COUNT`; the selected cameras, masks, and proposals are already
-recorded in the reused manifest.
+This is an initial evenly spaced 50-view baseline. Do not set
+`AUTO_TARGET_VIEW_COUNT`, `TARGET_SELECTION_SOURCE`, or `REUSE_SOURCE_OUT`.
 
 ## 12. Important Files
 
@@ -597,6 +629,7 @@ docs/TASK1_SEMANTIC_ANNOTATION.md
 docs/EXTERNAL_REPOS.md
 configs/task1_semantic_classes.example.json
 configs/task1_semantic_classes.train.json
+configs/task1_semantic_classes.room.json
 scripts/generate_grounded_sam_masks.py
 scripts/run_flashsplat_mask_proposals.py
 scripts/cluster_semantic_flashsplat_proposals.py

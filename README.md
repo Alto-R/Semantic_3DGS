@@ -53,16 +53,20 @@ gaze-target dataset:
 - Consolidation treats accepted instances as atomic: connected geometry may
   merge same-class IDs but may not split them. Job `92426` passed this check and
   is exposed at `outputs/eyenavgs_task1/accepted/bicycle` on the cluster.
-- Train reuse job `92469` is the accepted 50-view train baseline. Lowering the
+- Train reuse job `92469` established the accepted 50-view train baseline. Lowering the
   stuff-class minimum from 10,000 to 8,000 retained the strongly supported sky
   group (43 source views, 8,462 final Gaussians) without changing either train
   instance. Structural validation passed for all 1,026,508 Gaussians, and
-  `outputs/eyenavgs_task1/accepted/train` points to
-  `train_semantic_baseline_v2`.
-- The train overlay-difference proxy measures 99.32% pooled visible coverage
-  across 50 views, with a 94.74% minimum. This measures visible semantic tint,
-  not semantic ground truth or gaze-hit accuracy; the train and train-versus-
-  track contact sheets provide the accompanying visual QA.
+  it prepared the scene-local targeted expansion.
+- Final train job `92483` is now accepted at
+  `outputs/eyenavgs_task1/accepted/train -> ../train_semantic_targeted_v3`.
+  It validates 1,026,508 Gaussians across 70 views, retains two train instances
+  and an automatically supported sky group, and prunes the shipping-container
+  `building` false positive.
+- The accepted train overlay-difference proxy is 99.03% pooled across all 70
+  views, with an 89.62% minimum. The original 50 views measure 99.56%; the 20
+  difficult additions measure 97.70%. These are visible-tint measurements, not
+  semantic ground truth or gaze-hit accuracy.
 - The accepted workflow is now scene-configurable through
   `scripts/slurm_task1_semantic_scene.sbatch`; the historical bicycle script is
   a compatibility wrapper. Targeted train job `92470` added 20 difficult views
@@ -74,7 +78,9 @@ gaze-target dataset:
   that fusion result, but its overlays exposed a reuse-mode bug: validation
   defaulted to 50 evenly spaced cameras instead of inheriting all 70 manifest
   cameras. Reuse mode now infers both camera indices and count from the reused
-  Grounded-SAM manifest; a final validation reuse is the next checkpoint.
+  Grounded-SAM manifest. Job `92483` passed that complete validation. `room` is
+  the next baseline because it is the smallest remaining matched model at
+  1,593,376 Gaussians and provides 311 cameras.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
@@ -109,4 +115,4 @@ The `bicycle` pilot has completed end to end:
 
 Task 1 is not complete: the hard minimum remains four fully labeled and
 validated scenes. The next work is a downstream gaze-hit acceptance criterion,
-plus user-controlled train targeted-view expansion and additional scenes.
+plus user-controlled `room` annotation and at least one additional scene.

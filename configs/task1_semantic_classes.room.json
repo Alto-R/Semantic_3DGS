@@ -1,0 +1,96 @@
+{
+  "assignment_priority": [
+    "guitar",
+    "chair",
+    "sofa",
+    "table",
+    "lamp",
+    "indoor_plant",
+    "cabinet",
+    "bookshelf",
+    "picture_frame",
+    "rug",
+    "door",
+    "window",
+    "wall",
+    "floor",
+    "ceiling"
+  ],
+  "classes": [
+    {
+      "class": "guitar",
+      "type": "thing",
+      "prompts": ["guitar", "acoustic guitar"]
+    },
+    {
+      "class": "chair",
+      "type": "thing",
+      "prompts": ["chair", "armchair", "stool"]
+    },
+    {
+      "class": "sofa",
+      "type": "thing",
+      "prompts": ["sofa", "couch"]
+    },
+    {
+      "class": "table",
+      "type": "thing",
+      "prompts": ["table", "coffee table", "desk"]
+    },
+    {
+      "class": "lamp",
+      "type": "thing",
+      "prompts": ["lamp", "floor lamp", "table lamp"]
+    },
+    {
+      "class": "indoor_plant",
+      "type": "thing",
+      "prompts": ["indoor plant", "potted plant", "houseplant"]
+    },
+    {
+      "class": "cabinet",
+      "type": "thing",
+      "prompts": ["cabinet", "cupboard", "dresser"]
+    },
+    {
+      "class": "bookshelf",
+      "type": "thing",
+      "prompts": ["bookshelf", "bookcase", "shelf"]
+    },
+    {
+      "class": "picture_frame",
+      "type": "thing",
+      "prompts": ["picture frame", "painting", "wall art"]
+    },
+    {
+      "class": "rug",
+      "type": "stuff",
+      "prompts": ["rug", "carpet"]
+    },
+    {
+      "class": "door",
+      "type": "stuff",
+      "prompts": ["door", "doorway"]
+    },
+    {
+      "class": "window",
+      "type": "stuff",
+      "prompts": ["window"]
+    },
+    {
+      "class": "wall",
+      "type": "stuff",
+      "prompts": ["wall", "interior wall"]
+    },
+    {
+      "class": "floor",
+      "type": "stuff",
+      "prompts": ["floor", "wood floor", "flooring"]
+    },
+    {
+      "class": "ceiling",
+      "type": "stuff",
+      "prompts": ["ceiling"]
+    }
+  ]
+}

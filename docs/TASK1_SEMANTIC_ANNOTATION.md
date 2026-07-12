@@ -356,7 +356,7 @@ configs/task1_semantic_classes.train.json
 The initial 50-view job `92467` completed structurally, but pruned its strongly
 supported sky group because 8,451 assigned Gaussians fell below the default
 10,000-Gaussian stuff threshold. Reuse job `92469` lowered that threshold to
-8,000 and is the accepted baseline:
+8,000 and established the accepted baseline:
 
 ```text
 /lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/train
@@ -395,6 +395,33 @@ validation issue: an empty camera list previously fell back to 50 evenly spaced
 cameras instead of the reused manifest's 70 cameras. Reuse mode now inherits
 the exact camera-index list and view count from `grounded_sam_manifest.json`
 unless the caller explicitly supplies a camera list.
+
+Final job `92483` inherited the complete manifest and validated all 70 semantic
+and 70 train-versus-track overlays. It is accepted at:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/train
+  -> ../train_semantic_targeted_v3
+```
+
+The accepted result has an unlabeled ratio of `0.42898447941954665`. Its pooled
+70-view overlay-difference proxy is `0.9902516319130663`, with minimum
+`0.8961593702418886`. The original 50 views measure `0.9955632426577927`; the
+20 targeted additions measure `0.9769726050512503`. Visual QA passed with no
+building/container false label and no obvious train-colored background leakage.
+
+### Room baseline
+
+`room` is the smallest remaining matched model, with 1,593,376 Gaussians and
+311 cameras. Its scene vocabulary covers salient furniture and indoor surfaces:
+
+```text
+configs/task1_semantic_classes.room.json
+```
+
+The initial run uses 50 evenly spaced cameras and focused sofa-versus-table
+artifacts. Automatic targeted expansion remains disabled until that baseline is
+visually accepted.
 
 For a short smoke run with three selected cameras:
 

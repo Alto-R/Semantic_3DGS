@@ -15,21 +15,36 @@ from summarize_task1_semantic_run import build_summary  # noqa: E402
 
 
 class SceneConfigurationTest(unittest.TestCase):
-    def test_train_class_config_is_complete_and_prioritized(self) -> None:
-        path = ROOT / "configs" / "task1_semantic_classes.train.json"
+    def assert_scene_config(self, scene: str) -> dict[str, object]:
+        path = ROOT / "configs" / f"task1_semantic_classes.{scene}.json"
         config = json.loads(path.read_text(encoding="utf-8"))
         classes = config["classes"]
         class_names = [item["class"] for item in classes]
-
         self.assertEqual(len(class_names), len(set(class_names)))
         self.assertEqual(set(config["assignment_priority"]), set(class_names))
+        for item in classes:
+            self.assertIn(item["type"], {"thing", "stuff"})
+            self.assertTrue(item["prompts"])
+        return config
+
+    def test_train_class_config_is_complete_and_prioritized(self) -> None:
+        config = self.assert_scene_config("train")
+        classes = config["classes"]
+        class_names = [item["class"] for item in classes]
+
         self.assertIn("train", class_names)
         self.assertIn("railroad_track", class_names)
         class_types = {item["class"]: item["type"] for item in classes}
         self.assertEqual(class_types["building"], "stuff")
-        for item in classes:
-            self.assertIn(item["type"], {"thing", "stuff"})
-            self.assertTrue(item["prompts"])
+
+    def test_room_class_config_and_palette_are_complete(self) -> None:
+        config = self.assert_scene_config("room")
+        classes = config["classes"]
+        class_names = {item["class"] for item in classes}
+        self.assertIn("sofa", class_names)
+        self.assertIn("table", class_names)
+        self.assertIn("guitar", class_names)
+        self.assertTrue(class_names.issubset(CLASS_COLORS))
 
     def test_train_focus_classes_have_stable_palette_colors(self) -> None:
         self.assertIn("train", CLASS_COLORS)

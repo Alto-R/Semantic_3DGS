@@ -38,7 +38,7 @@
     },
     {
       "class": "building",
-      "type": "thing",
+      "type": "stuff",
       "prompts": ["building", "house"]
     },
     {
