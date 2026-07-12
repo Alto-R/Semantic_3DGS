@@ -553,11 +553,15 @@ cutoff, pruned sky at 8,941 Gaussians, and returned the earlier background
 leakage. It also promoted a 6,831-Gaussian `building` group that visual QA shows
 is the long shipping container.
 
-The fusion code now reads optional per-class `min_assigned_gaussians` overrides
-from the scene config. Train sets both `sky` and `building` to 8,000: sky can be
-retained below the generic stuff cutoff, while the false building remains below
-its stricter thing threshold. The next user-controlled scheduler checkpoint
-reuses all masks and proposals from job `92470`:
+The correction is scene-independent. Stuff groups supported in at least half of
+the run's source views automatically use 75% of the normal stuff cutoff; other
+stuff and all thing groups retain their existing thresholds. On job `92470`'s
+evidence, sky has 59/70-view support and an automatic 7,500 cutoff, so its 8,941
+Gaussians survive. Building has only 14/70-view support and remains at 10,000,
+so the 6,831-Gaussian shipping-container false positive is pruned. `building`
+is part of the canonical stuff ontology rather than an object instance. The
+next user-controlled scheduler checkpoint reuses all masks and proposals from
+job `92470`:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr

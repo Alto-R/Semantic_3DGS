@@ -43,8 +43,7 @@
     },
     {
       "class": "building",
-      "type": "thing",
-      "min_assigned_gaussians": 8000,
+      "type": "stuff",
       "prompts": ["building", "house", "station building"]
     },
     {
@@ -85,7 +84,6 @@
     {
       "class": "sky",
       "type": "stuff",
-      "min_assigned_gaussians": 8000,
       "prompts": ["sky"]
     }
   ]

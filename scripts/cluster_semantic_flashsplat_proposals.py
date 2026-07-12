@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,7 +17,7 @@ from add_labels_from_npy import write_ply_with_labels
 from ply_utils import read_ply_header, vertex_data_memmap
 
 
-DEFAULT_STUFF_CLASSES = {"ground", "road", "sidewalk", "sky", "vegetation", "terrain"}
+DEFAULT_STUFF_CLASSES = {"building", "ground", "road", "sidewalk", "sky", "vegetation", "terrain"}
 VOXEL_NEIGHBOR_OFFSETS = [
     (dx, dy, dz)
     for dx in (-1, 0, 1)
@@ -128,23 +129,6 @@ def load_assignment_priorities(path: Path | None, override: str) -> dict[str, in
     return {class_name: len(names) - index for index, class_name in enumerate(names)}
 
 
-def load_class_min_assigned_gaussians(path: Path | None) -> dict[str, int]:
-    if path is None or not path.exists():
-        return {}
-    data = json.loads(path.read_text(encoding="utf-8"))
-    classes = data.get("classes", data) if isinstance(data, dict) else data
-    thresholds: dict[str, int] = {}
-    for item in classes:
-        if not isinstance(item, dict) or "min_assigned_gaussians" not in item:
-            continue
-        class_name = normalize_class_name(item.get("class", item.get("name", "")))
-        threshold = int(item["min_assigned_gaussians"])
-        if threshold < 0:
-            raise ValueError(f"min_assigned_gaussians must be non-negative for {class_name}")
-        thresholds[class_name] = threshold
-    return thresholds
-
-
 def load_class_evidence(path: Path | None) -> dict[str, ClassEvidence] | None:
     if path is None:
         return None
@@ -209,6 +193,16 @@ def load_proposals(
         )
     proposals.sort(key=lambda proposal: (proposal.score, proposal.gaussian_count), reverse=True)
     return proposals
+
+
+def proposal_manifest_view_count(manifest_path: Path) -> int:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    frame_files = {
+        str(item.get("frame_file", "")).strip()
+        for item in manifest.get("proposals", [])
+        if str(item.get("frame_file", "")).strip()
+    }
+    return len(frame_files)
 
 
 def intersection_count(left: np.ndarray, right: np.ndarray) -> int:
@@ -778,14 +772,17 @@ def assigned_prune_threshold(
     min_assigned_gaussians: int,
     min_assigned_thing_gaussians: int,
     min_assigned_stuff_gaussians: int,
-    class_min_assigned_gaussians: dict[str, int] | None = None,
+    total_source_view_count: int = 0,
+    adaptive_stuff_min_view_ratio: float = 0.5,
+    adaptive_stuff_threshold_ratio: float = 0.75,
 ) -> int:
     threshold = max(0, min_assigned_gaussians)
-    class_thresholds = class_min_assigned_gaussians or {}
-    if group.class_name in class_thresholds:
-        return max(threshold, class_thresholds[group.class_name])
     if group.is_stuff:
         threshold = max(threshold, max(0, min_assigned_stuff_gaussians))
+        view_ratio = len(group.source_frames) / float(max(total_source_view_count, 1))
+        if total_source_view_count > 0 and view_ratio >= adaptive_stuff_min_view_ratio:
+            adaptive_threshold = math.ceil(threshold * adaptive_stuff_threshold_ratio)
+            threshold = max(max(0, min_assigned_gaussians), adaptive_threshold)
     else:
         threshold = max(threshold, max(0, min_assigned_thing_gaussians))
     return threshold
@@ -798,7 +795,9 @@ def prune_assigned_groups(
     min_assigned_thing_gaussians: int,
     min_assigned_stuff_gaussians: int,
     min_label_score: float,
-    class_min_assigned_gaussians: dict[str, int] | None = None,
+    total_source_view_count: int = 0,
+    adaptive_stuff_min_view_ratio: float = 0.5,
+    adaptive_stuff_threshold_ratio: float = 0.75,
 ) -> tuple[np.ndarray, list[SemanticGroup], list[dict[str, Any]]]:
     kept: list[SemanticGroup] = []
     pruned: list[dict[str, Any]] = []
@@ -809,7 +808,9 @@ def prune_assigned_groups(
             min_assigned_gaussians,
             min_assigned_thing_gaussians,
             min_assigned_stuff_gaussians,
-            class_min_assigned_gaussians,
+            total_source_view_count,
+            adaptive_stuff_min_view_ratio,
+            adaptive_stuff_threshold_ratio,
         )
         reasons: list[str] = []
         if threshold > 0 and group.assigned_count < threshold:
@@ -930,6 +931,8 @@ def main() -> None:
     parser.add_argument("--min-assigned-gaussians", default=0, type=int)
     parser.add_argument("--min-assigned-thing-gaussians", default=0, type=int)
     parser.add_argument("--min-assigned-stuff-gaussians", default=0, type=int)
+    parser.add_argument("--adaptive-stuff-min-view-ratio", default=0.5, type=float)
+    parser.add_argument("--adaptive-stuff-threshold-ratio", default=0.75, type=float)
     parser.add_argument("--min-label-score", default=0.0, type=float)
     parser.add_argument("--scene", default="")
     parser.add_argument("--semantic-ply-name", default="semantic_point_cloud.ply")
@@ -941,6 +944,11 @@ def main() -> None:
     parser.add_argument("--allow-unknown-class", dest="require_class", action="store_false")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
+
+    if not 0.0 <= args.adaptive_stuff_min_view_ratio <= 1.0:
+        raise ValueError("adaptive-stuff-min-view-ratio must be between 0 and 1")
+    if not 0.0 < args.adaptive_stuff_threshold_ratio <= 1.0:
+        raise ValueError("adaptive-stuff-threshold-ratio must be greater than 0 and at most 1")
 
     manifest_path = args.proposal_dir / "proposal_manifest.json"
     support_dir = args.proposal_dir / "proposal_supports"
@@ -956,7 +964,7 @@ def main() -> None:
 
     stuff_classes = load_stuff_classes(args.class_config, args.stuff_classes)
     assignment_priorities = load_assignment_priorities(args.class_config, args.class_priority)
-    class_min_assigned_gaussians = load_class_min_assigned_gaussians(args.class_config)
+    total_source_view_count = proposal_manifest_view_count(manifest_path)
     class_evidence = load_class_evidence(args.class_evidence_dir)
     proposals = load_proposals(
         manifest_path,
@@ -993,7 +1001,9 @@ def main() -> None:
         args.min_assigned_thing_gaussians,
         args.min_assigned_stuff_gaussians,
         args.min_label_score,
-        class_min_assigned_gaussians,
+        total_source_view_count,
+        args.adaptive_stuff_min_view_ratio,
+        args.adaptive_stuff_threshold_ratio,
     )
     labels, groups = prune_and_compact_groups(labels, groups)
     if pruned_groups:
@@ -1033,7 +1043,9 @@ def main() -> None:
             args.min_assigned_thing_gaussians,
             args.min_assigned_stuff_gaussians,
             args.min_label_score,
-            class_min_assigned_gaussians,
+            total_source_view_count,
+            args.adaptive_stuff_min_view_ratio,
+            args.adaptive_stuff_threshold_ratio,
         )
         labels, groups = prune_and_compact_groups(labels, groups)
 
@@ -1059,7 +1071,9 @@ def main() -> None:
             args.min_assigned_thing_gaussians,
             args.min_assigned_stuff_gaussians,
             args.min_label_score,
-            class_min_assigned_gaussians,
+            total_source_view_count,
+            args.adaptive_stuff_min_view_ratio,
+            args.adaptive_stuff_threshold_ratio,
         )
         spatial_tiny_pruned.extend(consolidated_tiny_pruned)
         labels, groups = prune_and_compact_groups(labels, groups)
@@ -1098,7 +1112,9 @@ def main() -> None:
             "min_assigned_gaussians": args.min_assigned_gaussians,
             "min_assigned_thing_gaussians": args.min_assigned_thing_gaussians,
             "min_assigned_stuff_gaussians": args.min_assigned_stuff_gaussians,
-            "class_min_assigned_gaussians": class_min_assigned_gaussians,
+            "total_source_view_count": total_source_view_count,
+            "adaptive_stuff_min_view_ratio": args.adaptive_stuff_min_view_ratio,
+            "adaptive_stuff_threshold_ratio": args.adaptive_stuff_threshold_ratio,
             "min_label_score": args.min_label_score,
             "assignment_priority": assignment_priorities,
             "assignment_mode": "confidence_weighted_multiview",

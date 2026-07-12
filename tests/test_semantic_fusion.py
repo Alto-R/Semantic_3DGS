@@ -104,31 +104,34 @@ class InstanceConsolidationTest(unittest.TestCase):
 
 
 class AssignedPruneThresholdTest(unittest.TestCase):
-    def test_class_threshold_can_lower_stuff_default(self) -> None:
+    def test_strong_multiview_stuff_uses_adaptive_threshold(self) -> None:
         group = thing_group(1, [0])
         group.class_name = "sky"
         group.is_stuff = True
+        group.source_frames = {f"frame_{index}" for index in range(43)}
 
-        threshold = assigned_prune_threshold(group, 0, 5000, 10000, {"sky": 8000})
+        threshold = assigned_prune_threshold(group, 0, 5000, 10000, 50, 0.5, 0.75)
 
-        self.assertEqual(threshold, 8000)
+        self.assertEqual(threshold, 7500)
 
-    def test_class_threshold_can_raise_thing_default(self) -> None:
+    def test_low_view_stuff_keeps_category_threshold(self) -> None:
         group = thing_group(1, [0])
         group.class_name = "building"
-
-        threshold = assigned_prune_threshold(group, 0, 5000, 10000, {"building": 8000})
-
-        self.assertEqual(threshold, 8000)
-
-    def test_global_threshold_remains_a_floor(self) -> None:
-        group = thing_group(1, [0])
-        group.class_name = "sky"
         group.is_stuff = True
+        group.source_frames = {f"frame_{index}" for index in range(14)}
 
-        threshold = assigned_prune_threshold(group, 9000, 5000, 10000, {"sky": 8000})
+        threshold = assigned_prune_threshold(group, 0, 5000, 10000, 70, 0.5, 0.75)
 
-        self.assertEqual(threshold, 9000)
+        self.assertEqual(threshold, 10000)
+
+    def test_adaptive_threshold_does_not_change_thing_groups(self) -> None:
+        group = thing_group(1, [0])
+        group.class_name = "train"
+        group.source_frames = {f"frame_{index}" for index in range(50)}
+
+        threshold = assigned_prune_threshold(group, 0, 5000, 10000, 50, 0.5, 0.75)
+
+        self.assertEqual(threshold, 5000)
 
 
 if __name__ == "__main__":

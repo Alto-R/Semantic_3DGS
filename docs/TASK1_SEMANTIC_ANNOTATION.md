@@ -378,11 +378,15 @@ cameras. It remains diagnostic because its default stuff threshold pruned sky
 at 8,941 Gaussians and a 6,831-Gaussian shipping-container false positive was
 retained as `building`.
 
-Class entries may define `min_assigned_gaussians` to override the thing/stuff
-category cutoff while preserving the global minimum as a floor. The train
-config sets `sky` and `building` to 8,000. This retains the supported sky group
-while pruning the false building group in a reuse correction that does not
-repeat camera selection, GroundingDINO/SAM, or FlashSplat.
+Assigned-group pruning adapts automatically from cross-view support. A stuff
+group observed in at least half of the proposal manifest's source views uses
+75% of the normal stuff cutoff; other stuff and all thing groups retain their
+normal thresholds. This rule is shared by every scene. `building` is part of
+the canonical stuff ontology, consistent with panoptic labeling rather than
+object-instance labeling. For job `92470`, the rule retains sky (59/70 views,
+8,941 Gaussians, automatic threshold 7,500) and prunes the shipping-container
+false building (14/70 views, 6,831 Gaussians, threshold 10,000) without repeating
+camera selection, GroundingDINO/SAM, or FlashSplat.
 
 For a short smoke run with three selected cameras:
 

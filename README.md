@@ -67,9 +67,11 @@ gaze-target dataset:
   `scripts/slurm_task1_semantic_scene.sbatch`; the historical bicycle script is
   a compatibility wrapper. Targeted train job `92470` added 20 difficult views
   but is diagnostic only: it pruned sky at the default stuff cutoff and labeled
-  a shipping container as `building`. Scene-configured per-class thresholds now
-  retain sky at 8,000 Gaussians and require 8,000 for building; a reuse run of
-  the 70-view masks/proposals is the next scheduler checkpoint.
+  a shipping container as `building`. Fusion now adapts the stuff cutoff from
+  multi-view support for every scene: a stuff group seen in at least half the
+  source views uses 75% of the normal cutoff. `building` is treated consistently
+  as stuff rather than an object instance. A reuse run of the 70-view
+  masks/proposals is the next scheduler checkpoint.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`

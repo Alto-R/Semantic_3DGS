@@ -25,12 +25,8 @@ class SceneConfigurationTest(unittest.TestCase):
         self.assertEqual(set(config["assignment_priority"]), set(class_names))
         self.assertIn("train", class_names)
         self.assertIn("railroad_track", class_names)
-        thresholds = {
-            item["class"]: item["min_assigned_gaussians"]
-            for item in classes
-            if "min_assigned_gaussians" in item
-        }
-        self.assertEqual(thresholds, {"building": 8000, "sky": 8000})
+        class_types = {item["class"]: item["type"] for item in classes}
+        self.assertEqual(class_types["building"], "stuff")
         for item in classes:
             self.assertIn(item["type"], {"thing", "stuff"})
             self.assertTrue(item["prompts"])
