@@ -480,10 +480,12 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared corrected 50-view `room` baseline through the user-controlled
-   scheduler checkpoint below; Codex must not submit it.
-2. Inspect room structure, class/instance counts, coverage, and full/focused
-   contact sheets before creating `accepted/room`.
+1. Run the prepared 20-view automatic targeted expansion for the accepted
+   `room` baseline through the user-controlled scheduler checkpoint below;
+   Codex must not submit it.
+2. Compare the added room views against the original 50, inspect the full and
+   piano-versus-television contact sheets, and advance `accepted/room` only if
+   the expansion remains visually coherent.
 3. Define a downstream gaze-hit acceptance criterion for accepted scenes before
    introducing any automatic propagation/refinement stage.
 4. Prepare and validate at least one additional matched scene after room to
@@ -604,9 +606,8 @@ retain train instances of 429,100 and 20,633 Gaussians, 8,943 sky Gaussians,
 and no building label. These overlay differences are visibility proxies, not
 semantic ground truth or gaze-hit accuracy.
 
-`room` is the next pilot: 1,593,376 Gaussians and 311 cameras. Its tracked
-indoor vocabulary is `configs/task1_semantic_classes.room.json`, with stable
-palette colors.
+`room` has 1,593,376 Gaussians and 311 cameras. Its tracked indoor vocabulary is
+`configs/task1_semantic_classes.room.json`, with stable palette colors.
 
 Initial job `92490` completed successfully and structurally validated all
 1,593,376 Gaussians. It produced 14 nonzero labels, an unlabeled ratio of
@@ -621,20 +622,59 @@ missing categories.
 The vocabulary now includes those classes. Phrase resolution also maps unique
 partial GroundingDINO phrases back to configured multiword prompts (`acoustic`
 to guitar and `indoor` to indoor plant) and rejects unmatched phrases instead
-of inventing new classes. Because the query vocabulary changed, masks and
-FlashSplat proposals from job `92490` must not be reused. Dhana must submit:
+of inventing new classes.
+
+Corrected baseline job `92492` reran detection and FlashSplat with that
+vocabulary. It completed in 4 minutes 26 seconds and structurally validated all
+1,593,376 Gaussians. It produced 18 nonzero labels and the accepted pointer is:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/room
+  -> ../room_semantic_baseline_v2
+```
+
+Measured baseline metrics:
+
+```text
+Gaussians:                     1,593,376
+final labels including 0:            19
+unlabeled ratio:               0.6849419095053522
+visible frame count:                         50
+evaluated pixels:              30,560,200
+overlay-changed pixels:        24,797,428
+overlay-changed ratio:         0.8114288519054195
+frame ratio min:               0.5680983763195268
+frame ratio p10:               0.6769563026419984
+frame ratio median:            0.8352006858593857
+frame ratio p90:               0.9002894287341051
+frame ratio max:               0.9679910471790106
+```
+
+Relative to job `92490`, the unlabeled ratio fell by 4.07 percentage points,
+the pooled overlay-difference proxy rose by 14.14 points, and the minimum rose
+by 49.08 points. Visual QA shows the piano and television localized consistently
+across the orbit and plausible sofa, chair, rug, plant, curtain, door, window,
+and bookshelf labels. The hardest electronics close-ups retain minor television
+spill onto adjacent cabinet/wall geometry. The coverage numbers measure visible
+overlay differences, not semantic ground truth or gaze-hit accuracy.
+
+The next checkpoint is a fresh automatic targeted-camera expansion; do not set
+`REUSE_SOURCE_OUT`. Dhana must submit:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 SCENE=room \
-OUTPUT_NAME=room_semantic_baseline_v2 \
+OUTPUT_NAME=room_semantic_targeted_v1 \
+AUTO_TARGET_VIEW_COUNT=20 \
+TARGET_CANDIDATE_COUNT=100 \
+TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/room \
 FOCUS_CLASSES='piano,television' \
 FOCUS_NAME=piano_vs_television \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
+sbatch --export=ALL,SCENE,OUTPUT_NAME,AUTO_TARGET_VIEW_COUNT,TARGET_CANDIDATE_COUNT,TARGET_SELECTION_SOURCE,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
 ```
 
-This is an initial evenly spaced 50-view baseline. Do not set
-`AUTO_TARGET_VIEW_COUNT`, `TARGET_SELECTION_SOURCE`, or `REUSE_SOURCE_OUT`.
+The selector will preserve the accepted 50 views and automatically add 20
+low-coverage, pose-diverse unused cameras.
 
 ## 12. Important Files
 

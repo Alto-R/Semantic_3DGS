@@ -419,9 +419,8 @@ building/container false label and no obvious train-colored background leakage.
 configs/task1_semantic_classes.room.json
 ```
 
-The initial run uses 50 evenly spaced cameras and focused sofa-versus-table
-artifacts. Automatic targeted expansion remains disabled until that baseline is
-visually accepted.
+The initial run uses 50 evenly spaced cameras. Automatic targeted expansion is
+enabled only after that baseline is visually accepted.
 
 Job `92490` completed structurally, with 14 nonzero labels and an unlabeled
 ratio of `0.7256222009117748`. Its pooled 50-view overlay-difference proxy is
@@ -434,8 +433,26 @@ The corrected room vocabulary includes those missing classes and uses
 piano-versus-television focused artifacts. GroundingDINO can emit only part of
 a multiword prompt; unique partial phrases now resolve back to the configured
 class, while unmatched phrases are rejected rather than becoming arbitrary new
-classes. The corrected baseline must rerun detection and FlashSplat instead of
-reusing job `92490`.
+classes.
+
+Corrected job `92492` reran detection and FlashSplat and is accepted at:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/room
+  -> ../room_semantic_baseline_v2
+```
+
+It validates all 1,593,376 Gaussians with 18 nonzero labels. The unlabeled ratio
+is `0.6849419095053522`. Its pooled 50-view overlay-difference proxy is
+`0.8114288519054195`, with minimum `0.5680983763195268`, compared with
+`0.6700577548576253` pooled and `0.07734897022925243` minimum for diagnostic
+job `92490`. Visual QA shows consistent piano/television localization and
+plausible room-wide labels; minor television spill remains on adjacent geometry
+in the hardest close views. These measurements are visible-overlay proxies, not
+semantic ground truth or gaze-hit accuracy.
+
+The next room checkpoint is a fresh 20-view automatic targeted expansion from
+the accepted baseline; it must not reuse the old masks or proposals.
 
 For a short smoke run with three selected cameras:
 

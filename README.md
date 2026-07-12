@@ -78,18 +78,23 @@ gaze-target dataset:
   that fusion result, but its overlays exposed a reuse-mode bug: validation
   defaulted to 50 evenly spaced cameras instead of inheriting all 70 manifest
   cameras. Reuse mode now infers both camera indices and count from the reused
-  Grounded-SAM manifest. Job `92483` passed that complete validation. `room` is
-  the next baseline because it is the smallest remaining matched model at
-  1,593,376 Gaussians and provides 311 cameras.
+  Grounded-SAM manifest. Job `92483` passed that complete validation.
 - Room baseline job `92490` is structurally valid but diagnostic only. Its
   sofa, chair, table, rug, plant, door, and window labels are visually coherent,
   but the initial vocabulary omitted the prominent piano, television, speakers,
   media console, and curtains. Pooled visible-tint coverage is 67.01%, with the
   lowest electronics-dominated view at 7.73%.
-- The room vocabulary now includes those missing categories. GroundingDINO
-  partial phrases such as `acoustic` or `indoor` are resolved back to configured
-  multiword classes instead of becoming out-of-vocabulary labels. A new 50-view
-  detection run is required; the job `92490` masks cannot be reused.
+- Corrected room job `92492` reran detection with the expanded vocabulary and
+  is accepted at
+  `outputs/eyenavgs_task1/accepted/room -> ../room_semantic_baseline_v2`.
+  It validates all 1,593,376 Gaussians with 18 nonzero labels. The unlabeled
+  ratio fell from 72.56% to 68.49%, while the 50-view visible-tint proxy rose
+  from 67.01% to 81.14% and its minimum rose from 7.73% to 56.81%.
+- Visual QA shows consistent piano and television localization and plausible
+  room furniture/surface labels. The hardest close views have minor television
+  spill onto adjacent cabinet/wall geometry, so this remains an accepted
+  baseline rather than a semantic-ground-truth claim. Automatic targeted-view
+  expansion is the next room checkpoint.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
@@ -123,5 +128,5 @@ The `bicycle` pilot has completed end to end:
 6. Full and bicycle-versus-bench overlays visually checked.
 
 Task 1 is not complete: the hard minimum remains four fully labeled and
-validated scenes. The next work is a downstream gaze-hit acceptance criterion,
-plus user-controlled `room` annotation and at least one additional scene.
+validated scenes. The next work is room targeted-view validation, a downstream
+gaze-hit acceptance criterion, and at least one additional scene.
