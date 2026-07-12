@@ -81,6 +81,15 @@ gaze-target dataset:
   Grounded-SAM manifest. Job `92483` passed that complete validation. `room` is
   the next baseline because it is the smallest remaining matched model at
   1,593,376 Gaussians and provides 311 cameras.
+- Room baseline job `92490` is structurally valid but diagnostic only. Its
+  sofa, chair, table, rug, plant, door, and window labels are visually coherent,
+  but the initial vocabulary omitted the prominent piano, television, speakers,
+  media console, and curtains. Pooled visible-tint coverage is 67.01%, with the
+  lowest electronics-dominated view at 7.73%.
+- The room vocabulary now includes those missing categories. GroundingDINO
+  partial phrases such as `acoustic` or `indoor` are resolved back to configured
+  multiword classes instead of becoming out-of-vocabulary labels. A new 50-view
+  detection run is required; the job `92490` masks cannot be reused.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`

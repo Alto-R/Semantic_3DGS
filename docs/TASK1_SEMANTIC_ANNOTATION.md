@@ -423,6 +423,20 @@ The initial run uses 50 evenly spaced cameras and focused sofa-versus-table
 artifacts. Automatic targeted expansion remains disabled until that baseline is
 visually accepted.
 
+Job `92490` completed structurally, with 14 nonzero labels and an unlabeled
+ratio of `0.7256222009117748`. Its pooled 50-view overlay-difference proxy is
+`0.6700577548576253`, with minimum `0.07734897022925243`. Visual QA shows clean
+sofa/table focus and plausible furniture/surface labels, but the initial
+vocabulary omitted the prominent piano, television, speakers, media console,
+and curtains. It is therefore diagnostic, not accepted.
+
+The corrected room vocabulary includes those missing classes and uses
+piano-versus-television focused artifacts. GroundingDINO can emit only part of
+a multiword prompt; unique partial phrases now resolve back to the configured
+class, while unmatched phrases are rejected rather than becoming arbitrary new
+classes. The corrected baseline must rerun detection and FlashSplat instead of
+reusing job `92490`.
+
 For a short smoke run with three selected cameras:
 
 ```bash

@@ -480,7 +480,7 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared 50-view `room` baseline through the user-controlled
+1. Run the prepared corrected 50-view `room` baseline through the user-controlled
    scheduler checkpoint below; Codex must not submit it.
 2. Inspect room structure, class/instance counts, coverage, and full/focused
    contact sheets before creating `accepted/room`.
@@ -606,14 +606,30 @@ semantic ground truth or gaze-hit accuracy.
 
 `room` is the next pilot: 1,593,376 Gaussians and 311 cameras. Its tracked
 indoor vocabulary is `configs/task1_semantic_classes.room.json`, with stable
-palette colors and sofa/table focused QA. Dhana must submit:
+palette colors.
+
+Initial job `92490` completed successfully and structurally validated all
+1,593,376 Gaussians. It produced 14 nonzero labels, an unlabeled ratio of
+`0.7256222009117748`, and a 50-view overlay-difference ratio of
+`0.6700577548576253` with minimum `0.07734897022925243`. Sofa, chairs, tables,
+rug, plant, door, window, and bookshelf are visually plausible, and the
+sofa-versus-table focus is clean. It is diagnostic rather than accepted because
+the initial vocabulary omitted the scene's prominent piano, television,
+speakers, media console, and curtains. The lowest views are dominated by those
+missing categories.
+
+The vocabulary now includes those classes. Phrase resolution also maps unique
+partial GroundingDINO phrases back to configured multiword prompts (`acoustic`
+to guitar and `indoor` to indoor plant) and rejects unmatched phrases instead
+of inventing new classes. Because the query vocabulary changed, masks and
+FlashSplat proposals from job `92490` must not be reused. Dhana must submit:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 SCENE=room \
-OUTPUT_NAME=room_semantic_baseline_v1 \
-FOCUS_CLASSES='sofa,table' \
-FOCUS_NAME=sofa_vs_table \
+OUTPUT_NAME=room_semantic_baseline_v2 \
+FOCUS_CLASSES='piano,television' \
+FOCUS_NAME=piano_vs_television \
 sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
 ```
 

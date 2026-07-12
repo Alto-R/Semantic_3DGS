@@ -35,7 +35,7 @@ DEFAULT_CLASSES = [
     {"class": "car", "prompts": ["car", "vehicle"], "type": "thing"},
     {"class": "bench", "prompts": ["bench"], "type": "thing"},
     {"class": "tree", "prompts": ["tree"], "type": "thing"},
-    {"class": "building", "prompts": ["building", "house"], "type": "thing"},
+    {"class": "building", "prompts": ["building", "house"], "type": "stuff"},
     {"class": "ground", "prompts": ["ground", "terrain"], "type": "stuff"},
     {"class": "road", "prompts": ["road", "street"], "type": "stuff"},
     {"class": "sidewalk", "prompts": ["sidewalk", "pavement"], "type": "stuff"},
@@ -129,8 +129,25 @@ def class_from_phrase(phrase: str, specs: list[ClassSpec]) -> str:
             normalized_prompt = normalize_text(prompt)
             if normalized_prompt and re.search(rf"\b{re.escape(normalized_prompt)}\b", normalized_phrase):
                 return spec.name
-    if normalized_phrase:
-        return normalized_phrase.split()[0].replace(" ", "_")
+
+    # GroundingDINO can return only one token from a configured multiword
+    # prompt (for example, "acoustic" for "acoustic guitar"). Resolve a
+    # unique partial prompt back to the configured class instead of inventing
+    # an out-of-vocabulary class from the first token.
+    phrase_tokens = frozenset(normalized_phrase.split())
+    partial_scores: dict[str, float] = {}
+    if phrase_tokens:
+        for spec in specs:
+            for prompt in spec.prompts:
+                prompt_tokens = frozenset(normalize_text(prompt).split())
+                if phrase_tokens < prompt_tokens:
+                    coverage = len(phrase_tokens) / float(len(prompt_tokens))
+                    partial_scores[spec.name] = max(partial_scores.get(spec.name, 0.0), coverage)
+    if partial_scores:
+        best_score = max(partial_scores.values())
+        best_names = [name for name, score in partial_scores.items() if score == best_score]
+        if len(best_names) == 1:
+            return best_names[0]
     return "unknown"
 
 

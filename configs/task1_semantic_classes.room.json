@@ -1,6 +1,10 @@
 {
   "assignment_priority": [
+    "piano",
+    "television",
+    "speaker",
     "guitar",
+    "media_console",
     "chair",
     "sofa",
     "table",
@@ -9,6 +13,7 @@
     "cabinet",
     "bookshelf",
     "picture_frame",
+    "curtain",
     "rug",
     "door",
     "window",
@@ -18,9 +23,29 @@
   ],
   "classes": [
     {
+      "class": "piano",
+      "type": "thing",
+      "prompts": ["piano", "upright piano"]
+    },
+    {
+      "class": "television",
+      "type": "thing",
+      "prompts": ["television", "tv", "television screen"]
+    },
+    {
+      "class": "speaker",
+      "type": "thing",
+      "prompts": ["speaker", "loudspeaker", "floor speaker"]
+    },
+    {
       "class": "guitar",
       "type": "thing",
       "prompts": ["guitar", "acoustic guitar"]
+    },
+    {
+      "class": "media_console",
+      "type": "thing",
+      "prompts": ["media console", "television stand", "entertainment center"]
     },
     {
       "class": "chair",
@@ -63,6 +88,11 @@
       "prompts": ["picture frame", "painting", "wall art"]
     },
     {
+      "class": "curtain",
+      "type": "stuff",
+      "prompts": ["curtain", "drape", "window curtain"]
+    },
+    {
       "class": "rug",
       "type": "stuff",
       "prompts": ["rug", "carpet"]
@@ -80,7 +110,7 @@
     {
       "class": "wall",
       "type": "stuff",
-      "prompts": ["wall", "interior wall"]
+      "prompts": ["wall", "interior wall", "painted wall", "room wall"]
     },
     {
       "class": "floor",

@@ -42,11 +42,17 @@ CLASS_COLORS: dict[str, tuple[float, float, float]] = {
     "wall": (0.68, 0.70, 0.74),
     "floor": (0.66, 0.46, 0.28),
     "ceiling": (0.88, 0.86, 0.72),
+    "piano": (0.08, 0.56, 0.78),
+    "television": (0.18, 0.20, 0.24),
+    "speaker": (0.86, 0.38, 0.08),
+    "media_console": (0.46, 0.34, 0.24),
+    "curtain": (0.52, 0.24, 0.68),
 }
 
 STUFF_CLASSES = {
     "building",
     "ceiling",
+    "curtain",
     "door",
     "floor",
     "ground",
