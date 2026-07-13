@@ -26,6 +26,9 @@ logs/
 tmp/
 scratch/
 
+# Local task handoffs
+*_HANDOFF.md
+
 # Common 3DGS / ML artifacts
 *.ckpt
 *.pth
@@ -42,4 +45,3 @@ Thumbs.db
 .vscode/
 
 !.vscode/settings.example.json
-

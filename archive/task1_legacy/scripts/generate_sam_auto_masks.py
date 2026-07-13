@@ -13,6 +13,8 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "task1"))
+
 from flashsplat_cameras import (
     background_tensor,
     camera_filename,

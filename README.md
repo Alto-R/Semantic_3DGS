@@ -18,47 +18,45 @@ gaze-target dataset:
 
 ## Current Status
 
-- Local project folder: `C:\Users\dhana\PROJECTS\PKU 3DGS VR`
-- GitHub remote: `https://github.com/DhanaKresnawijaya237/pku-3dgs-vr`
-- Cluster account: `ssh -p 10022 cse12312032@172.18.34.25`
-- Cluster root: `/lab/haoq_lab/cse12312032`
-- The old cluster bare Git remote is deprecated; use GitHub as the source of
-  truth.
+- Paths in this repository are relative to the project root. Dataset, model,
+  dependency, and output roots are configured outside tracked documentation.
+- The configured Git remote is the source of truth for code and documentation.
 - Reused semantic Conda env: `gaussian_grouping_true`
 - GraphDeco official pretrained models downloaded and extracted on the cluster.
 - Current Task 1 model coverage: 8/12 EyeNavGS scenes matched; `nyc`,
   `london`, `berlin`, and `alameda` still need separate 3DGS model sources.
-- Bicycle identity baseline job `92369` established the first accepted result
-  at commit `95ef1d6`: 50 views, 411 GroundingDINO + SAM masks, 399 FlashSplat
-  proposals, and 6,131,954 validated Gaussians.
-- Job `92344` removed the bicycle-colored road streaks and bench-colored
+- The bicycle identity baseline established the first accepted result: 50
+  views, 411 GroundingDINO + SAM masks, 399 FlashSplat proposals, and 6,131,954
+  validated Gaussians.
+- The signed-evidence bicycle run removed the bicycle-colored road streaks and bench-colored
   vegetation patches visible in the prior spatial-only run while preserving the
   bicycle and bench across all 50 validation views.
-- Automatic targeted-camera job `92426` is the current accepted bicycle result:
+- The automatic targeted-camera run is the current accepted bicycle result:
   it screened 144 safe unused cameras, evaluated a 100-camera candidate pool,
   automatically added 20 low-coverage/pose-diverse views, and validated a
   70-view run with 599 GroundingDINO + SAM masks and 583 FlashSplat proposals.
-- Job `92426` retains one 119,570-Gaussian bicycle, one 139,727-Gaussian bench,
+- The accepted bicycle run retains one 119,570-Gaussian bicycle, one
+  139,727-Gaussian bench,
   and eight tree IDs totaling 1,096,092 Gaussians. The apparent fence label in
-  job `92369` was reassigned primarily to the bench, matching the clean focused
+  the identity baseline was reassigned primarily to the bench, matching the clean focused
   overlays and the detector's earlier `bench fence` ambiguity.
 - The current result remains conservative in 3D: 58.40% of raw Gaussians use
   label `0`, down from 60.25%. On the same original 50 cameras, visible coverage
   is effectively unchanged at 92.42% while the worst frame improves from
   70.32% to 72.82%. The 20 difficult additions measure 82.45% pooled coverage.
-- Identity-test job `92353` merged the bicycle and bench correctly, but its
+- The diagnostic identity-test run merged the bicycle and bench correctly, but its
   first consolidation rule also split 13 accepted tree groups into 26
   components and ultimately discarded 95,584 tree Gaussians. That result is
   retained as a diagnostic, not accepted as the new baseline.
 - Consolidation treats accepted instances as atomic: connected geometry may
-  merge same-class IDs but may not split them. Job `92426` passed this check and
+  merge same-class IDs but may not split them. The accepted bicycle run passed this check and
   is exposed at `outputs/eyenavgs_task1/accepted/bicycle` on the cluster.
-- Train reuse job `92469` established the accepted 50-view train baseline. Lowering the
+- The train reuse run established the accepted 50-view train baseline. Lowering the
   stuff-class minimum from 10,000 to 8,000 retained the strongly supported sky
   group (43 source views, 8,462 final Gaussians) without changing either train
   instance. Structural validation passed for all 1,026,508 Gaussians, and
   it prepared the scene-local targeted expansion.
-- Final train job `92483` is now accepted at
+- The final train run is now accepted at
   `outputs/eyenavgs_task1/accepted/train -> ../train_semantic_targeted_v3`.
   It validates 1,026,508 Gaussians across 70 views, retains two train instances
   and an automatically supported sky group, and prunes the shipping-container
@@ -68,23 +66,23 @@ gaze-target dataset:
   difficult additions measure 97.70%. These are visible-tint measurements, not
   semantic ground truth or gaze-hit accuracy.
 - The accepted workflow is now scene-configurable through
-  `scripts/slurm_task1_semantic_scene.sbatch`; the historical bicycle script is
-  a compatibility wrapper. Targeted train job `92470` added 20 difficult views
+  `scripts/slurm/slurm_task1_semantic_scene.sbatch`; the historical bicycle script is
+  a compatibility wrapper. The first targeted train run added 20 difficult views
   but is diagnostic only: it pruned sky at the default stuff cutoff and labeled
   a shipping container as `building`. Fusion now adapts the stuff cutoff from
   multi-view support for every scene: a stuff group seen in at least half the
   source views uses 75% of the normal cutoff. `building` is treated consistently
-  as stuff rather than an object instance. Corrected reuse job `92482` validated
+  as stuff rather than an object instance. The corrected reuse run validated
   that fusion result, but its overlays exposed a reuse-mode bug: validation
   defaulted to 50 evenly spaced cameras instead of inheriting all 70 manifest
   cameras. Reuse mode now infers both camera indices and count from the reused
-  Grounded-SAM manifest. Job `92483` passed that complete validation.
-- Room baseline job `92490` is structurally valid but diagnostic only. Its
+  Grounded-SAM manifest. The final train run passed that complete validation.
+- The room baseline is structurally valid but diagnostic only. Its
   sofa, chair, table, rug, plant, door, and window labels are visually coherent,
   but the initial vocabulary omitted the prominent piano, television, speakers,
   media console, and curtains. Pooled visible-tint coverage is 67.01%, with the
   lowest electronics-dominated view at 7.73%.
-- Corrected room job `92492` reran detection with the expanded vocabulary and
+- The corrected room baseline reran detection with the expanded vocabulary and
   is accepted at
   `outputs/eyenavgs_task1/accepted/room -> ../room_semantic_baseline_v2`.
   It validates all 1,593,376 Gaussians with 18 nonzero labels. The unlabeled
@@ -100,7 +98,7 @@ gaze-target dataset:
   now allocate deterministic per-label colors with a CIELAB separation target,
   including distinct colors for multiple instances of one class. This changes
   only visualization colors, not semantic IDs or Gaussian ownership.
-- Targeted room job `92498` validated all 70 views and reduced the unlabeled
+- The first targeted room run validated all 70 views and reduced the unlabeled
   ratio to 65.30%, but the separated colors exposed a real cross-class error:
   ambiguous phrases such as `television stand table desk` were assigned to the
   first matching class and colored coffee/side-table geometry as television.
@@ -109,11 +107,11 @@ gaze-target dataset:
   specific compounds such as `floor speaker`. Connected same-class fragments
   are also consolidated before the global object-size cutoff so valid parts of
   one object are evaluated together without adding class-specific thresholds.
-- Corrected targeted room job `92513` is accepted at
+- The corrected targeted room run is accepted at
   `outputs/eyenavgs_task1/accepted/room -> ../room_semantic_targeted_v2`.
   It validates 1,593,376 Gaussians across 70 views, retains a clean
   7,779-Gaussian television and a separate 9,054-Gaussian table, and removes the
-  table-as-television failure from job `92498`.
+  table-as-television failure from the first targeted room run.
 - Accepted room visible-tint coverage is 81.38% pooled. The original 50 views
   measure 84.22% with a 62.24% minimum; the 20 automatically selected difficult
   views measure 74.28% with a 35.03% minimum. The lowest view is dominated by
@@ -121,7 +119,7 @@ gaze-target dataset:
 - `truck` is the fourth-scene pilot: 2,541,226 Gaussians and 251 cameras. Its
   scene configuration prioritizes the truck and wheels while retaining common
   outdoor context.
-- Truck baseline job `92531` completed structurally across 50 evenly spaced
+- The initial truck baseline completed structurally across 50 evenly spaced
   views, but it is diagnostic rather than accepted. It retained one coherent
   truck and only three wheel labels. Fusion had actually consolidated four
   wheel-position candidates; the missing wheel had 3,738 assigned Gaussians,
@@ -133,8 +131,8 @@ gaze-target dataset:
   multiplied by `max(0.5, 1 - source_view_ratio)`, never below the global
   minimum. This lowers the fourth wheel's threshold to 3,500 while leaving the
   two-view 146-Gaussian fragment at 4,800.
-- Corrected reuse job `92546` remains the valid 50-view truck baseline, but job
-  `92550` is the accepted 70-view result at
+- The corrected reuse run remains the valid 50-view truck baseline, but the
+  targeted run is the accepted 70-view result at
   `outputs/eyenavgs_task1/accepted/truck -> ../truck_semantic_targeted_v1`.
   It retains four wheel IDs with 8,887, 13,343, 9,253, and 4,389 Gaussians,
   supported by 19, 22, 24, and 24 views. A weak 95-Gaussian, two-view fragment
@@ -161,38 +159,38 @@ identified explicitly rather than assigned a speculative failure.
 | --- | --- | --- |
 | `bicycle` | Legacy review/finalization-path output; the retained project record does not identify a specific visual defect. It is not the accepted automatic semantic result. | The GroundingDINO + SAM + FlashSplat semantic pipeline replaced this fallback path and produced auditable class proposals and validation artifacts. |
 | `bicycle_auto` | Class-agnostic SAM grouping produced `object_candidate` groups rather than final semantic class names, so it still required manual naming/review. | The semantic pipeline used scene class prompts and automatic cross-view fusion to produce named labels. |
-| `archive/bicycle_semantic_10views_job92182` | This was an early 10-view experiment. The tracked notes do not preserve a more specific failure diagnosis, and it was never accepted. | Later bicycle runs used 50 source views, followed by automatic difficult-view expansion to 70 views. |
-| `archive/bicycle_semantic_50views_job92250_hard_priority` | Archived hard-priority experiment; the tracked notes do not preserve its exact rejection diagnosis. | It was superseded by the subsequent multiview and spatial-pruning experiments, then by signed multiview evidence. |
-| `archive/bicycle_semantic_50views_job92251_multiview_q003` | Archived multiview quality-threshold experiment; the tracked notes do not preserve its exact rejection diagnosis. | Job `92261` became the first documented useful 50-view baseline, after which failures were diagnosed explicitly. |
-| `archive/bicycle_semantic_50views_job92261_pre_spatial_pruning` | First useful automatic baseline, but foreground object identities were fragmented. | Job `92331` added spatial connected-component pruning to remove small disconnected label islands. |
-| `archive/bicycle_semantic_50views_job92331_spatial_only` | Spatial pruning removed small islands, but larger bicycle-colored road streaks and bench-colored vegetation patches survived because fusion accumulated positive evidence only. | Job `92344` added signed positive/negative multiview evidence and removed the obvious leakage. |
-| `bicycle_semantic` (job `92344`) | Clean class localization, but the same physical bicycle remained split into 2 IDs and the bench into 4 IDs. | Job `92353` introduced connected identity consolidation; job `92369` corrected that rule so accepted instances could merge but not split. |
-| `bicycle_semantic_identity_test` (job `92353`) | The first consolidation rule merged bicycle and bench correctly but split 13 accepted tree groups into 26 components; later size pruning discarded 95,584 tree Gaussians. | Job `92369` treated accepted instances as atomic and used merge-only consolidation, preserving all accepted tree coverage. |
-| `bicycle_semantic_identity_test_v2` (job `92369`) | Valid accepted 50-view baseline; no semantic failure was recorded. It became superseded because it did not test automatically selected difficult views. | Job `92426` added 20 automatically selected low-coverage/pose-diverse cameras and became the accepted 70-view bicycle result. |
-| `train_semantic_baseline_v1` (job `92467`) | The fixed 10,000-Gaussian stuff cutoff discarded a sky group supported by 43 of 50 views. | Job `92469` lowered the train experiment's stuff cutoff to 8,000 and retained the 8,462-Gaussian sky group without changing the train instances. This scene-specific experiment was later replaced by a generic adaptive rule. |
-| `train_semantic_baseline_v2` (job `92469`) | Valid accepted 50-view baseline; superseded because it did not include difficult-view expansion and its 8,000 cutoff was an interim scene-specific setting. | Targeted runs added 20 cameras, and the generic fusion rule now lowers the cutoff automatically for strongly supported stuff classes in every scene. |
-| `train_semantic_targeted_v1` (job `92470`) | The default cutoff again pruned sky, while a long shipping container was falsely retained as `building`. | Job `92482` added generic support-adaptive stuff pruning and treated `building` consistently as stuff; it kept sky and pruned the container. |
-| `train_semantic_targeted_v2` (job `92482`) | Fusion was correct, but reuse-mode overlay validation silently fell back to 50 evenly spaced cameras instead of validating the full 70-camera manifest. | Reuse mode was changed to inherit the exact camera indices and count; job `92483` validated all 70 views and became accepted. |
-| `room_semantic_baseline_v1` (job `92490`) | The initial vocabulary omitted piano, television, speakers, media console, and curtains; electronics-dominated views therefore had very low visible-tint coverage. | Job `92492` expanded the vocabulary and phrase aliases and reran detection/fusion. |
-| `room_semantic_baseline_v2` (job `92492`) | Valid accepted 50-view baseline; minor television spill remained, difficult views had not been added, and similar curtain/chair debug colors obscured visual inspection even though their label IDs were separate. | Targeted expansion added 20 cameras, and a deterministic perceptually separated palette made different labels visibly distinct. |
-| `room_semantic_targeted_v1` (job `92498`) | The clearer palette exposed a real semantic error: ambiguous phrases such as `television stand table desk` assigned table geometry to television. True television fragments were then individually lost under the object-size cutoff. | The phrase resolver now rejects unrelated multi-class phrases, and connected same-class fragments consolidate before pruning. Job `92513` retained a clean television separately from the table and became accepted. |
-| `truck_semantic_baseline_v1` (job `92531`) | A fixed 5,000-Gaussian thing cutoff removed one real wheel despite support from 15 views. | The generic support-adaptive thing cutoff retained the wheel while continuing to reject weak fragments. |
-| `truck_semantic_baseline_v2` (job `92546`) | Valid accepted 50-view baseline; superseded because it did not test automatically selected difficult views. | Job `92550` added 20 low-coverage/pose-diverse views, preserved all four wheel identities, and became the accepted truck result. |
+| `archive/bicycle_semantic_10views` | This was an early 10-view experiment. The tracked notes do not preserve a more specific failure diagnosis, and it was never accepted. | Later bicycle runs used 50 source views, followed by automatic difficult-view expansion to 70 views. |
+| `archive/bicycle_semantic_50views_hard_priority` | Archived hard-priority experiment; the tracked notes do not preserve its exact rejection diagnosis. | It was superseded by the subsequent multiview and spatial-pruning experiments, then by signed multiview evidence. |
+| `archive/bicycle_semantic_50views_multiview_q003` | Archived multiview quality-threshold experiment; the tracked notes do not preserve its exact rejection diagnosis. | The next run became the first documented useful 50-view baseline, after which failures were diagnosed explicitly. |
+| `archive/bicycle_semantic_50views_pre_spatial_pruning` | First useful automatic baseline, but foreground object identities were fragmented. | Spatial connected-component pruning removed small disconnected label islands in the following run. |
+| `archive/bicycle_semantic_50views_spatial_only` | Spatial pruning removed small islands, but larger bicycle-colored road streaks and bench-colored vegetation patches survived because fusion accumulated positive evidence only. | Signed positive/negative multiview evidence removed the obvious leakage. |
+| `bicycle_semantic` | Clean class localization, but the same physical bicycle remained split into 2 IDs and the bench into 4 IDs. | Connected identity consolidation was introduced and then corrected so accepted instances could merge but not split. |
+| `bicycle_semantic_identity_test` | The first consolidation rule merged bicycle and bench correctly but split 13 accepted tree groups into 26 components; later size pruning discarded 95,584 tree Gaussians. | The corrected run treated accepted instances as atomic and used merge-only consolidation, preserving all accepted tree coverage. |
+| `bicycle_semantic_identity_test_v2` | Valid accepted 50-view baseline; no semantic failure was recorded. It became superseded because it did not test automatically selected difficult views. | The targeted run added 20 automatically selected low-coverage/pose-diverse cameras and became the accepted 70-view bicycle result. |
+| `train_semantic_baseline_v1` | The fixed 10,000-Gaussian stuff cutoff discarded a sky group supported by 43 of 50 views. | The next run lowered the experimental stuff cutoff to 8,000 and retained the 8,462-Gaussian sky group without changing the train instances. This scene-specific experiment was later replaced by a generic adaptive rule. |
+| `train_semantic_baseline_v2` | Valid accepted 50-view baseline; superseded because it did not include difficult-view expansion and its 8,000 cutoff was an interim scene-specific setting. | Targeted runs added 20 cameras, and the generic fusion rule now lowers the cutoff automatically for strongly supported stuff classes in every scene. |
+| `train_semantic_targeted_v1` | The default cutoff again pruned sky, while a long shipping container was falsely retained as `building`. | Generic support-adaptive stuff pruning and consistent `building` handling retained sky and pruned the container. |
+| `train_semantic_targeted_v2` | Fusion was correct, but reuse-mode overlay validation silently fell back to 50 evenly spaced cameras instead of validating the full 70-camera manifest. | Reuse mode was changed to inherit the exact camera indices and count; the corrected run validated all 70 views and became accepted. |
+| `room_semantic_baseline_v1` | The initial vocabulary omitted piano, television, speakers, media console, and curtains; electronics-dominated views therefore had very low visible-tint coverage. | The next run expanded the vocabulary and phrase aliases and reran detection/fusion. |
+| `room_semantic_baseline_v2` | Valid accepted 50-view baseline; minor television spill remained, difficult views had not been added, and similar curtain/chair debug colors obscured visual inspection even though their label IDs were separate. | Targeted expansion added 20 cameras, and a deterministic perceptually separated palette made different labels visibly distinct. |
+| `room_semantic_targeted_v1` | The clearer palette exposed a real semantic error: ambiguous phrases such as `television stand table desk` assigned table geometry to television. True television fragments were then individually lost under the object-size cutoff. | The phrase resolver now rejects unrelated multi-class phrases, and connected same-class fragments consolidate before pruning. The corrected run retained a clean television separately from the table and became accepted. |
+| `truck_semantic_baseline_v1` | A fixed 5,000-Gaussian thing cutoff removed one real wheel despite support from 15 views. | The generic support-adaptive thing cutoff retained the wheel while continuing to reject weak fragments. |
+| `truck_semantic_baseline_v2` | Valid accepted 50-view baseline; superseded because it did not test automatically selected difficult views. | The targeted run added 20 low-coverage/pose-diverse views, preserved all four wheel identities, and became the accepted truck result. |
 
 Keep the final accepted targets and their compact reports:
 
-- `bicycle_semantic_targeted_v1` (job `92426`)
-- `train_semantic_targeted_v3` (job `92483`)
-- `room_semantic_targeted_v2` (job `92513`)
-- `truck_semantic_targeted_v1` (job `92550`)
+- `bicycle_semantic_targeted_v1`
+- `train_semantic_targeted_v3`
+- `room_semantic_targeted_v2`
+- `truck_semantic_targeted_v1`
 - `accepted/`, whose scene links point to those results
 - `logs/`, `manifests/`, and small validation/report JSON files needed for the
   final report
 
 Generated `semantic_point_cloud_rgb_debug.ply` files and their inspection JSON
 are also safe to delete from every old and accepted run. They are derived,
-redundant visualization artifacts rather than required deliverables, and commit
-`244787f` stopped future runs from creating them. Keep
+redundant visualization artifacts rather than required deliverables. The
+pipeline no longer creates them. Keep
 `deliverables/semantic_point_cloud.ply`, `label_map.json`, run summaries,
 validation reports, and `semantic_point_cloud_supersplat_debug.ply` for accepted
 scenes.
@@ -214,10 +212,8 @@ debug PLYs remain the supported colorized 3D visualization, while
 
 See:
 
-- `docs/WORKFLOW.md` for local/cluster setup and command conventions.
+- `scripts/README.md` for the maintained script layout.
 - `docs/TASK1_SEMANTIC_ANNOTATION.md` for the semantic annotation pipeline.
-- `TASK2_HANDOFF.md` for the isolated Task 2 gaze-target implementation
-  contract and new-thread starting prompt.
 - `configs/paths.example.yaml` for path conventions.
 
 ## First Milestone
@@ -232,6 +228,6 @@ The `bicycle` pilot has completed end to end:
 5. Semantic PLY and `label_map.json` exported in the D1 format.
 6. Full and bicycle-versus-bench overlays visually checked.
 
-Task 1 is not complete: the hard minimum remains four fully labeled and
-validated scenes. The next work is room targeted-view validation, a downstream
-gaze-hit acceptance criterion, and at least one additional scene.
+The four-scene Task 1 pilot minimum has been reached. Completing all twelve
+scenes and defining a downstream gaze-hit acceptance criterion remain future
+work.

@@ -19,4 +19,4 @@ export CLASS_CONFIG="${CLASS_CONFIG:-${PROJECT_ROOT}/configs/task1_semantic_clas
 export FOCUS_CLASSES="${FOCUS_CLASSES:-bicycle,bench}"
 export FOCUS_NAME="${FOCUS_NAME:-bicycle_vs_bench}"
 
-exec bash "${PROJECT_ROOT}/scripts/slurm_task1_semantic_scene.sbatch" "$@"
+exec bash "${PROJECT_ROOT}/scripts/slurm/slurm_task1_semantic_scene.sbatch" "$@"

@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import argparse
 import struct
+import sys
 from pathlib import Path
 from typing import Iterable, List
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "task1"))
 
 from ply_utils import element_stride, read_ply_header
 
@@ -137,4 +140,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

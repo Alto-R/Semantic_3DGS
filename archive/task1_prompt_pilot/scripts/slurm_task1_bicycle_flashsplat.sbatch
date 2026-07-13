@@ -47,7 +47,7 @@ echo "project=${PROJECT_ROOT}"
 echo "model=${MODEL_DIR}"
 nvidia-smi
 
-python scripts/generate_flashsplat_prompt_masks.py \
+python archive/task1_prompt_pilot/scripts/generate_flashsplat_prompt_masks.py \
   --model-path "${MODEL_DIR}" \
   --output-dir "${PROMPT_DIR}" \
   --flashsplat-root "${FLASHSPLAT_ROOT}" \
@@ -69,7 +69,7 @@ python scripts/generate_flashsplat_prompt_masks.py \
   --negative-point 35,132 \
   --negative-point 160,30
 
-python scripts/run_flashsplat_cameras.py \
+python archive/task1_prompt_pilot/scripts/run_flashsplat_cameras.py \
   --model-path "${MODEL_DIR}" \
   --mask-dir "${PROMPT_DIR}/sam_masks" \
   --output-dir "${OUT_DIR}" \
@@ -85,9 +85,9 @@ python scripts/run_flashsplat_cameras.py \
   --label-class object \
   --overwrite
 
-python scripts/inspect_ply.py "${OUT_DIR}/semantic_point_cloud.ply" --json > "${OUT_DIR}/semantic_point_cloud_inspection.json"
+python scripts/task1/inspect_ply.py "${OUT_DIR}/semantic_point_cloud.ply" --json > "${OUT_DIR}/semantic_point_cloud_inspection.json"
 
-python scripts/make_contact_sheet.py \
+python scripts/task1/make_contact_sheet.py \
   --image-dir "${OUT_DIR}/overlay_renders" \
   --output "${OUT_DIR}/overlay_contact_sheet.png" \
   --columns 5 \

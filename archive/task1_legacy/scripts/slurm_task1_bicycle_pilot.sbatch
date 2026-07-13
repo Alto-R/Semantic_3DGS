@@ -43,13 +43,13 @@ echo "project=${PROJECT_ROOT}"
 echo "model=${MODEL_DIR}"
 nvidia-smi
 
-python scripts/inspect_ply.py "${PLY}" --json > "${OUT_DIR}/point_cloud_inspection.json"
+python scripts/task1/inspect_ply.py "${PLY}" --json > "${OUT_DIR}/point_cloud_inspection.json"
 
 if [ ! -f "${OUT_DIR}/semantic_point_cloud.ply" ]; then
-  python scripts/add_dummy_labels.py "${PLY}" "${OUT_DIR}/semantic_point_cloud.ply" --label 0
+  python archive/task1_legacy/scripts/add_dummy_labels.py "${PLY}" "${OUT_DIR}/semantic_point_cloud.ply" --label 0
 fi
 
-python scripts/inspect_ply.py "${OUT_DIR}/semantic_point_cloud.ply" --json > "${OUT_DIR}/semantic_point_cloud_inspection.json"
+python scripts/task1/inspect_ply.py "${OUT_DIR}/semantic_point_cloud.ply" --json > "${OUT_DIR}/semantic_point_cloud_inspection.json"
 
 if [ ! -f "${OUT_DIR}/label_map.json" ]; then
   cat > "${OUT_DIR}/label_map.json" <<'JSON'
@@ -76,6 +76,6 @@ else
   render_args+=(--count "${RENDER_COUNT}")
 fi
 
-PYTHONPATH="${GRAPHDECO_ROOT}:${PYTHONPATH:-}" python scripts/render_graphdeco_cameras.py "${render_args[@]}"
+PYTHONPATH="${GRAPHDECO_ROOT}:${PYTHONPATH:-}" python archive/task1_legacy/scripts/render_graphdeco_cameras.py "${render_args[@]}"
 
 find "${OUT_DIR}" -maxdepth 2 -type f | sort

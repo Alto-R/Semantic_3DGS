@@ -10,11 +10,8 @@ Why it was archived:
 - The prompt pilot technically validated the render -> mask -> FlashSplat ->
   semantic PLY chain, but the bicycle mask leaked into the bench.
 
-Recorded result:
+Recorded result for the `bicycle` scene:
 
-- Slurm job: `91862`
-- Node: `rtx8000`
-- Scene: `bicycle`
 - Label histogram:
 
   ```json
@@ -24,8 +21,8 @@ Recorded result:
 Active replacement:
 
 ```text
-scripts/generate_sam_auto_masks.py
-scripts/run_flashsplat_mask_proposals.py
-scripts/cluster_flashsplat_proposals.py
-scripts/slurm_task1_bicycle_auto_proposals.sbatch
+scripts/task1/generate_grounded_sam_masks.py
+scripts/task1/run_flashsplat_mask_proposals.py
+scripts/task1/cluster_semantic_flashsplat_proposals.py
+scripts/slurm/slurm_task1_semantic_scene.sbatch
 ```

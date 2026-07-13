@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "task1"))
 
 from add_labels_from_npy import write_ply_with_labels
 from flashsplat_cameras import point_cloud_path

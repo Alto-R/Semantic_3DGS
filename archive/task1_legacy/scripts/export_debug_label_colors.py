@@ -6,10 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "task1"))
 
 from ply_utils import element_stride, read_ply_header, scalar_property_size
 from semantic_palette import load_label_items, palette_records, rgb8_for_label

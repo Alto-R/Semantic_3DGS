@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "task1"))
 
 from measure_overlay_coverage import measure_directory  # noqa: E402
 

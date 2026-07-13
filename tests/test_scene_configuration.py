@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "scripts" / "task1"))
 
 from semantic_palette import CLASS_COLORS  # noqa: E402
 from summarize_task1_semantic_run import build_summary  # noqa: E402

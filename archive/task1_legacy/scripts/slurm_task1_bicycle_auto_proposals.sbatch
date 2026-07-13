@@ -48,7 +48,7 @@ echo "project=${PROJECT_ROOT}"
 echo "model=${MODEL_DIR}"
 nvidia-smi
 
-python scripts/generate_sam_auto_masks.py \
+python archive/task1_legacy/scripts/generate_sam_auto_masks.py \
   --model-path "${MODEL_DIR}" \
   --output-dir "${SAM_OUT_DIR}" \
   --flashsplat-root "${FLASHSPLAT_ROOT}" \
@@ -63,7 +63,7 @@ python scripts/generate_sam_auto_masks.py \
   --min-mask-area 100 \
   --max-mask-area-ratio 0.70
 
-python scripts/run_flashsplat_mask_proposals.py \
+python scripts/task1/run_flashsplat_mask_proposals.py \
   --model-path "${MODEL_DIR}" \
   --sam-output-dir "${SAM_OUT_DIR}" \
   --output-dir "${PROPOSAL_DIR}" \
@@ -74,7 +74,7 @@ python scripts/run_flashsplat_mask_proposals.py \
   --max-masks-per-view "${MAX_MASKS_PER_VIEW}" \
   --min-support-gaussians 250
 
-python scripts/cluster_flashsplat_proposals.py \
+python archive/task1_legacy/scripts/cluster_flashsplat_proposals.py \
   --model-path "${MODEL_DIR}" \
   --proposal-dir "${PROPOSAL_DIR}" \
   --output-dir "${OUT_DIR}" \
@@ -88,9 +88,9 @@ python scripts/cluster_flashsplat_proposals.py \
   --max-groups 64 \
   --overwrite
 
-python scripts/inspect_ply.py "${OUT_DIR}/semantic_point_cloud_auto.ply" --json > "${OUT_DIR}/semantic_point_cloud_auto_inspection.json"
+python scripts/task1/inspect_ply.py "${OUT_DIR}/semantic_point_cloud_auto.ply" --json > "${OUT_DIR}/semantic_point_cloud_auto_inspection.json"
 
-python scripts/render_auto_label_overlays.py \
+python scripts/task1/render_auto_label_overlays.py \
   --model-path "${MODEL_DIR}" \
   --labels-npy "${OUT_DIR}/gaussian_labels_auto.npy" \
   --label-map "${OUT_DIR}/label_map_auto.json" \
@@ -101,13 +101,13 @@ python scripts/render_auto_label_overlays.py \
   --camera-indices "${AUTO_CAMERA_INDICES}" \
   --count "${AUTO_VIEW_COUNT}"
 
-python scripts/make_contact_sheet.py \
+python scripts/task1/make_contact_sheet.py \
   --image-dir "${SAM_OUT_DIR}/sam_auto_overlays" \
   --output "${OUT_DIR}/sam_auto_contact_sheet.png" \
   --columns 5 \
   --thumb-width 220
 
-python scripts/make_contact_sheet.py \
+python scripts/task1/make_contact_sheet.py \
   --image-dir "${OUT_DIR}/label_overlay_renders" \
   --output "${OUT_DIR}/label_overlay_contact_sheet.png" \
   --columns 5 \

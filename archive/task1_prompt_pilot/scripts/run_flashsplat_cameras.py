@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -12,6 +13,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image, ImageDraw
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO_ROOT / "archive" / "task1_legacy" / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "task1"))
 
 from add_labels_from_npy import write_ply_with_labels
 from flashsplat_cameras import (
