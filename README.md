@@ -132,9 +132,15 @@ gaze-target dataset:
   support for every class and scene. The effective cutoff is the base cutoff
   multiplied by `max(0.5, 1 - source_view_ratio)`, never below the global
   minimum. This lowers the fourth wheel's threshold to 3,500 while leaving the
-  two-view 146-Gaussian fragment at 4,800. The next checkpoint reuses job
-  `92531` masks/proposals and reruns fusion and validation as
-  `truck_semantic_baseline_v2`.
+  two-view 146-Gaussian fragment at 4,800.
+- Corrected reuse job `92546` is the accepted 50-view truck baseline at
+  `outputs/eyenavgs_task1/accepted/truck -> ../truck_semantic_baseline_v2`.
+  It retains four wheel IDs with 8,818, 13,036, 9,016, and 4,343 Gaussians; the
+  weak fragment remains pruned. Focused visual QA shows all four physical wheels
+  without wheel-colored leakage, and the additional 4,867-Gaussian tree group
+  is localized to tree geometry. The unlabeled ratio is 72.31%; visible-tint
+  coverage is 96.30% pooled with an 89.00% minimum. Automatic targeted-view
+  expansion is the next truck checkpoint.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`

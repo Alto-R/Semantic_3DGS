@@ -480,10 +480,11 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared `truck_semantic_baseline_v2` reuse correction through the
-   user-controlled scheduler checkpoint below; Codex must not submit it.
-2. Verify that the generic adaptive thing threshold retains all four physical
-   wheels without admitting the weak 146-Gaussian fragment or new leakage.
+1. Run the prepared `truck_semantic_targeted_v1` automatic expansion through
+   the user-controlled scheduler checkpoint below; Codex must not submit it.
+2. Compare its original 50 and added 20 views, confirm four physical wheel
+   instances, and reject any new wheel-colored leakage before advancing the
+   accepted pointer.
 3. Define a downstream gaze-hit acceptance criterion for accepted scenes before
    introducing any automatic propagation/refinement stage.
 4. Complete truck baseline and targeted validation to reach the four-scene
@@ -779,22 +780,40 @@ pruned correctly.
 Thing pruning now uses the same automatic policy for every class and scene:
 `base_threshold * max(0.5, 1 - source_view_ratio)`, bounded by the global
 minimum. This gives the fourth wheel a threshold of 3,500 and the weak fragment
-4,800. The next run reuses job `92531` masks/proposals to isolate this fusion
-change. Dhana must submit:
+4,800.
+
+Corrected reuse job `92546` completed in 1 minute 34 seconds and is accepted at:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck
+  -> ../truck_semantic_baseline_v2
+```
+
+It retains wheel groups of 8,818, 13,036, 9,016, and 4,343 Gaussians. The weak
+146-Gaussian fragment remains pruned. A newly retained 4,867-Gaussian tree group
+is visually localized to tree geometry. The run has 15 nonzero labels,
+unlabeled ratio `0.7230809066175146`, pooled visible-tint coverage
+`0.963010689091956`, and minimum `0.8900304339481487`. Focused visual QA shows
+all four physical wheels and no wheel-colored leakage.
+
+The next run performs fresh automatic targeted-view expansion. Dhana must
+submit:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 SCENE=truck \
-OUTPUT_NAME=truck_semantic_baseline_v2 \
+OUTPUT_NAME=truck_semantic_targeted_v1 \
 FOCUS_CLASSES='truck,wheel' \
 FOCUS_NAME=truck_vs_wheel \
-REUSE_SOURCE_OUT=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/truck_semantic_baseline_v1 \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME,REUSE_SOURCE_OUT scripts/slurm_task1_semantic_scene.sbatch
+AUTO_TARGET_VIEW_COUNT=20 \
+TARGET_CANDIDATE_COUNT=100 \
+TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME,AUTO_TARGET_VIEW_COUNT,TARGET_CANDIDATE_COUNT,TARGET_SELECTION_SOURCE scripts/slurm_task1_semantic_scene.sbatch
 ```
 
-Do not set `AUTO_TARGET_VIEW_COUNT` or `TARGET_SELECTION_SOURCE` for this reuse
-correction. Do not create `accepted/truck` until its label map and focused
-contact sheet pass visual QA.
+Do not set `REUSE_SOURCE_OUT` for targeted expansion. The 20 added cameras need
+fresh masks/proposals. Do not advance `accepted/truck` until the targeted label
+map and focused contact sheet pass visual QA.
 
 ## 12. Important Files
 

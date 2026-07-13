@@ -511,21 +511,46 @@ fixed 5,000-Gaussian thing cutoff removed it. A fifth 146-Gaussian, two-view
 fragment was also pruned and remains correctly rejected.
 
 The generic support-adaptive thing cutoff lowers the fourth wheel threshold to
-3,500 while the weak fragment remains subject to 4,800. The corrective run
-must reuse job `92531` masks and proposals so it isolates the fusion change:
+3,500 while the weak fragment remains subject to 4,800. Corrected reuse job
+`92546` isolated that fusion change and is accepted at:
+
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck
+  -> ../truck_semantic_baseline_v2
+```
+
+It validates all 2,541,226 Gaussians with 15 nonzero labels and an unlabeled
+ratio of `0.7230809066175146`. Four wheel IDs contain 8,818, 13,036, 9,016, and
+4,343 Gaussians. The 146-Gaussian two-view fragment remains pruned at its
+automatic 4,800 threshold. The general rule also retains a 4,867-Gaussian tree
+group supported by eight views; full semantic visual QA localizes it to tree
+geometry. Focused QA across all 50 views shows four distinct physical wheels
+without wheel-colored background or truck-body leakage.
+
+Job `92546` measures `0.963010689091956` pooled visible-tint coverage with a
+minimum frame ratio of `0.8900304339481487`. These are overlay-difference
+proxies, not semantic ground truth or gaze-hit accuracy. This run demonstrates
+the generic rule on truck, but does not by itself prove cross-scene
+generalization; accepted results remain immutable until separately rerun and
+reviewed.
+
+The next checkpoint is a fresh automatic 20-view expansion from the accepted
+truck baseline:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 SCENE=truck \
-OUTPUT_NAME=truck_semantic_baseline_v2 \
+OUTPUT_NAME=truck_semantic_targeted_v1 \
 FOCUS_CLASSES='truck,wheel' \
 FOCUS_NAME=truck_vs_wheel \
-REUSE_SOURCE_OUT=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/truck_semantic_baseline_v1 \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME,REUSE_SOURCE_OUT scripts/slurm_task1_semantic_scene.sbatch
+AUTO_TARGET_VIEW_COUNT=20 \
+TARGET_CANDIDATE_COUNT=100 \
+TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME,AUTO_TARGET_VIEW_COUNT,TARGET_CANDIDATE_COUNT,TARGET_SELECTION_SOURCE scripts/slurm_task1_semantic_scene.sbatch
 ```
 
-Do not accept truck until the corrected label map and focused contact sheet
-confirm all physical wheels without new wheel-colored leakage.
+Do not set `REUSE_SOURCE_OUT` for targeted expansion because the 20 added
+cameras require fresh GroundingDINO/SAM masks and FlashSplat proposals.
 
 For a short smoke run with three selected cameras:
 
