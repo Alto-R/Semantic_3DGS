@@ -480,21 +480,16 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared `truck_semantic_targeted_v1` automatic expansion through
-   the user-controlled scheduler checkpoint below; Codex must not submit it.
-2. Compare its original 50 and added 20 views, confirm four physical wheel
-   instances, and reject any new wheel-colored leakage before advancing the
-   accepted pointer.
-3. Define a downstream gaze-hit acceptance criterion for accepted scenes before
+1. Task 1 is paused at the accepted four-scene pilot milestone: bicycle, train,
+   room, and truck each have a reviewed 70-view targeted result.
+2. Define a downstream gaze-hit acceptance criterion for accepted scenes before
    introducing any automatic propagation/refinement stage.
-4. Complete truck baseline and targeted validation to reach the four-scene
-   minimum.
-5. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
+3. Locate or train models for `nyc`, `london`, `berlin`, and `alameda` before
    claiming all 12 scenes.
 
-Do not call Task 1 complete merely because bicycle passes. The hard minimum is
-four validated scenes, and the visible-coverage proxy is not a substitute for
-semantic or gaze-hit validation.
+The four-scene pilot minimum is now met, but Task 1 is not complete for all 12
+requested scenes. The visible-coverage proxy is not a substitute for semantic
+or gaze-hit validation.
 
 ### Completed automatic targeted-view checkpoint
 
@@ -782,12 +777,8 @@ Thing pruning now uses the same automatic policy for every class and scene:
 minimum. This gives the fourth wheel a threshold of 3,500 and the weak fragment
 4,800.
 
-Corrected reuse job `92546` completed in 1 minute 34 seconds and is accepted at:
-
-```text
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck
-  -> ../truck_semantic_baseline_v2
-```
+Corrected reuse job `92546` completed in 1 minute 34 seconds and established the
+valid 50-view baseline.
 
 It retains wheel groups of 8,818, 13,036, 9,016, and 4,343 Gaussians. The weak
 146-Gaussian fragment remains pruned. A newly retained 4,867-Gaussian tree group
@@ -796,24 +787,31 @@ unlabeled ratio `0.7230809066175146`, pooled visible-tint coverage
 `0.963010689091956`, and minimum `0.8900304339481487`. Focused visual QA shows
 all four physical wheels and no wheel-colored leakage.
 
-The next run performs fresh automatic targeted-view expansion. Dhana must
-submit:
+Targeted job `92550` completed in 7 minutes 10 seconds and is accepted at:
 
-```bash
-cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
-SCENE=truck \
-OUTPUT_NAME=truck_semantic_targeted_v1 \
-FOCUS_CLASSES='truck,wheel' \
-FOCUS_NAME=truck_vs_wheel \
-AUTO_TARGET_VIEW_COUNT=20 \
-TARGET_CANDIDATE_COUNT=100 \
-TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME,AUTO_TARGET_VIEW_COUNT,TARGET_CANDIDATE_COUNT,TARGET_SELECTION_SOURCE scripts/slurm_task1_semantic_scene.sbatch
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck
+  -> ../truck_semantic_targeted_v1
 ```
 
-Do not set `REUSE_SOURCE_OUT` for targeted expansion. The 20 added cameras need
-fresh masks/proposals. Do not advance `accepted/truck` until the targeted label
-map and focused contact sheet pass visual QA.
+It validates 2,541,226 Gaussians across 70 views, has 17 nonzero labels, and
+has unlabeled ratio `0.7157301239637875`. Its wheel groups contain 8,887,
+13,343, 9,253, and 4,389 Gaussians and are supported by 19, 22, 24, and 24
+views. The weak fresh fragment has 95 assigned Gaussians and only two source
+views, so it remains pruned at an automatic threshold of 4,858.
+
+Overall pooled visible-tint coverage is `0.9484990898912178`, with minimum
+`0.8747312059598836`. The original 50 views measure `0.958824278221905`
+pooled; the targeted 20 measure `0.922686119064499`, with minimum
+`0.888622325278978`. Comparing those 20 against their pre-expansion proxy
+measurements gives ten increases and ten decreases and a small mean change from
+`0.925420865859534` to `0.922686119064499`. Do not claim that targeted fusion
+improved semantic accuracy from this proxy. Acceptance is based on the much
+stronger multiview support plus focused visual QA: four stable physical wheel
+identities and no obvious wheel-colored truck-body, pavement, or background
+leakage. Full semantic visual QA shows no obvious new context-label leakage.
+
+There is no active Task 1 `sbatch` checkpoint at this pause point.
 
 ## 12. Important Files
 

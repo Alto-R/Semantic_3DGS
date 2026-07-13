@@ -133,14 +133,18 @@ gaze-target dataset:
   multiplied by `max(0.5, 1 - source_view_ratio)`, never below the global
   minimum. This lowers the fourth wheel's threshold to 3,500 while leaving the
   two-view 146-Gaussian fragment at 4,800.
-- Corrected reuse job `92546` is the accepted 50-view truck baseline at
-  `outputs/eyenavgs_task1/accepted/truck -> ../truck_semantic_baseline_v2`.
-  It retains four wheel IDs with 8,818, 13,036, 9,016, and 4,343 Gaussians; the
-  weak fragment remains pruned. Focused visual QA shows all four physical wheels
-  without wheel-colored leakage, and the additional 4,867-Gaussian tree group
-  is localized to tree geometry. The unlabeled ratio is 72.31%; visible-tint
-  coverage is 96.30% pooled with an 89.00% minimum. Automatic targeted-view
-  expansion is the next truck checkpoint.
+- Corrected reuse job `92546` remains the valid 50-view truck baseline, but job
+  `92550` is the accepted 70-view result at
+  `outputs/eyenavgs_task1/accepted/truck -> ../truck_semantic_targeted_v1`.
+  It retains four wheel IDs with 8,887, 13,343, 9,253, and 4,389 Gaussians,
+  supported by 19, 22, 24, and 24 views. A weak 95-Gaussian, two-view fragment
+  remains pruned. Focused visual QA shows stable wheel identities without
+  wheel-colored leakage, while full semantic QA localizes the added context
+  groups plausibly. The unlabeled ratio is 71.57%; visible-tint coverage is
+  94.85% pooled across all 70 views, with 95.88% on the original 50 and 92.27%
+  on the 20 automatically selected difficult views. The proxy did not improve
+  on average for those 20 views, so acceptance is based on stronger multiview
+  support and visual consistency, not a claimed semantic-accuracy gain.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
@@ -172,12 +176,15 @@ identified explicitly rather than assigned a speculative failure.
 | `room_semantic_baseline_v1` (job `92490`) | The initial vocabulary omitted piano, television, speakers, media console, and curtains; electronics-dominated views therefore had very low visible-tint coverage. | Job `92492` expanded the vocabulary and phrase aliases and reran detection/fusion. |
 | `room_semantic_baseline_v2` (job `92492`) | Valid accepted 50-view baseline; minor television spill remained, difficult views had not been added, and similar curtain/chair debug colors obscured visual inspection even though their label IDs were separate. | Targeted expansion added 20 cameras, and a deterministic perceptually separated palette made different labels visibly distinct. |
 | `room_semantic_targeted_v1` (job `92498`) | The clearer palette exposed a real semantic error: ambiguous phrases such as `television stand table desk` assigned table geometry to television. True television fragments were then individually lost under the object-size cutoff. | The phrase resolver now rejects unrelated multi-class phrases, and connected same-class fragments consolidate before pruning. Job `92513` retained a clean television separately from the table and became accepted. |
+| `truck_semantic_baseline_v1` (job `92531`) | A fixed 5,000-Gaussian thing cutoff removed one real wheel despite support from 15 views. | The generic support-adaptive thing cutoff retained the wheel while continuing to reject weak fragments. |
+| `truck_semantic_baseline_v2` (job `92546`) | Valid accepted 50-view baseline; superseded because it did not test automatically selected difficult views. | Job `92550` added 20 low-coverage/pose-diverse views, preserved all four wheel identities, and became the accepted truck result. |
 
 Keep the final accepted targets and their compact reports:
 
 - `bicycle_semantic_targeted_v1` (job `92426`)
 - `train_semantic_targeted_v3` (job `92483`)
 - `room_semantic_targeted_v2` (job `92513`)
+- `truck_semantic_targeted_v1` (job `92550`)
 - `accepted/`, whose scene links point to those results
 - `logs/`, `manifests/`, and small validation/report JSON files needed for the
   final report

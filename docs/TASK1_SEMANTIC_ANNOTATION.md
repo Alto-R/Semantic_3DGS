@@ -512,12 +512,7 @@ fragment was also pruned and remains correctly rejected.
 
 The generic support-adaptive thing cutoff lowers the fourth wheel threshold to
 3,500 while the weak fragment remains subject to 4,800. Corrected reuse job
-`92546` isolated that fusion change and is accepted at:
-
-```text
-/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck
-  -> ../truck_semantic_baseline_v2
-```
+`92546` isolated that fusion change and established the valid 50-view baseline.
 
 It validates all 2,541,226 Gaussians with 15 nonzero labels and an unlabeled
 ratio of `0.7230809066175146`. Four wheel IDs contain 8,818, 13,036, 9,016, and
@@ -534,23 +529,33 @@ the generic rule on truck, but does not by itself prove cross-scene
 generalization; accepted results remain immutable until separately rerun and
 reviewed.
 
-The next checkpoint is a fresh automatic 20-view expansion from the accepted
-truck baseline:
+Job `92550` (`truck_semantic_targeted_v1`) completed in 7 minutes 10 seconds
+and is accepted at:
 
-```bash
-cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
-SCENE=truck \
-OUTPUT_NAME=truck_semantic_targeted_v1 \
-FOCUS_CLASSES='truck,wheel' \
-FOCUS_NAME=truck_vs_wheel \
-AUTO_TARGET_VIEW_COUNT=20 \
-TARGET_CANDIDATE_COUNT=100 \
-TARGET_SELECTION_SOURCE=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME,AUTO_TARGET_VIEW_COUNT,TARGET_CANDIDATE_COUNT,TARGET_SELECTION_SOURCE scripts/slurm_task1_semantic_scene.sbatch
+```text
+/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/accepted/truck
+  -> ../truck_semantic_targeted_v1
 ```
 
-Do not set `REUSE_SOURCE_OUT` for targeted expansion because the 20 added
-cameras require fresh GroundingDINO/SAM masks and FlashSplat proposals.
+It validates all 2,541,226 Gaussians across the original 50 and 20
+automatically selected difficult views. It has 17 nonzero labels and an
+unlabeled ratio of `0.7157301239637875`. The four wheels contain 8,887, 13,343,
+9,253, and 4,389 Gaussians, with 19, 22, 24, and 24 source views respectively.
+A fresh 95-Gaussian wheel fragment supported by only two views is pruned at its
+automatic 4,858 threshold.
+
+The pooled overlay-difference proxy is `0.9484990898912178`, with minimum
+`0.8747312059598836`. The original 50 views measure `0.958824278221905`
+pooled; the added 20 measure `0.922686119064499` pooled with minimum
+`0.888622325278978`. Against the pre-expansion candidate measurements, ten
+selected views rise and ten fall; their mean changes from `0.925420865859534`
+to `0.922686119064499`. Therefore the result is not accepted on a claim that
+the tint proxy improved. It is accepted because the targeted views materially
+increase multiview wheel support while focused visual QA preserves four
+physical wheel identities without truck-body, pavement, or background leakage.
+The full semantic contact sheet also shows no obvious new context-label
+leakage. These visual findings are interpretation, and the tint metric remains
+a proxy rather than semantic ground truth or gaze-hit accuracy.
 
 For a short smoke run with three selected cameras:
 
