@@ -189,6 +189,8 @@ See:
 
 - `docs/WORKFLOW.md` for local/cluster setup and command conventions.
 - `docs/TASK1_SEMANTIC_ANNOTATION.md` for the semantic annotation pipeline.
+- `TASK2_HANDOFF.md` for the isolated Task 2 gaze-target implementation
+  contract and new-thread starting prompt.
 - `configs/paths.example.yaml` for path conventions.
 
 ## First Milestone
