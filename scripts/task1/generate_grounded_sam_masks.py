@@ -30,6 +30,17 @@ from flashsplat_cameras import (
 )
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
+DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
+DEFAULT_DEVA_ROOT = WORKSPACE_ROOT / "gaussian-grouping" / "Tracking-Anything-with-DEVA"
+DEFAULT_GROUNDED_SAM_ROOT = DEFAULT_DEVA_ROOT / "Grounded-Segment-Anything"
+DEFAULT_GROUNDINGDINO_CONFIG = DEFAULT_DEVA_ROOT / "saves" / "GroundingDINO_SwinT_OGC.py"
+DEFAULT_GROUNDINGDINO_CHECKPOINT = DEFAULT_DEVA_ROOT / "saves" / "groundingdino_swint_ogc.pth"
+DEFAULT_SEGMENT_ANYTHING_ROOT = DEFAULT_GROUNDED_SAM_ROOT / "segment_anything"
+DEFAULT_SAM_CHECKPOINT = WORKSPACE_ROOT / "InvRGBL_modif" / "pretrained" / "sam_vit_h_4b8939.pth"
+
+
 DEFAULT_CLASSES = [
     {"class": "bicycle", "prompts": ["bicycle", "bike"], "type": "thing"},
     {"class": "car", "prompts": ["car", "vehicle"], "type": "thing"},
@@ -419,30 +430,30 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
-    parser.add_argument("--flashsplat-root", default="/lab/haoq_lab/cse12312032/external/FlashSplat", type=Path)
+    parser.add_argument("--flashsplat-root", default=DEFAULT_FLASHSPLAT_ROOT, type=Path)
     parser.add_argument(
         "--groundingdino-root",
-        default="/lab/haoq_lab/cse12312032/gaussian-grouping/Tracking-Anything-with-DEVA/Grounded-Segment-Anything",
+        default=DEFAULT_GROUNDED_SAM_ROOT,
         type=Path,
     )
     parser.add_argument(
         "--groundingdino-config",
-        default="/lab/haoq_lab/cse12312032/gaussian-grouping/Tracking-Anything-with-DEVA/saves/GroundingDINO_SwinT_OGC.py",
+        default=DEFAULT_GROUNDINGDINO_CONFIG,
         type=Path,
     )
     parser.add_argument(
         "--groundingdino-checkpoint",
-        default="/lab/haoq_lab/cse12312032/gaussian-grouping/Tracking-Anything-with-DEVA/saves/groundingdino_swint_ogc.pth",
+        default=DEFAULT_GROUNDINGDINO_CHECKPOINT,
         type=Path,
     )
     parser.add_argument(
         "--segment-anything-root",
-        default="/lab/haoq_lab/cse12312032/gaussian-grouping/Tracking-Anything-with-DEVA/Grounded-Segment-Anything/segment_anything",
+        default=DEFAULT_SEGMENT_ANYTHING_ROOT,
         type=Path,
     )
     parser.add_argument(
         "--sam-checkpoint",
-        default="/lab/haoq_lab/cse12312032/InvRGBL_modif/pretrained/sam_vit_h_4b8939.pth",
+        default=DEFAULT_SAM_CHECKPOINT,
         type=Path,
     )
     parser.add_argument("--sam-arch", default="vit_h")

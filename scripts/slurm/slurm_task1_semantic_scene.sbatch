@@ -8,13 +8,13 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=96G
 #SBATCH --time=06:00:00
-#SBATCH --output=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/logs/%x-%j.out
-#SBATCH --error=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/logs/%x-%j.err
+#SBATCH --output=../../outputs/eyenavgs_task1/logs/%x-%j.out
+#SBATCH --error=../../outputs/eyenavgs_task1/logs/%x-%j.err
 
 set -euo pipefail
 
-ROOT=/lab/haoq_lab/cse12312032
-PROJECT_ROOT="${ROOT}/projects/pku-3dgs-vr"
+PROJECT_ROOT="$(cd -- "${SLURM_SUBMIT_DIR:-$(pwd)}" && pwd)"
+ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
 FLASHSPLAT_ROOT="${ROOT}/external/FlashSplat"
 TASK1_ROOT="${ROOT}/outputs/eyenavgs_task1"
 SCENE="${SCENE:-bicycle}"

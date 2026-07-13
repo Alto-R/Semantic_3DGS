@@ -14,6 +14,9 @@ import torch
 
 
 CameraItem = Tuple[int, Dict[str, Any]]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
+DEFAULT_GRAPHDECO_ROOT = WORKSPACE_ROOT / "external" / "gaussian-splatting"
 
 
 def parse_indices(value: str) -> List[int]:
@@ -84,7 +87,7 @@ def point_cloud_path(model_path: Path, iteration: int) -> Path:
 
 def load_flashsplat(
     flashsplat_root: Path,
-    graphdeco_root: Path = Path("/lab/haoq_lab/cse12312032/external/gaussian-splatting"),
+    graphdeco_root: Path = DEFAULT_GRAPHDECO_ROOT,
 ) -> Dict[str, Any]:
     flashsplat_root = flashsplat_root.resolve()
     graphdeco_root = graphdeco_root.resolve()

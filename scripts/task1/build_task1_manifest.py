@@ -12,8 +12,10 @@ from typing import Any, Dict, List, Optional
 from find_point_clouds import summarize_point_cloud
 
 
-DEFAULT_SETTINGS = Path("/lab/haoq_lab/cse12312032/data/EyeNavGS/Rutgers/scene_setting.csv")
-DEFAULT_MODEL_ROOT = Path("/lab/haoq_lab/cse12312032/data/3dgs_models")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
+DEFAULT_SETTINGS = WORKSPACE_ROOT / "data" / "EyeNavGS" / "Rutgers" / "scene_setting.csv"
+DEFAULT_MODEL_ROOT = WORKSPACE_ROOT / "data" / "3dgs_models"
 
 
 def read_scene_settings(path: Path) -> List[Dict[str, str]]:
@@ -108,4 +110,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

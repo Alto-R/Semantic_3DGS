@@ -28,6 +28,11 @@ from flashsplat_cameras import (
 from semantic_palette import load_label_items, normalize_classes, palette_records, rgb_for_label
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
+DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
+
+
 def label_ids_from_map(
     label_map: Dict[str, Any],
     max_labels: int,
@@ -76,7 +81,7 @@ def main() -> None:
     parser.add_argument("--rgb-output-dir", type=Path)
     parser.add_argument(
         "--flashsplat-root",
-        default="/lab/haoq_lab/cse12312032/external/FlashSplat",
+        default=DEFAULT_FLASHSPLAT_ROOT,
         type=Path,
     )
     parser.add_argument("--iteration", default=30000, type=int)

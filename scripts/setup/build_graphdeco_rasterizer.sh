@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${ROOT:-/lab/haoq_lab/cse12312032}"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="${ROOT:-$(cd -- "${PROJECT_ROOT}/../.." && pwd)}"
 ENV_NAME="${ENV_NAME:-gaussian_grouping_true}"
 RASTERIZER_ROOT="${RASTERIZER_ROOT:-${ROOT}/external/gaussian-splatting/submodules/diff-gaussian-rasterization}"
 

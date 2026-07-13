@@ -4,8 +4,8 @@
 #SBATCH --qos=rtx2080ti
 #SBATCH --gres=gpu:1
 #SBATCH --time=00:05:00
-#SBATCH --output=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/slurm_gpu_check_%j.out
-#SBATCH --error=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/slurm_gpu_check_%j.err
+#SBATCH --output=../../outputs/eyenavgs_task1/slurm_gpu_check_%j.out
+#SBATCH --error=../../outputs/eyenavgs_task1/slurm_gpu_check_%j.err
 
 set -euo pipefail
 

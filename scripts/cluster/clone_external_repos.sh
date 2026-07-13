@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${1:-/lab/haoq_lab/cse12312032/external}"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORKSPACE_ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
+ROOT="${1:-${WORKSPACE_ROOT}/external}"
 mkdir -p "$ROOT"
 cd "$ROOT"
 

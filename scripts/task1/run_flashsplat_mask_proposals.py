@@ -24,6 +24,11 @@ from flashsplat_cameras import (
 )
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
+DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
+
+
 def load_mask_stack(mask_path: Path, height: int, width: int) -> np.ndarray:
     if not mask_path.exists():
         raise FileNotFoundError(mask_path)
@@ -255,7 +260,7 @@ def main() -> None:
     parser.add_argument("--mask-dir-name", default="")
     parser.add_argument(
         "--flashsplat-root",
-        default="/lab/haoq_lab/cse12312032/external/FlashSplat",
+        default=DEFAULT_FLASHSPLAT_ROOT,
         type=Path,
     )
     parser.add_argument("--iteration", default=30000, type=int)

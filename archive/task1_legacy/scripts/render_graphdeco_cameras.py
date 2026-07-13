@@ -22,6 +22,11 @@ import torch
 from PIL import Image
 
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+WORKSPACE_ROOT = REPO_ROOT.parents[1]
+DEFAULT_GRAPHDECO_ROOT = WORKSPACE_ROOT / "external" / "gaussian-splatting"
+
+
 def parse_indices(value: str) -> List[int]:
     indices: List[int] = []
     for part in value.split(","):
@@ -197,7 +202,7 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument(
         "--graphdeco-root",
-        default="/lab/haoq_lab/cse12312032/external/gaussian-splatting",
+        default=DEFAULT_GRAPHDECO_ROOT,
         type=Path,
     )
     parser.add_argument("--iteration", default=30000, type=int)

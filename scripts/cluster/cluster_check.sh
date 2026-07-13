@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${1:-/lab/haoq_lab/cse12312032}"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="${1:-$(cd -- "${PROJECT_ROOT}/../.." && pwd)}"
 
 echo "user: $(whoami)"
 echo "host: $(hostname)"

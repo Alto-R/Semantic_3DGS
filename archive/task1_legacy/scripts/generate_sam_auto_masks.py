@@ -13,7 +13,15 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts" / "task1"))
+REPO_ROOT = Path(__file__).resolve().parents[3]
+WORKSPACE_ROOT = REPO_ROOT.parents[1]
+DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
+DEFAULT_SEGMENT_ANYTHING_ROOT = (
+    WORKSPACE_ROOT / "external" / "SegAnyGAussians" / "third_party" / "segment-anything"
+)
+DEFAULT_SAM_CHECKPOINT = WORKSPACE_ROOT / "InvRGBL_modif" / "pretrained" / "sam_vit_h_4b8939.pth"
+
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "task1"))
 
 from flashsplat_cameras import (
     background_tensor,
@@ -128,17 +136,17 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument(
         "--flashsplat-root",
-        default="/lab/haoq_lab/cse12312032/external/FlashSplat",
+        default=DEFAULT_FLASHSPLAT_ROOT,
         type=Path,
     )
     parser.add_argument(
         "--segment-anything-root",
-        default="/lab/haoq_lab/cse12312032/external/SegAnyGAussians/third_party/segment-anything",
+        default=DEFAULT_SEGMENT_ANYTHING_ROOT,
         type=Path,
     )
     parser.add_argument(
         "--sam-checkpoint",
-        default="/lab/haoq_lab/cse12312032/InvRGBL_modif/pretrained/sam_vit_h_4b8939.pth",
+        default=DEFAULT_SAM_CHECKPOINT,
         type=Path,
     )
     parser.add_argument("--sam-arch", default="vit_h")

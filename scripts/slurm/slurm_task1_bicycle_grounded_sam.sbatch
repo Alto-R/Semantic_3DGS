@@ -8,12 +8,12 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=96G
 #SBATCH --time=06:00:00
-#SBATCH --output=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/logs/%x-%j.out
-#SBATCH --error=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/logs/%x-%j.err
+#SBATCH --output=../../outputs/eyenavgs_task1/logs/%x-%j.out
+#SBATCH --error=../../outputs/eyenavgs_task1/logs/%x-%j.err
 
 set -euo pipefail
 
-PROJECT_ROOT=/lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+PROJECT_ROOT="$(cd -- "${SLURM_SUBMIT_DIR:-$(pwd)}" && pwd)"
 export SCENE="${SCENE:-bicycle}"
 export CLASS_CONFIG="${CLASS_CONFIG:-${PROJECT_ROOT}/configs/task1_semantic_classes.example.json}"
 export FOCUS_CLASSES="${FOCUS_CLASSES:-bicycle,bench}"

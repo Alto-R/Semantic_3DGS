@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ENV_NAME="${1:-gaussian_grouping_true}"
-EXTERNAL_ROOT="${2:-/lab/haoq_lab/cse12312032/external}"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORKSPACE_ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
+EXTERNAL_ROOT="${2:-${WORKSPACE_ROOT}/external}"
 
 echo "conda env:     $ENV_NAME"
 echo "external root: $EXTERNAL_ROOT"

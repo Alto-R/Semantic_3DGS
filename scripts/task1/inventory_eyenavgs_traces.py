@@ -11,8 +11,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 
-DEFAULT_RUTGERS = Path("/lab/haoq_lab/cse12312032/data/EyeNavGS/Rutgers")
-DEFAULT_NTHU = Path("/lab/haoq_lab/cse12312032/data/EyeNavGS/NTHU")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
+DEFAULT_RUTGERS = WORKSPACE_ROOT / "data" / "EyeNavGS" / "Rutgers"
+DEFAULT_NTHU = WORKSPACE_ROOT / "data" / "EyeNavGS" / "NTHU"
 
 
 def count_data_rows(path: Path) -> int:

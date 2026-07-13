@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${1:-/lab/haoq_lab/cse12312032/data/3dgs_models/graphdeco}"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORKSPACE_ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
+ROOT="${1:-${WORKSPACE_ROOT}/data/3dgs_models/graphdeco}"
 ARCHIVE_DIR="$(dirname "$ROOT")/_downloads"
 ARCHIVE="$ARCHIVE_DIR/graphdeco_pretrained_models.zip"
 URL="https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/pretrained/models.zip"
@@ -25,4 +27,3 @@ unzip -n "$ARCHIVE" -d "$ROOT"
 
 echo "available point clouds:"
 find "$ROOT" -name point_cloud.ply | sort
-

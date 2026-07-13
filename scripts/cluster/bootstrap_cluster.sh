@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${1:-/lab/haoq_lab/cse12312032}"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="${1:-$(cd -- "${PROJECT_ROOT}/../.." && pwd)}"
 
 mkdir -p \
   "$ROOT/projects/pku-3dgs-vr" \
@@ -23,4 +24,3 @@ Next:
   2. Clone third-party repos under $ROOT/external.
   3. Download EyeNavGS data and 3DGS models under $ROOT/data.
 EOF
-

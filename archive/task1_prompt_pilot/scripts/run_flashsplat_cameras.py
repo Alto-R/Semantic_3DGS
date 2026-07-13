@@ -15,6 +15,8 @@ import torch.nn.functional as F
 from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+WORKSPACE_ROOT = REPO_ROOT.parents[1]
+DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
 sys.path.insert(0, str(REPO_ROOT / "archive" / "task1_legacy" / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "task1"))
 
@@ -72,7 +74,7 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument(
         "--flashsplat-root",
-        default="/lab/haoq_lab/cse12312032/external/FlashSplat",
+        default=DEFAULT_FLASHSPLAT_ROOT,
         type=Path,
     )
     parser.add_argument("--iteration", default=30000, type=int)
