@@ -1,6 +1,6 @@
 # Current Task Handoff
 
-Last updated: 2026-07-11 (Asia/Shanghai)
+Last updated: 2026-07-13 (Asia/Shanghai)
 
 This file is the authoritative compact handoff for continuing the current work
 in a fresh Codex task launched directly in the canonical Git repository. Treat
@@ -480,10 +480,10 @@ the lowest-coverage views and downstream gaze hits before changing the policy.
 
 ## 11. Next Engineering Milestones
 
-1. Run the prepared 50-view `truck` baseline through the user-controlled
-   scheduler checkpoint below; Codex must not submit it.
-2. Inspect truck structure, class/instance counts, coverage, and full/focused
-   contact sheets before creating `accepted/truck`.
+1. Run the prepared `truck_semantic_baseline_v2` reuse correction through the
+   user-controlled scheduler checkpoint below; Codex must not submit it.
+2. Verify that the generic adaptive thing threshold retains all four physical
+   wheels without admitting the weak 146-Gaussian fragment or new leakage.
 3. Define a downstream gaze-hit acceptance criterion for accepted scenes before
    introducing any automatic propagation/refinement stage.
 4. Complete truck baseline and targeted validation to reach the four-scene
@@ -764,20 +764,37 @@ semantic ground truth or gaze-hit accuracy.
 
 `truck` is the smallest remaining EyeNavGS-matched model: 2,541,226 Gaussians
 and 251 cameras. Its tracked vocabulary is
-`configs/task1_semantic_classes.truck.json`. The initial baseline uses 50 evenly
-spaced cameras and truck-versus-wheel focused artifacts. Dhana must submit:
+`configs/task1_semantic_classes.truck.json`. Initial 50-view job `92531`
+completed structurally with 13 nonzero labels, unlabeled ratio
+`0.7251456580406466`, pooled visible-tint coverage `0.9595273925117603`, and
+minimum `0.8720501200515458`. It is diagnostic, not accepted.
+
+Job `92531` retained only three wheel IDs, but detector/fusion evidence proves
+four physical wheel candidates existed after instance consolidation. The
+missing candidate had 3,738 assigned Gaussians, 17 proposals, 15 source views,
+and score `0.5838544368743896`; it was removed only because the old global
+thing threshold was 5,000. A separate 146-Gaussian two-view fragment was also
+pruned correctly.
+
+Thing pruning now uses the same automatic policy for every class and scene:
+`base_threshold * max(0.5, 1 - source_view_ratio)`, bounded by the global
+minimum. This gives the fourth wheel a threshold of 3,500 and the weak fragment
+4,800. The next run reuses job `92531` masks/proposals to isolate this fusion
+change. Dhana must submit:
 
 ```bash
 cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
 SCENE=truck \
-OUTPUT_NAME=truck_semantic_baseline_v1 \
+OUTPUT_NAME=truck_semantic_baseline_v2 \
 FOCUS_CLASSES='truck,wheel' \
 FOCUS_NAME=truck_vs_wheel \
-sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME scripts/slurm_task1_semantic_scene.sbatch
+REUSE_SOURCE_OUT=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/truck_semantic_baseline_v1 \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME,REUSE_SOURCE_OUT scripts/slurm_task1_semantic_scene.sbatch
 ```
 
-Do not set `AUTO_TARGET_VIEW_COUNT`, `TARGET_SELECTION_SOURCE`, or
-`REUSE_SOURCE_OUT` for this initial truck baseline.
+Do not set `AUTO_TARGET_VIEW_COUNT` or `TARGET_SELECTION_SOURCE` for this reuse
+correction. Do not create `accepted/truck` until its label map and focused
+contact sheet pass visual QA.
 
 ## 12. Important Files
 

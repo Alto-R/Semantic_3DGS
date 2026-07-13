@@ -144,12 +144,36 @@ class AssignedPruneThresholdTest(unittest.TestCase):
 
         self.assertEqual(threshold, 10000)
 
-    def test_adaptive_threshold_does_not_change_thing_groups(self) -> None:
+    def test_multiview_thing_uses_continuous_adaptive_threshold(self) -> None:
         group = thing_group(1, [0])
-        group.class_name = "train"
-        group.source_frames = {f"frame_{index}" for index in range(50)}
+        group.class_name = "wheel"
+        group.source_frames = {f"frame_{index}" for index in range(15)}
 
         threshold = assigned_prune_threshold(group, 0, 5000, 10000, 50, 0.5, 0.75)
+
+        self.assertEqual(threshold, 3500)
+
+    def test_low_view_thing_stays_close_to_category_threshold(self) -> None:
+        group = thing_group(1, [0])
+        group.source_frames = {"frame_0", "frame_1"}
+
+        threshold = assigned_prune_threshold(group, 0, 5000, 10000, 50)
+
+        self.assertEqual(threshold, 4800)
+
+    def test_thing_adaptation_respects_floor_and_global_minimum(self) -> None:
+        group = thing_group(1, [0])
+        group.source_frames = {f"frame_{index}" for index in range(50)}
+
+        threshold = assigned_prune_threshold(group, 4000, 5000, 10000, 50)
+
+        self.assertEqual(threshold, 4000)
+
+    def test_thing_threshold_does_not_adapt_without_manifest_view_count(self) -> None:
+        group = thing_group(1, [0])
+        group.source_frames = {f"frame_{index}" for index in range(15)}
+
+        threshold = assigned_prune_threshold(group, 0, 5000, 10000)
 
         self.assertEqual(threshold, 5000)
 

@@ -380,13 +380,15 @@ retained as `building`.
 
 Assigned-group pruning adapts automatically from cross-view support. A stuff
 group observed in at least half of the proposal manifest's source views uses
-75% of the normal stuff cutoff; other stuff and all thing groups retain their
-normal thresholds. This rule is shared by every scene. `building` is part of
-the canonical stuff ontology, consistent with panoptic labeling rather than
-object-instance labeling. For job `92470`, the rule retains sky (59/70 views,
-8,941 Gaussians, automatic threshold 7,500) and prunes the shipping-container
-false building (14/70 views, 6,831 Gaussians, threshold 10,000) without repeating
-camera selection, GroundingDINO/SAM, or FlashSplat.
+75% of the normal stuff cutoff. Thing groups use a continuous scene-neutral
+rule: `base * max(0.5, 1 - source_view_ratio)`, never below the global minimum.
+This allows small, repeatedly observed instances without class- or scene-specific
+cutoffs while leaving weakly supported fragments close to the normal threshold.
+`building` is part of the canonical stuff ontology, consistent with panoptic
+labeling rather than object-instance labeling. For job `92470`, the stuff rule
+retains sky (59/70 views, 8,941 Gaussians, automatic threshold 7,500) and prunes
+the shipping-container false building (14/70 views, 6,831 Gaussians, threshold
+10,000) without repeating camera selection, GroundingDINO/SAM, or FlashSplat.
 
 Corrected reuse job `92482` confirmed the automatic fusion outcome, with 8,943
 sky Gaussians retained and the 9,505-Gaussian merged building candidate pruned.
@@ -492,6 +494,38 @@ configs/task1_semantic_classes.truck.json
 ```
 
 The initial run uses 50 evenly spaced views and truck-versus-wheel focus.
+
+Job `92531` (`truck_semantic_baseline_v1`) completed in 4 minutes 8 seconds and
+passed structural validation for all 2,541,226 Gaussians. It produced 13
+nonzero labels, an unlabeled ratio of `0.7251456580406466`, pooled visible-tint
+coverage of `0.9595273925117603`, and a minimum frame ratio of
+`0.8720501200515458`. These coverage values are overlay-difference proxies, not
+semantic ground truth.
+
+Focused visual QA and the label map show one coherent 283,840-Gaussian truck
+but only three retained wheel IDs. The detector was not the cause: instance
+consolidation found four wheel-position candidates. Three retained wheels have
+8,818, 13,036, and 9,016 final Gaussians. The fourth had 3,738 assigned
+Gaussians, 17 proposals, 15 source views, and score `0.5838544368743896`; the
+fixed 5,000-Gaussian thing cutoff removed it. A fifth 146-Gaussian, two-view
+fragment was also pruned and remains correctly rejected.
+
+The generic support-adaptive thing cutoff lowers the fourth wheel threshold to
+3,500 while the weak fragment remains subject to 4,800. The corrective run
+must reuse job `92531` masks and proposals so it isolates the fusion change:
+
+```bash
+cd /lab/haoq_lab/cse12312032/projects/pku-3dgs-vr
+SCENE=truck \
+OUTPUT_NAME=truck_semantic_baseline_v2 \
+FOCUS_CLASSES='truck,wheel' \
+FOCUS_NAME=truck_vs_wheel \
+REUSE_SOURCE_OUT=/lab/haoq_lab/cse12312032/outputs/eyenavgs_task1/truck_semantic_baseline_v1 \
+sbatch --export=ALL,SCENE,OUTPUT_NAME,FOCUS_CLASSES,FOCUS_NAME,REUSE_SOURCE_OUT scripts/slurm_task1_semantic_scene.sbatch
+```
+
+Do not accept truck until the corrected label map and focused contact sheet
+confirm all physical wheels without new wheel-colored leakage.
 
 For a short smoke run with three selected cameras:
 

@@ -775,6 +775,7 @@ def assigned_prune_threshold(
     total_source_view_count: int = 0,
     adaptive_stuff_min_view_ratio: float = 0.5,
     adaptive_stuff_threshold_ratio: float = 0.75,
+    adaptive_thing_threshold_floor_ratio: float = 0.5,
 ) -> int:
     threshold = max(0, min_assigned_gaussians)
     if group.is_stuff:
@@ -785,6 +786,17 @@ def assigned_prune_threshold(
             threshold = max(max(0, min_assigned_gaussians), adaptive_threshold)
     else:
         threshold = max(threshold, max(0, min_assigned_thing_gaussians))
+        if total_source_view_count > 0:
+            view_ratio = min(
+                1.0,
+                len(group.source_frames) / float(total_source_view_count),
+            )
+            threshold_ratio = max(
+                adaptive_thing_threshold_floor_ratio,
+                1.0 - view_ratio,
+            )
+            adaptive_threshold = math.ceil(threshold * threshold_ratio)
+            threshold = max(max(0, min_assigned_gaussians), adaptive_threshold)
     return threshold
 
 
@@ -798,6 +810,7 @@ def prune_assigned_groups(
     total_source_view_count: int = 0,
     adaptive_stuff_min_view_ratio: float = 0.5,
     adaptive_stuff_threshold_ratio: float = 0.75,
+    adaptive_thing_threshold_floor_ratio: float = 0.5,
 ) -> tuple[np.ndarray, list[SemanticGroup], list[dict[str, Any]]]:
     kept: list[SemanticGroup] = []
     pruned: list[dict[str, Any]] = []
@@ -811,6 +824,7 @@ def prune_assigned_groups(
             total_source_view_count,
             adaptive_stuff_min_view_ratio,
             adaptive_stuff_threshold_ratio,
+            adaptive_thing_threshold_floor_ratio,
         )
         reasons: list[str] = []
         if threshold > 0 and group.assigned_count < threshold:
@@ -933,6 +947,11 @@ def main() -> None:
     parser.add_argument("--min-assigned-stuff-gaussians", default=0, type=int)
     parser.add_argument("--adaptive-stuff-min-view-ratio", default=0.5, type=float)
     parser.add_argument("--adaptive-stuff-threshold-ratio", default=0.75, type=float)
+    parser.add_argument(
+        "--adaptive-thing-threshold-floor-ratio",
+        default=0.5,
+        type=float,
+    )
     parser.add_argument("--min-label-score", default=0.0, type=float)
     parser.add_argument("--scene", default="")
     parser.add_argument("--semantic-ply-name", default="semantic_point_cloud.ply")
@@ -949,6 +968,10 @@ def main() -> None:
         raise ValueError("adaptive-stuff-min-view-ratio must be between 0 and 1")
     if not 0.0 < args.adaptive_stuff_threshold_ratio <= 1.0:
         raise ValueError("adaptive-stuff-threshold-ratio must be greater than 0 and at most 1")
+    if not 0.0 < args.adaptive_thing_threshold_floor_ratio <= 1.0:
+        raise ValueError(
+            "adaptive-thing-threshold-floor-ratio must be greater than 0 and at most 1"
+        )
 
     manifest_path = args.proposal_dir / "proposal_manifest.json"
     support_dir = args.proposal_dir / "proposal_supports"
@@ -1024,6 +1047,7 @@ def main() -> None:
         total_source_view_count,
         args.adaptive_stuff_min_view_ratio,
         args.adaptive_stuff_threshold_ratio,
+        args.adaptive_thing_threshold_floor_ratio,
     )
     labels, groups = prune_and_compact_groups(labels, groups)
     if pruned_groups:
@@ -1065,6 +1089,7 @@ def main() -> None:
             total_source_view_count,
             args.adaptive_stuff_min_view_ratio,
             args.adaptive_stuff_threshold_ratio,
+            args.adaptive_thing_threshold_floor_ratio,
         )
         labels, groups = prune_and_compact_groups(labels, groups)
 
@@ -1105,6 +1130,9 @@ def main() -> None:
             "total_source_view_count": total_source_view_count,
             "adaptive_stuff_min_view_ratio": args.adaptive_stuff_min_view_ratio,
             "adaptive_stuff_threshold_ratio": args.adaptive_stuff_threshold_ratio,
+            "adaptive_thing_threshold_floor_ratio": (
+                args.adaptive_thing_threshold_floor_ratio
+            ),
             "min_label_score": args.min_label_score,
             "assignment_priority": assignment_priorities,
             "assignment_mode": "confidence_weighted_multiview",

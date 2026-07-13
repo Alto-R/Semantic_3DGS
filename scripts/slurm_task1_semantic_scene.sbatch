@@ -71,6 +71,7 @@ MIN_ASSIGNED_THING_GAUSSIANS="${MIN_ASSIGNED_THING_GAUSSIANS:-5000}"
 MIN_ASSIGNED_STUFF_GAUSSIANS="${MIN_ASSIGNED_STUFF_GAUSSIANS:-10000}"
 ADAPTIVE_STUFF_MIN_VIEW_RATIO="${ADAPTIVE_STUFF_MIN_VIEW_RATIO:-0.50}"
 ADAPTIVE_STUFF_THRESHOLD_RATIO="${ADAPTIVE_STUFF_THRESHOLD_RATIO:-0.75}"
+ADAPTIVE_THING_THRESHOLD_FLOOR_RATIO="${ADAPTIVE_THING_THRESHOLD_FLOOR_RATIO:-0.50}"
 MIN_LABEL_SCORE="${MIN_LABEL_SCORE:-0.0}"
 BOX_THRESHOLD="${BOX_THRESHOLD:-0.30}"
 TEXT_THRESHOLD="${TEXT_THRESHOLD:-0.25}"
@@ -269,6 +270,7 @@ fi
   echo "min_assigned_stuff_gaussians=${MIN_ASSIGNED_STUFF_GAUSSIANS}"
   echo "adaptive_stuff_min_view_ratio=${ADAPTIVE_STUFF_MIN_VIEW_RATIO}"
   echo "adaptive_stuff_threshold_ratio=${ADAPTIVE_STUFF_THRESHOLD_RATIO}"
+  echo "adaptive_thing_threshold_floor_ratio=${ADAPTIVE_THING_THRESHOLD_FLOOR_RATIO}"
   echo "signed_class_evidence_min_positive_views=2"
   echo "signed_class_evidence_min_ratio=0.50"
   echo "consolidate_thing_instances=1"
@@ -358,6 +360,7 @@ run_stage 03_semantic_fusion \
     --min-assigned-stuff-gaussians "${MIN_ASSIGNED_STUFF_GAUSSIANS}" \
     --adaptive-stuff-min-view-ratio "${ADAPTIVE_STUFF_MIN_VIEW_RATIO}" \
     --adaptive-stuff-threshold-ratio "${ADAPTIVE_STUFF_THRESHOLD_RATIO}" \
+    --adaptive-thing-threshold-floor-ratio "${ADAPTIVE_THING_THRESHOLD_FLOOR_RATIO}" \
     --min-label-score "${MIN_LABEL_SCORE}" \
     --overwrite
 

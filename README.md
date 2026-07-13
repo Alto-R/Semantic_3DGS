@@ -120,7 +120,21 @@ gaze-target dataset:
   unlabeled wall/ceiling rather than visible class leakage.
 - `truck` is the fourth-scene pilot: 2,541,226 Gaussians and 251 cameras. Its
   scene configuration prioritizes the truck and wheels while retaining common
-  outdoor context. The first checkpoint is an evenly spaced 50-view baseline.
+  outdoor context.
+- Truck baseline job `92531` completed structurally across 50 evenly spaced
+  views, but it is diagnostic rather than accepted. It retained one coherent
+  truck and only three wheel labels. Fusion had actually consolidated four
+  wheel-position candidates; the missing wheel had 3,738 assigned Gaussians,
+  17 proposals, and support from 15 views, but the fixed 5,000-Gaussian thing
+  cutoff pruned it. A separate 146-Gaussian wheel fragment was correctly
+  rejected.
+- Thing-instance pruning now adapts continuously from normalized multiview
+  support for every class and scene. The effective cutoff is the base cutoff
+  multiplied by `max(0.5, 1 - source_view_ratio)`, never below the global
+  minimum. This lowers the fourth wheel's threshold to 3,500 while leaving the
+  two-view 146-Gaussian fragment at 4,800. The next checkpoint reuses job
+  `92531` masks/proposals and reruns fusion and validation as
+  `truck_semantic_baseline_v2`.
 - Task docs imported:
   - `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md`
   - `INTERNSHIP_SCHEDULE.md`
