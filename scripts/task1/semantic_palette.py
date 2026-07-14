@@ -49,6 +49,17 @@ CLASS_COLORS: dict[str, tuple[float, float, float]] = {
     "speaker": (0.86, 0.38, 0.08),
     "media_console": (0.46, 0.34, 0.24),
     "curtain": (0.52, 0.24, 0.68),
+    "fireplace": (0.82, 0.42, 0.12),
+    "toy": (0.96, 0.18, 0.48),
+    "cushion": (0.98, 0.58, 0.12),
+    "book": (0.28, 0.48, 0.96),
+    "tree_stump": (0.48, 0.25, 0.10),
+    "log": (0.66, 0.36, 0.14),
+    "path": (0.52, 0.50, 0.46),
+    "radiator": (0.76, 0.76, 0.80),
+    "monitor": (0.20, 0.26, 0.34),
+    "stroller": (0.62, 0.20, 0.78),
+    "staircase": (0.78, 0.48, 0.20),
 }
 
 STUFF_CLASSES = {

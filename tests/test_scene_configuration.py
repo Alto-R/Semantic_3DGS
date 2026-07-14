@@ -55,6 +55,21 @@ class SceneConfigurationTest(unittest.TestCase):
         self.assertEqual(class_types["wheel"], "thing")
         self.assertEqual(class_types["building"], "stuff")
 
+    def test_remaining_eyenavgs_scene_configs_are_complete(self) -> None:
+        expected_classes = {
+            "drjohnson": {"chair", "table", "radiator"},
+            "playroom": {"toy", "table", "monitor", "stroller", "staircase"},
+            "stump": {"tree_stump", "log"},
+            "treehill": {"tree", "bench"},
+        }
+
+        for scene, required_classes in expected_classes.items():
+            with self.subTest(scene=scene):
+                config = self.assert_scene_config(scene)
+                class_names = {item["class"] for item in config["classes"]}
+                self.assertTrue(required_classes.issubset(class_names))
+                self.assertTrue(class_names.issubset(CLASS_COLORS))
+
     def test_train_focus_classes_have_stable_palette_colors(self) -> None:
         self.assertIn("train", CLASS_COLORS)
         self.assertIn("railroad_track", CLASS_COLORS)

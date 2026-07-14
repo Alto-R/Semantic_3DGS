@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -41,6 +42,20 @@ class GroundedClassResolutionTest(unittest.TestCase):
     def test_shorter_prompt_inside_specific_prompt_is_ignored(self) -> None:
         self.assertEqual(class_from_phrase("floor speaker", self.specs), "speaker")
         self.assertEqual(class_from_phrase("television stand", self.specs), "media_console")
+
+    def test_remaining_scene_config_prompts_resolve_to_their_classes(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for scene in ("drjohnson", "playroom", "stump", "treehill"):
+            config_path = root / "configs" / f"task1_semantic_classes.{scene}.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            specs = [
+                ClassSpec(name=item["class"], prompts=tuple(item["prompts"]))
+                for item in config["classes"]
+            ]
+            for item in config["classes"]:
+                for prompt in item["prompts"]:
+                    with self.subTest(scene=scene, prompt=prompt):
+                        self.assertEqual(class_from_phrase(prompt, specs), item["class"])
 
 
 if __name__ == "__main__":
