@@ -271,8 +271,9 @@ sbatch scripts/slurm/slurm_task1_bicycle_grounded_sam.sbatch
 
 ### Automatic Targeted Camera Expansion
 
-The scheduled workflow can automatically expand the accepted 50-view bicycle
-baseline. It does not require a person to choose camera IDs:
+The scheduled workflow can automatically expand a validated 50-view scene
+baseline; bicycle was its first use. Each scene must use its own baseline as
+the selection source. No manual camera-ID selection is required:
 
 1. Sample the model geometry and measure projection characteristics for every
    unused camera.
@@ -550,6 +551,52 @@ physical wheel identities without truck-body, pavement, or background leakage.
 The full semantic contact sheet also shows no obvious new context-label
 leakage. These visual findings are interpretation, and the tint metric remains
 a proxy rather than semantic ground truth or gaze-hit accuracy.
+
+### Remaining GraphDeco Scenes
+
+The same scene-configurable workflow now covers the four other scenes with
+matched GraphDeco models. Their vocabularies are tracked in:
+
+```text
+configs/task1_semantic_classes.drjohnson.json
+configs/task1_semantic_classes.playroom.json
+configs/task1_semantic_classes.stump.json
+configs/task1_semantic_classes.treehill.json
+```
+
+The default run uses 50 evenly spaced cameras. Targeted expansion adds up to 20
+projection-safe, pose-diverse cameras selected from low-coverage regions. More
+views are useful only when they add reliable evidence: visible Gaussians outside
+a class mask also contribute negative evidence.
+
+An all-camera Playroom test used 225 views and created 2,454 proposals, but only
+13 nonzero groups survived. Its unlabeled ratio was `0.9161` and its
+visible-overlay proxy was `0.0925`. This indicates that confidence normalization
+over many source frames can push broadly distributed groups below the automatic
+assignment gate. The all-camera result is rejected pending a scene-neutral
+fusion redesign.
+
+Final reviewed selections:
+
+| Scene | Selected output | Views | Unlabeled | Visible-overlay proxy | Minimum |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Dr Johnson | `drjohnson_semantic_targeted_v1` | 70 | 0.7293 | 0.8160 | 0.5446 |
+| Playroom | `playroom_semantic_baseline_v3` | 50 | 0.6854 | 0.8516 | 0.4888 |
+| Stump | `stump_semantic_targeted_v1` | 70 | 0.7664 | 0.7673 | 0.4039 |
+| Treehill | `treehill_semantic_targeted_v1` | 70 | 0.8074 | 0.8192 | 0.5705 |
+
+Dr Johnson improved broadly, though door/cabinet boundaries remain imperfect.
+Playroom baseline v3 coherently labels the main built-in cabinet after adding
+wardrobe, cupboard, and built-in-cabinet prompts. Its targeted run is rejected:
+the unlabeled ratio rose to `0.7191`, cabinet assignment fell from 53,183 to
+39,710 Gaussians, and larger holes appeared. On the common original 50 views,
+targeted Stump improved from `0.8017` to `0.8303` and Treehill from `0.8542` to
+`0.8618`; their deliberately difficult added views measured `0.6096` and
+`0.7125` respectively.
+
+All four selected outputs pass structural validation and focused visual review.
+They are review decisions only; their `accepted/` pointers have not yet been
+created.
 
 For a short smoke run with three selected cameras:
 

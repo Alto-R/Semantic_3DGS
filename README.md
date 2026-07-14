@@ -24,18 +24,23 @@ gaze-target dataset:
 - The pipeline reuses the `gaussian_grouping_true` Conda environment and the
   downloaded GraphDeco models. Models are available for 8/12 EyeNavGS scenes;
   `nyc`, `london`, `berlin`, and `alameda` still need separate 3DGS sources.
-- The four-scene Task 1 pilot minimum is complete. Accepted outputs are exposed
-  under `outputs/eyenavgs_task1/accepted/`.
+- All eight scenes with matched GraphDeco models now have validated semantic
+  runs. The original four have accepted pointers; the four newer selections
+  have completed review and await pointer finalization.
 - The scene-configurable entry point is
   `scripts/slurm/slurm_task1_semantic_scene.sbatch`; the bicycle-specific script
   remains a compatibility wrapper.
 
-| Scene | Accepted target and result | Visible-overlay proxy |
-| --- | --- | --- |
-| Bicycle | `bicycle -> ../bicycle_semantic_targeted_v1`; 6,131,954 Gaussians across 70 views, 599 masks, and 583 lifted proposals. It retains one 119,570-Gaussian bicycle, one 139,727-Gaussian bench, and eight tree IDs totaling 1,096,092 Gaussians; 58.40% remain unlabeled. | 89.57% pooled; 92.42% on the original 50 views and 82.45% on the 20 difficult additions. The original-view minimum improved from 70.32% to 72.82%. |
-| Train | `train -> ../train_semantic_targeted_v3`; 1,026,508 Gaussians across 70 views. It retains two train instances and a strongly supported sky group while pruning the shipping-container `building` false positive. | 99.03% pooled, 89.62% minimum; 99.56% on the original 50 views and 97.70% on the 20 additions. |
-| Room | `room -> ../room_semantic_targeted_v2`; 1,593,376 Gaussians across 70 views. It retains a clean 7,779-Gaussian television and a separate 9,054-Gaussian table, removing the earlier table-as-television error. | 81.38% pooled; 84.22% on the original 50 views (62.24% minimum) and 74.28% on the additions (35.03% minimum). The lowest view is dominated by unlabeled wall and ceiling. |
-| Truck | `truck -> ../truck_semantic_targeted_v1`; 2,541,226 Gaussians across 70 views. Four wheel IDs contain 8,887, 13,343, 9,253, and 4,389 Gaussians with support from 19, 22, 24, and 24 views; a weak 95-Gaussian fragment is pruned and 71.57% remain unlabeled. | 94.85% pooled; 95.88% on the original 50 views and 92.27% on the 20 additions. Acceptance is based on stronger multiview support and clean visual QA, not proxy improvement. |
+| Scene | Selected output | Views | Unlabeled | Visible-overlay proxy | State |
+| --- | --- | ---: | ---: | ---: | --- |
+| Bicycle | `bicycle_semantic_targeted_v1` | 70 | 58.40% | 89.57% | Accepted |
+| Train | `train_semantic_targeted_v3` | 70 | 42.90% | 99.03% | Accepted |
+| Room | `room_semantic_targeted_v2` | 70 | 66.58% | 81.38% | Accepted |
+| Truck | `truck_semantic_targeted_v1` | 70 | 71.57% | 94.85% | Accepted |
+| Dr Johnson | `drjohnson_semantic_targeted_v1` | 70 | 72.93% | 81.60% | Reviewed |
+| Playroom | `playroom_semantic_baseline_v3` | 50 | 68.54% | 85.16% | Reviewed |
+| Stump | `stump_semantic_targeted_v1` | 70 | 76.64% | 76.73% | Reviewed |
+| Treehill | `treehill_semantic_targeted_v1` | 70 | 80.74% | 81.92% | Reviewed |
 
 The accepted pipeline incorporates the following scene-neutral corrections:
 
@@ -54,7 +59,10 @@ The accepted pipeline incorporates the following scene-neutral corrections:
 
 Overlay-difference coverage is a visible-tint proxy, not semantic ground truth
 or gaze-hit accuracy. Acceptance also requires multiview support and focused
-visual QA. Detailed methods and run evidence remain in
+visual QA. The all-camera Playroom experiment is rejected: confidence scaling
+left most broad classes unlabeled, so the supported strategy remains 50 evenly
+spaced views plus up to 20 projection-safe, diverse, low-coverage additions.
+Detailed methods and run evidence remain in
 `docs/TASK1_SEMANTIC_ANNOTATION.md`; the source task documents are
 `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md` and `INTERNSHIP_SCHEDULE.md`.
 
@@ -98,13 +106,18 @@ project record lacks a specific diagnosis, none is inferred.
   pruning retained it while rejecting weak fragments. The valid corrected
   50-view baseline was superseded by the accepted 70-view targeted run.
 
-Keep the final accepted targets and compact reports:
+Keep the accepted targets, reviewed selections, and compact reports:
 
 - `bicycle_semantic_targeted_v1`
 - `train_semantic_targeted_v3`
 - `room_semantic_targeted_v2`
 - `truck_semantic_targeted_v1`
-- `accepted/`, whose scene links point to those results
+- `drjohnson_semantic_targeted_v1`
+- `playroom_semantic_baseline_v3`
+- `stump_semantic_targeted_v1`
+- `treehill_semantic_targeted_v1`
+- `accepted/`; its first four scene links are finalized, while the four newer
+  selections still await pointer creation
 - `logs/`, `manifests/`, and small validation/report JSON files needed for the
   final report
 
@@ -136,13 +149,9 @@ See:
 - `docs/TASK1_SEMANTIC_ANNOTATION.md` for the semantic annotation pipeline.
 - `configs/paths.example.yaml` for path conventions.
 
-## First Milestone
+## Task 1 Milestone
 
-The four-scene Task 1 pilot is complete for `bicycle`, `train`, `room`, and
-`truck`. Each accepted result uses 50 base views plus 20 automatically selected
-difficult views, passes structural validation, and includes semantic PLY,
-label-map, overlay, and visual-QA artifacts under
-`outputs/eyenavgs_task1/accepted/`.
-
-Next: extend the validated pipeline to the remaining scenes and define a
-downstream gaze-hit acceptance criterion.
+Semantic runs are complete and reviewed for all eight scenes with available
+GraphDeco models. Finalize the four newer `accepted/` pointers, then obtain 3DGS
+models for `nyc`, `london`, `berlin`, and `alameda`. In parallel, define the
+downstream gaze-hit acceptance criterion for Task 2.
