@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ENV_NAME="${1:-dinov2_segmentation}"
+PYTHON_VERSION="3.10"
+RECREATE_INCOMPATIBLE_ENV="${RECREATE_INCOMPATIBLE_ENV:-0}"
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORKSPACE_ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
 DINOV2_ROOT="${2:-${WORKSPACE_ROOT}/external/dinov2}"
@@ -11,8 +13,20 @@ BASE_URL="https://dl.fbaipublicfiles.com/dinov2"
 test -d "${DINOV2_ROOT}"
 command -v conda >/dev/null 2>&1
 
+if conda env list | awk '{print $1}' | grep -Fxq "${ENV_NAME}"; then
+  CURRENT_PYTHON="$(conda run -n "${ENV_NAME}" python -c 'import platform; print(platform.python_version())')"
+  if [[ "${CURRENT_PYTHON}" != "${PYTHON_VERSION}".* ]]; then
+    if [[ "${RECREATE_INCOMPATIBLE_ENV}" != "1" ]]; then
+      echo "${ENV_NAME} uses Python ${CURRENT_PYTHON}; DINOv2 requires Python ${PYTHON_VERSION}." >&2
+      echo "Rerun with RECREATE_INCOMPATIBLE_ENV=1 to rebuild this dedicated environment." >&2
+      exit 2
+    fi
+    conda env remove -y -n "${ENV_NAME}"
+  fi
+fi
+
 if ! conda env list | awk '{print $1}' | grep -Fxq "${ENV_NAME}"; then
-  conda create -y -n "${ENV_NAME}" python=3.9
+  conda create -y -n "${ENV_NAME}" "python=${PYTHON_VERSION}"
 fi
 
 conda run -n "${ENV_NAME}" python -m pip install --upgrade pip
@@ -61,11 +75,14 @@ conda run -n "${ENV_NAME}" python -c '
 import mmcv
 import mmseg
 import numpy
+import sys
 import torch
 import torchvision
 import cv2
 import mmcv._ext
 import dinov2.eval.segmentation.models
+import dinov2.models.vision_transformer
+print("python", sys.version.split()[0])
 print("torch", torch.__version__)
 print("torchvision", torchvision.__version__)
 print("mmcv", mmcv.__version__)
@@ -75,6 +92,7 @@ print("opencv", cv2.__version__)
 print("torch CUDA runtime", torch.version.cuda)
 print("CUDA available on this node", torch.cuda.is_available())
 assert numpy.__version__ == "1.26.4"
+assert sys.version_info[:2] == (3, 10)
 assert torch.ones(1).numpy().shape == (1,)
 '
 
