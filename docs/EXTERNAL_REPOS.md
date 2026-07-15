@@ -50,3 +50,8 @@ Create it and download the official ViT-L/14 ADE20K linear checkpoints with:
 ```bash
 bash scripts/setup/install_dinov2_segmentation.sh
 ```
+
+The environment uses `mmcv-full==1.7.2` and `mmsegmentation==0.30.0`. This is
+the compatible MMSeg 0.x pair for which OpenMMLab publishes a Python 3.9,
+PyTorch 2.0, CUDA 11.7 wheel; forcing a binary wheel prevents an accidental
+MMCV source build on a login node.

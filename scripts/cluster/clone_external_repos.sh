@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 WORKSPACE_ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
 ROOT="${1:-${WORKSPACE_ROOT}/external}"
 mkdir -p "$ROOT"
@@ -48,4 +49,4 @@ git -C SegAnyGAussians submodule update --init --recursive --depth 1
 
 echo
 echo "Recorded versions:"
-bash "$(dirname "$0")/record_external_repos.sh" "$ROOT"
+bash "${SCRIPT_DIR}/record_external_repos.sh" "$ROOT"

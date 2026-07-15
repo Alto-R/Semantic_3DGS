@@ -17,12 +17,17 @@ fi
 
 conda run -n "${ENV_NAME}" python -m pip install --upgrade pip
 conda run -n "${ENV_NAME}" python -m pip install \
-  torch==2.0.0 torchvision==0.15.1 \
+  torch==2.0.0 torchvision==0.15.0 \
   --index-url https://download.pytorch.org/whl/cu117
 conda run -n "${ENV_NAME}" python -m pip install -r "${DINOV2_ROOT}/requirements.txt"
+# DINOv2 originally pinned mmcv-full 1.5.0 with mmsegmentation 0.27.0,
+# but OpenMMLab does not publish a Python 3.9 / Torch 2.0 / CUDA 11.7 wheel
+# for that MMCV version. Use the newest compatible MMSeg 0.x pair available
+# as a prebuilt wheel, and forbid a silent fallback to a source build.
 conda run -n "${ENV_NAME}" python -m pip install \
-  mmsegmentation==0.27.0 \
-  mmcv-full==1.5.0 \
+  mmsegmentation==0.30.0 \
+  mmcv-full==1.7.2 \
+  --only-binary=mmcv-full \
   -f https://download.openmmlab.com/mmcv/dist/cu117/torch2.0.0/index.html
 
 mkdir -p "${CHECKPOINT_DIR}"
@@ -45,16 +50,20 @@ download_if_missing \
   "${BASE_URL}/dinov2_vitl14/dinov2_vitl14_ade20k_linear_head.pth" \
   "${CHECKPOINT_DIR}/dinov2_vitl14_ade20k_linear_head.pth"
 
+PYTHONPATH="${DINOV2_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
 conda run -n "${ENV_NAME}" python -c '
 import mmcv
 import mmseg
 import torch
 import torchvision
+import mmcv._ext
+import dinov2.eval.segmentation.models
 print("torch", torch.__version__)
 print("torchvision", torchvision.__version__)
 print("mmcv", mmcv.__version__)
 print("mmseg", mmseg.__version__)
-assert torch.cuda.is_available(), "CUDA is not available in the DINOv2 environment"
+print("torch CUDA runtime", torch.version.cuda)
+print("CUDA available on this node", torch.cuda.is_available())
 '
 
 printf 'DINOv2 root: %s\ncheckpoint directory: %s\nconda environment: %s\n' \
