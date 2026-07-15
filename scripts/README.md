@@ -7,8 +7,10 @@ the Slurm entry points resolve consistently.
   inspection tools. These files stay together because several import shared
   local modules.
 - `slurm/`: maintained Slurm entry points. Use
-  `slurm/slurm_task1_semantic_scene.sbatch` for scene-configurable runs; the
-  bicycle entry point is a compatibility wrapper.
+  `slurm/slurm_task1_dinov2_scene.sbatch` for the production DINOv2 route and
+  its optional continuous GroundingDINO extension. Use
+  `slurm/slurm_task1_semantic_scene.sbatch` for standalone GroundingDINO
+  debugging; the bicycle entry point is a compatibility wrapper.
 - `cluster/`: cluster bootstrap, health-check, dependency-clone, and dependency
   inventory helpers.
 - `setup/`: renderer and semantic-extension installation helpers.
@@ -23,8 +25,15 @@ The alternative prompt-free DINOv2 route is implemented by:
   view, including low-confidence abstention.
 - `task1/fuse_dinov2_multiview_votes.py`: exact disk-backed vote fusion,
   thresholding, thing-instance components, pruning, and D1 export.
-- `slurm/slurm_task1_dinov2_scene.sbatch`: separate DINOv2 and FlashSplat Conda
-  environments plus the maintained validation/visualization stages.
+- `task1/run_grounding_semantic_branch.py`: shared GroundingDINO/SAM,
+  FlashSplat, and semantic-fusion branch used by both scheduler paths.
+- `task1/merge_semantic_extensions.py`: deterministic Gaussian-label merge for
+  reviewed classes outside the ADE20K ontology.
+- `slurm/slurm_task1_dinov2_scene.sbatch`: production entry point. Set
+  `ENABLE_GROUNDINGDINO=1` to run the extension branch continuously after the
+  DINOv2 base; the default `0` publishes DINOv2 alone.
+- `slurm/slurm_task1_recolor_output.sbatch`: visualization-only stable-color
+  regeneration for an existing output; it does not rerun either semantic model.
 - `setup/install_dinov2_segmentation.sh`: install the separate segmentation
   environment and download the official ViT-L/14 ADE20K linear artifacts.
 - `setup/install_semantic_extensions.sh`: rebuild the CUDA extensions for
@@ -41,3 +50,7 @@ provenance. They are not active pipeline entry points.
 Scene vocabularies live in `configs/task1_semantic_classes.<scene>.json`. If a
 scene-specific file is absent, the generic scheduler falls back to
 `configs/task1_semantic_classes.example.json`.
+
+Semantic colors are keyed by normalized class name, not label ID or run-local
+label ordering. `COLOR_MODE=class` is the comparison default; `instance` is an
+optional debug view. Every run writes a JSON and PNG color legend.

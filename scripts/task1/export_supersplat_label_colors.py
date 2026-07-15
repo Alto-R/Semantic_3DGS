@@ -75,9 +75,17 @@ def collect_label_colors(
     labels: np.ndarray,
     label_items: dict[int, dict[str, Any]],
     focus_classes: set[str],
+    color_mode: str = "class",
 ) -> dict[int, np.ndarray]:
     return {
-        int(label_id): sh_dc_for_rgb(rgb_for_label(int(label_id), label_items, focus_classes))
+        int(label_id): sh_dc_for_rgb(
+            rgb_for_label(
+                int(label_id),
+                label_items,
+                focus_classes,
+                color_mode=color_mode,
+            )
+        )
         for label_id in np.unique(labels)
     }
 
@@ -100,6 +108,7 @@ def export_supersplat_debug_ply(
     batch_size: int,
     overwrite: bool,
     focus_classes: set[str],
+    color_mode: str = "class",
 ) -> dict[str, Any]:
     header = read_ply_header(input_ply)
     vertex = header.element("vertex")
@@ -146,7 +155,7 @@ def export_supersplat_debug_ply(
 
             labels = mutable_column(blob, count, stride, label_offset, label_dtype).astype(np.int64)
             seen_labels.update(int(label_id) for label_id in np.unique(labels))
-            dc_by_label = collect_label_colors(labels, label_items, focus_classes)
+            dc_by_label = collect_label_colors(labels, label_items, focus_classes, color_mode)
 
             for label_id, dc_color in dc_by_label.items():
                 selected = labels == label_id
@@ -168,9 +177,15 @@ def export_supersplat_debug_ply(
         "label_property": label_property,
         "color_mode": "supersplat_sh_dc",
         "focus_classes": sorted(focus_classes),
+        "color_mode": color_mode,
         "zeroed_f_rest_property_count": len(rest_offsets),
         "label_count": len(seen_labels),
-        "palette": palette_records(seen_labels, label_items, focus_classes),
+        "palette": palette_records(
+            seen_labels,
+            label_items,
+            focus_classes,
+            color_mode=color_mode,
+        ),
     }
 
 
@@ -183,6 +198,7 @@ def main() -> None:
     parser.add_argument("--batch-size", default=100_000, type=int)
     parser.add_argument("--metadata-json", type=Path)
     parser.add_argument("--focus-classes", default="")
+    parser.add_argument("--color-mode", choices=("class", "instance"), default="class")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -194,6 +210,7 @@ def main() -> None:
         batch_size=args.batch_size,
         overwrite=args.overwrite,
         focus_classes=normalize_classes(args.focus_classes),
+        color_mode=args.color_mode,
     )
     metadata_path = args.metadata_json or args.output_ply.with_suffix(".json")
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")

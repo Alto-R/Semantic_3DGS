@@ -1,14 +1,16 @@
-"""Shared class-aware colors for semantic overlays and debug PLY exports."""
+"""Stable semantic-class colors for overlays, legends, and debug PLY exports."""
 
 from __future__ import annotations
 
 import colorsys
+import hashlib
 import json
-import math
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
+
+PALETTE_VERSION = "semantic-class-v1"
+COLOR_MODES = {"class", "instance"}
 
 CLASS_COLORS: dict[str, tuple[float, float, float]] = {
     "unlabeled": (0.08, 0.08, 0.08),
@@ -62,26 +64,17 @@ CLASS_COLORS: dict[str, tuple[float, float, float]] = {
     "staircase": (0.78, 0.48, 0.20),
 }
 
-STUFF_CLASSES = {
-    "building",
-    "ceiling",
-    "curtain",
-    "door",
-    "floor",
-    "ground",
-    "railroad_track",
-    "railway_platform",
-    "road",
-    "rug",
-    "sidewalk",
-    "sky",
-    "terrain",
-    "vegetation",
-    "wall",
-    "window",
-}
 
-MIN_LABEL_DELTA_E = 30.0
+def normalize_class_name(value: Any) -> str:
+    normalized = "_".join(str(value or "").strip().lower().replace("-", " ").split())
+    return normalized or "unknown"
+
+
+def validate_color_mode(color_mode: str) -> str:
+    mode = str(color_mode).strip().lower()
+    if mode not in COLOR_MODES:
+        raise ValueError(f"color mode must be one of {sorted(COLOR_MODES)}; got {color_mode!r}")
+    return mode
 
 
 def load_label_items(path: Path | None) -> dict[int, dict[str, Any]]:
@@ -93,141 +86,122 @@ def load_label_items(path: Path | None) -> dict[int, dict[str, Any]]:
 
 def normalize_classes(values: str | Iterable[str]) -> set[str]:
     items = values.split(",") if isinstance(values, str) else values
-    return {str(item).strip().lower().replace(" ", "_") for item in items if str(item).strip()}
+    return {normalize_class_name(item) for item in items if str(item).strip()}
 
 
-def fallback_color(label_id: int) -> tuple[float, float, float]:
-    hue = (label_id * 0.618033988749895) % 1.0
-    return colorsys.hsv_to_rgb(hue, 0.78, 0.96)
+def _digest(value: str) -> bytes:
+    return hashlib.sha256(value.encode("utf-8")).digest()
 
 
-def _linear_srgb(channel: float) -> float:
-    return channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+def fallback_class_color(class_name: str) -> tuple[float, float, float]:
+    """Return a run-independent color keyed only by normalized class name."""
+
+    key = normalize_class_name(class_name)
+    digest = _digest(key)
+    hue = int.from_bytes(digest[:2], "big") / 65535.0
+    saturation = 0.68 + (digest[2] / 255.0) * 0.22
+    value = 0.78 + (digest[3] / 255.0) * 0.18
+    return colorsys.hsv_to_rgb(hue, saturation, value)
 
 
-def lab_for_rgb(rgb: tuple[float, float, float]) -> tuple[float, float, float]:
-    red, green, blue = (_linear_srgb(channel) for channel in rgb)
-    x = (0.4124564 * red + 0.3575761 * green + 0.1804375 * blue) / 0.95047
-    y = 0.2126729 * red + 0.7151522 * green + 0.0721750 * blue
-    z = (0.0193339 * red + 0.1191920 * green + 0.9503041 * blue) / 1.08883
-
-    delta = 6.0 / 29.0
-
-    def transform(value: float) -> float:
-        if value > delta**3:
-            return value ** (1.0 / 3.0)
-        return value / (3.0 * delta**2) + 4.0 / 29.0
-
-    fx, fy, fz = transform(x), transform(y), transform(z)
-    return 116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)
+def rgb_for_class(class_name: str) -> tuple[float, float, float]:
+    key = normalize_class_name(class_name)
+    return CLASS_COLORS.get(key, fallback_class_color(key))
 
 
-def color_distance(
-    first: tuple[float, float, float],
-    second: tuple[float, float, float],
-) -> float:
-    first_lab = lab_for_rgb(first)
-    second_lab = lab_for_rgb(second)
-    return math.sqrt(sum((a - b) ** 2 for a, b in zip(first_lab, second_lab)))
+def instance_color(class_name: str, instance_name: str) -> tuple[float, float, float]:
+    """Return a stable class-related shade keyed by semantic and instance names."""
 
-
-def _candidate_colors() -> tuple[tuple[float, float, float], ...]:
-    colors: list[tuple[float, float, float]] = []
-    for hue_index in range(48):
-        hue = hue_index / 48.0
-        for saturation, value in ((0.95, 0.95), (0.72, 0.98), (0.88, 0.72)):
-            colors.append(colorsys.hsv_to_rgb(hue, saturation, value))
-    return tuple(colors)
-
-
-DISPLAY_COLOR_CANDIDATES = _candidate_colors()
-
-
-def _label_signature(
-    label_items: dict[int, dict[str, Any]],
-) -> tuple[tuple[int, str, str], ...]:
-    return tuple(
-        sorted(
-            (
-                int(label_id),
-                str(item.get("class", "unlabeled" if int(label_id) == 0 else "unknown")).lower(),
-                str(item.get("name", "")),
-            )
-            for label_id, item in label_items.items()
-        )
+    key = normalize_class_name(class_name)
+    if key == "unlabeled":
+        return rgb_for_class(key)
+    base = rgb_for_class(key)
+    hue, saturation, value = colorsys.rgb_to_hsv(*base)
+    digest = _digest(f"{key}:{normalize_class_name(instance_name)}")
+    hue_offset = ((digest[0] / 255.0) - 0.5) * 0.08
+    saturation_scale = 0.88 + (digest[1] / 255.0) * 0.20
+    value_scale = 0.86 + (digest[2] / 255.0) * 0.22
+    return colorsys.hsv_to_rgb(
+        (hue + hue_offset) % 1.0,
+        min(1.0, max(0.35, saturation * saturation_scale)),
+        min(1.0, max(0.35, value * value_scale)),
     )
 
 
-@lru_cache(maxsize=128)
-def _palette_from_signature(
-    signature: tuple[tuple[int, str, str], ...],
-) -> dict[int, tuple[float, float, float]]:
-    palette: dict[int, tuple[float, float, float]] = {}
-    used_colors: list[tuple[float, float, float]] = []
-
-    if any(label_id == 0 for label_id, _, _ in signature):
-        palette[0] = CLASS_COLORS["unlabeled"]
-        used_colors.append(palette[0])
-
-    for label_id, class_name, _ in signature:
-        if label_id == 0:
-            continue
-
-        preferred = CLASS_COLORS.get(class_name, fallback_color(label_id))
-        preferred_distance = min(
-            (color_distance(preferred, used) for used in used_colors),
-            default=float("inf"),
-        )
-        if preferred_distance >= MIN_LABEL_DELTA_E:
-            selected = preferred
-        else:
-            selected = max(
-                DISPLAY_COLOR_CANDIDATES,
-                key=lambda candidate: min(color_distance(candidate, used) for used in used_colors),
-            )
-        palette[label_id] = selected
-        used_colors.append(selected)
-
-    return palette
+def label_color_key(label_id: int, item: dict[str, Any], color_mode: str) -> str:
+    mode = validate_color_mode(color_mode)
+    class_name = normalize_class_name(
+        item.get("class", "unlabeled" if int(label_id) == 0 else "unknown")
+    )
+    if mode == "class":
+        return class_name
+    instance_name = normalize_class_name(item.get("name", f"label_{int(label_id)}"))
+    return f"{class_name}:{instance_name}"
 
 
 def label_palette(
     label_items: dict[int, dict[str, Any]],
+    color_mode: str = "class",
 ) -> dict[int, tuple[float, float, float]]:
-    """Return deterministic colors separated across every label in one output."""
-    return dict(_palette_from_signature(_label_signature(label_items)))
+    """Return colors independent of label IDs, map ordering, and other labels."""
+
+    mode = validate_color_mode(color_mode)
+    palette: dict[int, tuple[float, float, float]] = {}
+    for label_id, item in label_items.items():
+        class_name = normalize_class_name(
+            item.get("class", "unlabeled" if int(label_id) == 0 else "unknown")
+        )
+        if mode == "class":
+            palette[int(label_id)] = rgb_for_class(class_name)
+        else:
+            palette[int(label_id)] = instance_color(
+                class_name,
+                str(item.get("name", f"label_{int(label_id)}")),
+            )
+    return palette
 
 
 def rgb_for_label(
     label_id: int,
     label_items: dict[int, dict[str, Any]] | None = None,
     focus_classes: set[str] | None = None,
+    color_mode: str = "class",
 ) -> tuple[float, float, float]:
+    mode = validate_color_mode(color_mode)
     item = (label_items or {}).get(label_id, {})
-    class_name = str(item.get("class", "unlabeled" if label_id == 0 else "unknown")).lower()
+    class_name = normalize_class_name(
+        item.get("class", "unlabeled" if label_id == 0 else "unknown")
+    )
     if focus_classes and class_name not in focus_classes:
-        return CLASS_COLORS["unlabeled"]
+        return rgb_for_class("unlabeled")
+    if mode == "instance":
+        return instance_color(class_name, str(item.get("name", f"label_{label_id}")))
+    return rgb_for_class(class_name)
 
-    if label_items:
-        palette = _palette_from_signature(_label_signature(label_items))
-        if label_id in palette:
-            return palette[label_id]
-    return CLASS_COLORS.get(class_name, fallback_color(label_id))
+
+def rgb8_for_class(class_name: str) -> list[int]:
+    return [int(round(channel * 255.0)) for channel in rgb_for_class(class_name)]
 
 
 def rgb8_for_label(
     label_id: int,
     label_items: dict[int, dict[str, Any]] | None = None,
     focus_classes: set[str] | None = None,
+    color_mode: str = "class",
 ) -> list[int]:
-    return [int(round(channel * 255.0)) for channel in rgb_for_label(label_id, label_items, focus_classes)]
+    return [
+        int(round(channel * 255.0))
+        for channel in rgb_for_label(label_id, label_items, focus_classes, color_mode)
+    ]
 
 
 def palette_records(
     label_ids: Iterable[int],
     label_items: dict[int, dict[str, Any]] | None = None,
     focus_classes: set[str] | None = None,
+    color_mode: str = "class",
 ) -> list[dict[str, Any]]:
+    mode = validate_color_mode(color_mode)
     records = []
     for label_id in sorted({int(value) for value in label_ids}):
         item = (label_items or {}).get(label_id, {})
@@ -236,7 +210,10 @@ def palette_records(
                 "id": label_id,
                 "name": item.get("name", ""),
                 "class": item.get("class", ""),
-                "rgb": rgb8_for_label(label_id, label_items, focus_classes),
+                "palette_version": PALETTE_VERSION,
+                "color_mode": mode,
+                "color_key": label_color_key(label_id, item, mode),
+                "rgb": rgb8_for_label(label_id, label_items, focus_classes, mode),
             }
         )
     return records

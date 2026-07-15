@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import sys
+import argparse
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "task1"))
 
 from select_targeted_cameras import (  # noqa: E402
+    seed_command,
     coverage_by_camera,
     projection_rejection_reasons,
     projection_thresholds,
@@ -33,6 +37,35 @@ def camera(index: int, x: float) -> dict:
 
 
 class TargetedCameraSelectionTest(unittest.TestCase):
+    def test_seed_selection_is_even_and_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            source = root / "view_manifest.json"
+            output = root / "seed_manifest.json"
+            indices = root / "seed_indices.txt"
+            source.write_text(
+                json.dumps(
+                    {
+                        "frames": [
+                            {"file": f"{index:05d}.png", "camera_index": index}
+                            for index in range(10)
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            seed_command(
+                argparse.Namespace(
+                    source_manifest=source,
+                    output=output,
+                    indices_output=indices,
+                    count=4,
+                )
+            )
+            report = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(report["selected_camera_indices"], [0, 3, 6, 9])
+            self.assertEqual(indices.read_text(encoding="utf-8").strip(), "0,3,6,9")
+
     def test_projection_screen_is_anchored_to_known_safe_baseline(self) -> None:
         baseline = [
             {

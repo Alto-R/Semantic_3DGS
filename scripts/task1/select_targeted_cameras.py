@@ -319,6 +319,42 @@ def write_indices(path: Path, indices: list[int]) -> None:
     path.write_text(",".join(str(index) for index in indices) + "\n", encoding="utf-8")
 
 
+def seed_command(args: argparse.Namespace) -> None:
+    source_manifest = load_json(args.source_manifest)
+    source_frames = source_manifest.get("frames", [])
+    if not isinstance(source_frames, list) or not source_frames:
+        raise ValueError(f"No frames found in {args.source_manifest}")
+    unique_frames: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for frame in source_frames:
+        camera_index = int(frame["camera_index"])
+        if camera_index not in seen:
+            unique_frames.append(frame)
+            seen.add(camera_index)
+    if args.count <= 0:
+        raise ValueError("--count must be positive")
+    if args.count >= len(unique_frames):
+        selected_positions = list(range(len(unique_frames)))
+    else:
+        selected_positions = sorted(
+            {int(round(value)) for value in np.linspace(0, len(unique_frames) - 1, args.count)}
+        )
+    selected_frames = [unique_frames[position] for position in selected_positions]
+    selected_indices = [int(frame["camera_index"]) for frame in selected_frames]
+    report = {
+        "source": "evenly_spaced_manifest_seed",
+        "source_manifest": str(args.source_manifest),
+        "requested_count": args.count,
+        "camera_count": len(selected_frames),
+        "selected_camera_indices": selected_indices,
+        "frames": selected_frames,
+    }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    write_indices(args.indices_output, selected_indices)
+    print(json.dumps({key: value for key, value in report.items() if key != "frames"}, indent=2))
+
+
 def screen_command(args: argparse.Namespace) -> None:
     cameras = read_cameras(args.model_path)
     baseline_manifest = load_json(args.baseline_manifest)
@@ -327,6 +363,17 @@ def screen_command(args: argparse.Namespace) -> None:
     )
     if not baseline_indices:
         raise ValueError(f"No baseline camera indices in {args.baseline_manifest}")
+    if args.allowed_manifest is not None:
+        allowed_manifest = load_json(args.allowed_manifest)
+        allowed_indices = validate_indices(
+            unique_indices(allowed_manifest.get("frames", [])),
+            len(cameras),
+            "Allowed",
+        )
+        if not allowed_indices:
+            raise ValueError(f"No allowed camera indices in {args.allowed_manifest}")
+    else:
+        allowed_indices = list(range(len(cameras)))
 
     ply_path = args.model_path / "point_cloud" / f"iteration_{args.iteration}" / "point_cloud.ply"
     points, max_scale = sample_scene_geometry(ply_path, args.sample_count)
@@ -340,7 +387,8 @@ def screen_command(args: argparse.Namespace) -> None:
     baseline_set = set(baseline_indices)
     candidate_records: list[dict[str, Any]] = []
     safe_indices: list[int] = []
-    for index, camera in enumerate(cameras):
+    for index in allowed_indices:
+        camera = cameras[index]
         if index in baseline_set:
             continue
         reasons = projection_rejection_reasons(metrics_by_index[index], thresholds)
@@ -363,6 +411,8 @@ def screen_command(args: argparse.Namespace) -> None:
         "method": "baseline_anchored_projection_screen_and_pose_diversity",
         "model_path": str(args.model_path),
         "baseline_manifest": str(args.baseline_manifest),
+        "allowed_manifest": str(args.allowed_manifest) if args.allowed_manifest else None,
+        "allowed_camera_count": len(allowed_indices),
         "point_cloud": str(ply_path),
         "sample_count": int(points.shape[0]),
         "projection_margin": max(float(args.projection_margin), 1.0),
@@ -449,9 +499,20 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    seed = subparsers.add_parser(
+        "seed",
+        help="Select evenly spaced seed cameras from an existing rendered-view manifest",
+    )
+    seed.add_argument("--source-manifest", required=True, type=Path)
+    seed.add_argument("--output", required=True, type=Path)
+    seed.add_argument("--indices-output", required=True, type=Path)
+    seed.add_argument("--count", default=50, type=int)
+    seed.set_defaults(handler=seed_command)
+
     screen = subparsers.add_parser("screen", help="Screen and diversify unused candidate cameras")
     screen.add_argument("--model-path", required=True, type=Path)
     screen.add_argument("--baseline-manifest", required=True, type=Path)
+    screen.add_argument("--allowed-manifest", type=Path)
     screen.add_argument("--output", required=True, type=Path)
     screen.add_argument("--indices-output", required=True, type=Path)
     screen.add_argument("--iteration", default=30000, type=int)

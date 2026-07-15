@@ -663,12 +663,12 @@ Active semantic scripts:
   - can focus selected classes while dimming all other labels
 
 - `scripts/task1/semantic_palette.py`
-  - provides one deterministic label-aware palette shared by overlays and debug
-    PLYs
-  - preserves configured class colors when they remain perceptually separated
-  - replaces collisions through farthest-point selection in CIELAB space with
-    a target Delta E of 30, including separate hues for same-class instances
-  - uses red for bicycle and blue for bench in every validation artifact
+  - provides one deterministic semantic-class palette shared by DINOv2,
+    GroundingDINO, final overlays, legends, and debug PLYs
+  - assigns the same class the same color regardless of run-local label IDs,
+    instance count, or label-map ordering
+  - derives stable fallback colors from normalized class names for new classes
+  - supports optional class-related instance shades only in explicit debug mode
 
 - `scripts/task1/summarize_task1_semantic_run.py`
   - writes one `pipeline_run_summary.json` across mask generation, FlashSplat

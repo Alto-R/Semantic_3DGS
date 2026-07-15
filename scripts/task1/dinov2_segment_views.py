@@ -15,6 +15,7 @@ import numpy as np
 from PIL import Image
 
 from dinov2_ontology import load_ontology
+from semantic_palette import rgb8_for_class
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -159,30 +160,22 @@ def inference_probabilities(model: Any, image_path: Path) -> np.ndarray:
     return stacked.detach().float().cpu().numpy()
 
 
-def class_color(class_id: int) -> np.ndarray:
-    if class_id <= 0:
-        return np.zeros((3,), dtype=np.uint8)
-    return np.asarray(
-        [
-            (37 * class_id + 53) % 256,
-            (97 * class_id + 101) % 256,
-            (17 * class_id + 199) % 256,
-        ],
-        dtype=np.uint8,
-    )
-
-
 def save_overlay(
     rgb_path: Path,
     project_ids: np.ndarray,
     output_path: Path,
     alpha: float,
+    project_class_names: dict[int, str],
 ) -> None:
     base = np.asarray(Image.open(rgb_path).convert("RGB"), dtype=np.uint8)
     colors = np.zeros_like(base)
     for class_id in np.unique(project_ids):
         if class_id > 0:
-            colors[project_ids == class_id] = class_color(int(class_id))
+            class_name = project_class_names.get(int(class_id), f"project_class_{int(class_id)}")
+            colors[project_ids == class_id] = np.asarray(
+                rgb8_for_class(class_name),
+                dtype=np.uint8,
+            )
     mask = project_ids > 0
     overlay = base.copy()
     overlay[mask] = (
@@ -213,6 +206,10 @@ def main() -> None:
     view_manifest = json.loads(view_manifest_path.read_text(encoding="utf-8"))
     ontology = load_ontology(args.ontology)
     lookup = ontology.ade_to_project
+    project_class_names = {
+        item.project_id: item.project_class
+        for item in ontology.classes
+    }
     segment_dir = args.input_dir / "dinov2_segments"
     overlay_dir = args.input_dir / "dinov2_overlays"
     output_manifest_path = args.input_dir / "dinov2_manifest.json"
@@ -258,7 +255,13 @@ def main() -> None:
             class_id=raw_class,
             confidence=confidence,
         )
-        save_overlay(rgb_path, project_ids, overlay_path, args.overlay_alpha)
+        save_overlay(
+            rgb_path,
+            project_ids,
+            overlay_path,
+            args.overlay_alpha,
+            project_class_names,
+        )
         frames.append(
             {
                 **frame,

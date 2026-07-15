@@ -54,8 +54,8 @@ The accepted pipeline incorporates the following scene-neutral corrections:
 - Reuse mode inherits the exact camera indices and count from the Grounded-SAM
   manifest, so all targeted views are validated.
 - Phrase resolution rejects unrelated multi-class matches, connected fragments
-  consolidate before size pruning, and deterministic CIELAB-separated colors
-  improve inspection without changing semantic ownership.
+  consolidate before size pruning, and stable semantic-class colors make runs
+  directly comparable without changing semantic ownership.
 
 Overlay-difference coverage is a visible-tint proxy, not semantic ground truth
 or gaze-hit accuracy. Acceptance also requires multiview support and focused
@@ -66,12 +66,13 @@ Detailed methods and run evidence remain in
 `docs/TASK1_SEMANTIC_ANNOTATION.md`; the source task documents are
 `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md` and `INTERNSHIP_SCHEDULE.md`.
 
-A separate DINOv2 v1 route is now available for evaluation without modifying
-the accepted GroundingDINO pipeline. It uses the official ViT-L/14 ADE20K
-linear head, every real scene camera, confidence-aware abstention, and exact
-disk-backed multiview fusion. Its design and run procedure are documented in
-`docs/DINOV2_MULTIVIEW_VOTING.md`; Room is the first pilot, and no DINOv2 run is
-accepted until its overlays and final labels are reviewed.
+The DINOv2 route is the production entry point. It uses the official ViT-L/14
+ADE20K linear head, every real scene camera, confidence-aware abstention, and
+exact disk-backed multiview fusion. `ENABLE_GROUNDINGDINO=1` adds a continuous,
+configuration-driven GroundingDINO/SAM extension for reviewed classes missing
+from ADE20K; `0` keeps the prompt-free DINOv2 result. The standalone
+GroundingDINO scheduler remains available for debugging. The design and run
+procedure are documented in `docs/DINOV2_MULTIVIEW_VOTING.md`.
 
 ## Superseded Task 1 Run Record
 

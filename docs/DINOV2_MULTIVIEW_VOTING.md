@@ -1,9 +1,10 @@
 # Task 1 Alternative Front-End: DINOv2 Multi-View Voting
 
-This document specifies an alternative semantic-labeling front-end for the
-EyeNavGS 3DGS scenes. It replaces the current hand-written-vocabulary detector
-(GroundingDINO + SAM) with a **prompt-free, dense DINOv2 semantic segmentation**
-front-end, then assigns one label per Gaussian by **multi-view voting**.
+This document specifies the DINOv2 semantic-labeling front-end for the EyeNavGS
+3DGS scenes. Its default mode replaces the hand-written-vocabulary detector
+with **prompt-free, dense DINOv2 semantic segmentation** and assigns one label
+per Gaussian by **multi-view voting**. An optional continuous GroundingDINO/SAM
+branch can enrich reviewed classes missing from ADE20K.
 
 The output contract is unchanged: each Gaussian still receives one integer
 `label`, and each scene still ships a `label_map.json`. This route only changes
@@ -236,7 +237,24 @@ MIN_PIXEL_CONFIDENCE    (default 0.5)
 MIN_VIEWS               (default 2)
 MIN_AGREEMENT           (default 0.5)
 BASELINE_LABELS         (optional accepted GroundingDINO gaussian_labels.npy)
+ENABLE_GROUNDINGDINO    (default 0; set 1 for continuous extension branch)
+GROUNDING_EXTENSION_CONFIG
+GROUNDING_EXTENSION_CLASSES (optional QA override)
+GROUNDING_BASE_VIEW_COUNT   (default 50)
+GROUNDING_TARGET_VIEW_COUNT (default 20)
+COLOR_MODE              (class by default; instance for debugging only)
 ```
+
+When enabled, the scheduler reuses the all-camera RGB renders, selects 50
+evenly spaced seed views, adds up to 20 projection-safe views using low DINOv2
+coverage and pose diversity, runs the mature GroundingDINO/SAM/FlashSplat
+cleanup branch, and merges only surviving configured extension groups. The
+standalone GroundingDINO scheduler remains available for isolated debugging.
+
+Room extension candidates live in
+`configs/task1_hybrid_extensions.room.json`. Its default-enabled list stays
+empty until per-class hybrid QA is accepted; during QA, pass an explicit
+`GROUNDING_EXTENSION_CLASSES` value.
 
 ### Room pilot commands
 

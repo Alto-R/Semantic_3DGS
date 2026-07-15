@@ -8,12 +8,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "task1"))
 
-from generate_grounded_sam_masks import ClassSpec, class_from_phrase  # noqa: E402
+from generate_grounded_sam_masks import (  # noqa: E402
+    ClassSpec,
+    class_from_phrase,
+    select_class_specs,
+)
 
 
 class GroundedClassResolutionTest(unittest.TestCase):
+    def test_include_classes_preserves_requested_config_order(self) -> None:
+        selected = select_class_specs(self.specs, "media_console,piano")
+        self.assertEqual([item.name for item in selected], ["media_console", "piano"])
+
+    def test_unknown_include_class_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "absent from the class config"):
+            select_class_specs(self.specs, "radiator")
+
     def setUp(self) -> None:
         self.specs = [
+            ClassSpec(name="piano", prompts=("piano", "upright piano")),
             ClassSpec(name="guitar", prompts=("guitar", "acoustic guitar")),
             ClassSpec(name="indoor_plant", prompts=("indoor plant", "potted plant")),
             ClassSpec(name="chair", prompts=("chair", "armchair")),

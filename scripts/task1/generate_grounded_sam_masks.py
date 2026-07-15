@@ -15,6 +15,8 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
+from semantic_palette import rgb8_for_class
+
 from flashsplat_cameras import (
     background_tensor,
     camera_filename,
@@ -115,6 +117,23 @@ def parse_class_specs(path: Path | None, text_prompt: str | None) -> list[ClassS
             prompt_tuple = (class_name.replace("_", " "),)
         specs.append(ClassSpec(name=class_name, prompts=prompt_tuple, kind=str(item.get("type", "thing"))))
     return specs
+
+
+def select_class_specs(specs: list[ClassSpec], include_classes: str) -> list[ClassSpec]:
+    requested = [
+        normalize_text(value).replace(" ", "_")
+        for value in include_classes.split(",")
+        if value.strip()
+    ]
+    if not requested:
+        return specs
+    if len(requested) != len(set(requested)):
+        raise ValueError(f"Duplicate include classes: {requested}")
+    by_name = {spec.name: spec for spec in specs}
+    unknown = [name for name in requested if name not in by_name]
+    if unknown:
+        raise ValueError(f"Included classes are absent from the class config: {unknown}")
+    return [by_name[name] for name in requested]
 
 
 def text_prompt_from_specs(specs: list[ClassSpec], text_prompt: str | None) -> str:
@@ -371,21 +390,10 @@ def record_for_detection(detection: Detection, index: int) -> dict[str, Any]:
     }
 
 
-def label_color(index: int) -> np.ndarray:
-    return np.asarray(
-        [
-            (37 * (index + 1)) % 255,
-            (97 * (index + 3)) % 255,
-            (173 * (index + 5)) % 255,
-        ],
-        dtype=np.uint8,
-    )
-
-
 def save_overlay(rgb: np.ndarray, detections: list[Detection], output_path: Path) -> None:
     overlay = rgb.copy()
-    for index, detection in enumerate(detections):
-        color = label_color(index)
+    for detection in detections:
+        color = np.asarray(rgb8_for_class(detection.class_name), dtype=np.uint8)
         selected = detection.mask.astype(bool)
         overlay[selected] = (0.55 * overlay[selected] + 0.45 * color).astype(np.uint8)
 
@@ -397,7 +405,7 @@ def save_overlay(rgb: np.ndarray, detections: list[Detection], output_path: Path
         font = None
     for index, detection in enumerate(detections):
         x1, y1, x2, y2 = detection.bbox_xyxy
-        color = tuple(int(value) for value in label_color(index))
+        color = tuple(rgb8_for_class(detection.class_name))
         draw.rectangle((x1, y1, x2, y2), outline=color, width=2)
         label = f"{index}:{detection.class_name} {detection.grounding_score:.2f}"
         text_xy = (max(0, int(x1)), max(0, int(y1) - 12))
@@ -458,7 +466,9 @@ def main() -> None:
     )
     parser.add_argument("--sam-arch", default="vit_h")
     parser.add_argument("--class-config", type=Path)
+    parser.add_argument("--include-classes", default="")
     parser.add_argument("--text-prompt", default="")
+    parser.add_argument("--source-view-manifest", type=Path)
     parser.add_argument("--iteration", default=30000, type=int)
     parser.add_argument("--sh-degree", default=3, type=int)
     parser.add_argument("--camera-indices", default="")
@@ -478,23 +488,57 @@ def main() -> None:
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for the default GroundingDINO/SAM path")
 
-    specs = parse_class_specs(args.class_config, args.text_prompt or None)
+    specs = select_class_specs(
+        parse_class_specs(args.class_config, args.text_prompt or None),
+        args.include_classes,
+    )
+    if not specs:
+        raise ValueError("No GroundingDINO classes were selected")
     text_prompt = text_prompt_from_specs(specs, args.text_prompt or None)
 
-    rgb_dir = args.output_dir / "rgb_renders"
+    source_view_manifest: dict[str, Any] | None = None
+    source_frames_by_camera: dict[int, dict[str, Any]] = {}
+    if args.source_view_manifest is not None:
+        source_view_manifest = json.loads(args.source_view_manifest.read_text(encoding="utf-8"))
+        source_frames_by_camera = {
+            int(frame["camera_index"]): frame
+            for frame in source_view_manifest.get("frames", [])
+        }
+        rgb_dir = args.source_view_manifest.parent / "rgb_renders"
+        if not rgb_dir.is_dir():
+            raise FileNotFoundError(rgb_dir)
+    else:
+        rgb_dir = args.output_dir / "rgb_renders"
     mask_dir = args.output_dir / "mask_stacks"
     binary_mask_dir = args.output_dir / "binary_masks"
     overlay_dir = args.output_dir / "overlays"
-    for directory in (rgb_dir, mask_dir, binary_mask_dir, overlay_dir):
+    for directory in (mask_dir, binary_mask_dir, overlay_dir):
         directory.mkdir(parents=True, exist_ok=True)
+    if source_view_manifest is None:
+        rgb_dir.mkdir(parents=True, exist_ok=True)
 
     cameras = load_cameras(args.model_path)
     selected_items = selected_camera_items(cameras, args.camera_indices, args.count)
-    modules = load_flashsplat(args.flashsplat_root)
     ply_path = point_cloud_path(args.model_path, args.iteration)
-    gaussians = load_gaussians(modules, ply_path, args.sh_degree)
-    pipeline = default_pipeline()
-    background = background_tensor(args.white_background)
+    missing_source_views = [
+        camera_index
+        for camera_index, _camera in selected_items
+        if source_view_manifest is not None and camera_index not in source_frames_by_camera
+    ]
+    if missing_source_views:
+        raise ValueError(
+            "Selected cameras are absent from the source view manifest: "
+            f"{missing_source_views}"
+        )
+    modules = None
+    gaussians = None
+    pipeline = None
+    background = None
+    if source_view_manifest is None:
+        modules = load_flashsplat(args.flashsplat_root)
+        gaussians = load_gaussians(modules, ply_path, args.sh_degree)
+        pipeline = default_pipeline()
+        background = background_tensor(args.white_background)
 
     grounding_model, transforms_module, phrase_from_posmap = load_grounding_model(
         args.groundingdino_root,
@@ -513,6 +557,10 @@ def main() -> None:
         "requested_view_count": args.count,
         "requested_camera_indices": args.camera_indices,
         "selected_camera_indices": [camera_index for camera_index, _ in selected_items],
+        "source_view_manifest": (
+            str(args.source_view_manifest) if args.source_view_manifest is not None else None
+        ),
+        "reused_rgb_renders": source_view_manifest is not None,
         "output_directories": {
             "rgb_renders": str(rgb_dir),
             "mask_stacks": str(mask_dir),
@@ -541,12 +589,26 @@ def main() -> None:
 
     with torch.no_grad():
         for output_index, (camera_index, camera_json) in enumerate(selected_items):
-            camera = make_camera(camera_json, modules, args.max_width)
-            render_pkg = render_flashsplat(camera, gaussians, modules, pipeline, background)
-            rgb = tensor_to_rgb_array(render_pkg["render"])
-            filename = camera_filename(output_index, camera_json)
+            if source_view_manifest is not None:
+                source_frame = source_frames_by_camera[camera_index]
+                filename = str(source_frame["file"])
+                rgb_path = rgb_dir / filename
+                if not rgb_path.exists():
+                    raise FileNotFoundError(rgb_path)
+                rgb = np.asarray(Image.open(rgb_path).convert("RGB"), dtype=np.uint8)
+                render_height, render_width = rgb.shape[:2]
+            else:
+                if modules is None or gaussians is None or pipeline is None or background is None:
+                    raise RuntimeError("FlashSplat render state was not initialized")
+                camera = make_camera(camera_json, modules, args.max_width)
+                render_pkg = render_flashsplat(camera, gaussians, modules, pipeline, background)
+                rgb = tensor_to_rgb_array(render_pkg["render"])
+                filename = camera_filename(output_index, camera_json)
+                render_width = int(camera.image_width)
+                render_height = int(camera.image_height)
             stem = Path(filename).stem
-            Image.fromarray(rgb, mode="RGB").save(rgb_dir / filename)
+            if source_view_manifest is None:
+                Image.fromarray(rgb, mode="RGB").save(rgb_dir / filename)
 
             boxes, phrases, scores = run_grounding_dino(
                 grounding_model,
@@ -558,7 +620,7 @@ def main() -> None:
                 args.text_threshold,
                 device,
             )
-            boxes_xyxy = cxcywh_to_xyxy_pixels(boxes, int(camera.image_width), int(camera.image_height))
+            boxes_xyxy = cxcywh_to_xyxy_pixels(boxes, render_width, render_height)
             masks, sam_scores = run_sam_for_boxes(sam_predictor, rgb, boxes_xyxy, device)
 
             detections: list[Detection] = []
@@ -581,12 +643,12 @@ def main() -> None:
                 detections,
                 min_area=args.min_mask_area,
                 max_area_ratio=args.max_mask_area_ratio,
-                image_area=int(camera.image_width * camera.image_height),
+                image_area=int(render_width * render_height),
                 mask_nms_iou=args.mask_nms_iou,
                 max_detections=args.max_detections_per_view,
             )
 
-            mask_stack = np.zeros((0, int(camera.image_height), int(camera.image_width)), dtype=np.uint8)
+            mask_stack = np.zeros((0, render_height, render_width), dtype=np.uint8)
             if detections:
                 mask_stack = np.stack([detection.mask.astype(np.uint8) for detection in detections], axis=0)
             np.savez_compressed(mask_dir / f"{stem}.npz", masks=mask_stack)
@@ -600,8 +662,8 @@ def main() -> None:
                 "camera_index": camera_index,
                 "camera_id": int(camera_json["id"]),
                 "image_name": camera_json.get("img_name", ""),
-                "render_width": int(camera.image_width),
-                "render_height": int(camera.image_height),
+                "render_width": render_width,
+                "render_height": render_height,
                 "raw_detection_count": int(boxes.shape[0]),
                 "kept_mask_count": int(mask_stack.shape[0]),
                 "masks": [
