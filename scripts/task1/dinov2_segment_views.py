@@ -95,7 +95,7 @@ def build_segmenter(
     backbone.load_state_dict(strip_state_dict(raw_state), strict=True)
     backbone.eval().to(device)
 
-    model = init_segmentor(cfg)
+    model = init_segmentor(cfg, device=device)
     model.backbone.forward = partial(
         backbone.get_intermediate_layers,
         n=cfg.model.backbone.out_indices,
@@ -116,7 +116,7 @@ def build_segmenter(
 
 
 def inference_probabilities(model: Any, image_path: Path) -> np.ndarray:
-    """Return CxHxW probabilities using mmseg 0.27's configured test pipeline."""
+    """Return CxHxW probabilities using MMSeg's configured test pipeline."""
 
     import torch
     from mmcv.parallel import collate, scatter
