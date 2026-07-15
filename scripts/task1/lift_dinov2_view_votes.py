@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 from dinov2_ontology import load_ontology
-from dinov2_voting import sparse_view_votes
+from dinov2_voting import flashsplat_class_rows, sparse_view_votes
 from flashsplat_cameras import (
     background_tensor,
     default_pipeline,
@@ -139,12 +139,11 @@ def main() -> None:
                 gt_mask=gt_mask,
                 obj_num=int(class_ids.shape[0]),
             )
-            used_count = render_pkg["used_count"].detach().float().cpu().numpy()
-            if used_count.shape != (class_ids.shape[0], gaussian_count):
-                raise ValueError(
-                    f"Unexpected used_count shape {used_count.shape}; expected "
-                    f"{(class_ids.shape[0], gaussian_count)}"
-                )
+            used_count = flashsplat_class_rows(
+                render_pkg["used_count"].detach().float().cpu().numpy(),
+                int(class_ids.shape[0]),
+                gaussian_count,
+            )
             indices, vote_classes, weights = sparse_view_votes(
                 used_count,
                 class_ids,

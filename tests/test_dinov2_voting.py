@@ -13,11 +13,40 @@ sys.path.insert(0, str(ROOT / "scripts" / "task1"))
 
 from dinov2_voting import (  # noqa: E402
     accumulate_vote_arrays,
+    flashsplat_class_rows,
     sparse_view_votes,
     supporting_view_counts,
     threshold_winners,
     winner_metrics,
 )
+
+
+class FlashSplatClassRowsTest(unittest.TestCase):
+    def test_strips_unused_zero_sentinel_row(self) -> None:
+        used = np.asarray(
+            [[1.0, 2.0], [3.0, 4.0], [0.0, 0.0]],
+            dtype=np.float32,
+        )
+
+        rows = flashsplat_class_rows(used, class_count=2, gaussian_count=2)
+
+        np.testing.assert_array_equal(rows, used[:2])
+
+    def test_rejects_nonzero_sentinel_row(self) -> None:
+        used = np.asarray(
+            [[1.0, 2.0], [3.0, 4.0], [0.0, 0.1]],
+            dtype=np.float32,
+        )
+
+        with self.assertRaisesRegex(ValueError, "sentinel row"):
+            flashsplat_class_rows(used, class_count=2, gaussian_count=2)
+
+    def test_accepts_exact_class_axis(self) -> None:
+        used = np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+
+        rows = flashsplat_class_rows(used, class_count=2, gaussian_count=2)
+
+        np.testing.assert_array_equal(rows, used)
 
 
 class SparseViewVoteTest(unittest.TestCase):

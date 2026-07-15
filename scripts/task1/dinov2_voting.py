@@ -8,6 +8,34 @@ from typing import Iterable
 import numpy as np
 
 
+def flashsplat_class_rows(
+    used_count: np.ndarray,
+    class_count: int,
+    gaussian_count: int,
+) -> np.ndarray:
+    """Return FlashSplat rows corresponding to the requested local classes.
+
+    FlashSplat currently allocates ``num_obj + 1`` rows while accepting labels
+    in ``0..num_obj-1``. The final row is therefore an unused zero sentinel.
+    Accept an exact class-axis match as well so this remains compatible if the
+    upstream allocation is corrected later.
+    """
+
+    used = np.asarray(used_count, dtype=np.float32)
+    expected = (class_count, gaussian_count)
+    if used.shape == expected:
+        return used
+    sentinel_shape = (class_count + 1, gaussian_count)
+    if used.shape == sentinel_shape:
+        if np.count_nonzero(used[-1]) != 0:
+            raise ValueError("FlashSplat sentinel row contains nonzero vote mass")
+        return used[:-1]
+    raise ValueError(
+        f"Unexpected used_count shape {used.shape}; expected {expected} "
+        f"or zero-sentinel shape {sentinel_shape}"
+    )
+
+
 def sparse_view_votes(
     used_count: np.ndarray,
     project_class_ids: np.ndarray,

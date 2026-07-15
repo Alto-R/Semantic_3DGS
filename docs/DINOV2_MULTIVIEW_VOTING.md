@@ -131,7 +131,9 @@ the existing FlashSplat rasterizer.
 
 Compact the project classes present in a view into one integer mask, keeping
 local row zero for abstention. One FlashSplat call returns `used_count[k,g]`
-for all local rows, including abstention. Define
+for all local rows, including abstention. The current FlashSplat rasterizer
+allocates one additional all-zero sentinel row; validate and remove that row
+before voting. Define
 `visibility[g] = sum_k used_count[k,g]`. A supported class row casts:
 
 ```
