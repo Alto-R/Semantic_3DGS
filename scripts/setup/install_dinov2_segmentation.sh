@@ -29,6 +29,12 @@ conda run -n "${ENV_NAME}" python -m pip install \
   mmcv-full==1.7.2 \
   --only-binary=mmcv-full \
   -f https://download.openmmlab.com/mmcv/dist/cu117/torch2.0.0/index.html
+# Current OpenCV releases can pull NumPy 2.x, but the official Torch 2.0
+# binaries were compiled against NumPy 1.x and cannot export tensors to NumPy
+# with NumPy 2 installed. Keep both packages on the last compatible line.
+conda run -n "${ENV_NAME}" python -m pip install \
+  numpy==1.26.4 \
+  opencv-python==4.11.0.86
 
 mkdir -p "${CHECKPOINT_DIR}"
 download_if_missing() {
@@ -54,16 +60,22 @@ PYTHONPATH="${DINOV2_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
 conda run -n "${ENV_NAME}" python -c '
 import mmcv
 import mmseg
+import numpy
 import torch
 import torchvision
+import cv2
 import mmcv._ext
 import dinov2.eval.segmentation.models
 print("torch", torch.__version__)
 print("torchvision", torchvision.__version__)
 print("mmcv", mmcv.__version__)
 print("mmseg", mmseg.__version__)
+print("numpy", numpy.__version__)
+print("opencv", cv2.__version__)
 print("torch CUDA runtime", torch.version.cuda)
 print("CUDA available on this node", torch.cuda.is_available())
+assert numpy.__version__ == "1.26.4"
+assert torch.ones(1).numpy().shape == (1,)
 '
 
 printf 'DINOv2 root: %s\ncheckpoint directory: %s\nconda environment: %s\n' \
