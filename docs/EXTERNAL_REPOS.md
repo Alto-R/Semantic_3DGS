@@ -19,6 +19,7 @@ Do not commit these repositories into this project.
 | FlashSplat | Mask-to-Gaussian proposal lifting | https://github.com/florinshen/FlashSplat |
 | SegAnyGAussians | Semantic rasterizer extensions and Segment Anything dependency | https://github.com/Jumpat/SegAnyGAussians |
 | Grounded Segment Anything | GroundingDINO and SAM semantic mask generation | https://github.com/IDEA-Research/Grounded-Segment-Anything |
+| DINOv2 | ViT-L/14 backbone and ADE20K linear semantic head | https://github.com/facebookresearch/dinov2 |
 
 ## Commit Recording Command
 
@@ -42,3 +43,10 @@ to avoid pulling large assets into project storage.
 Required submodules for GraphDeco, FlashSplat, and SAGA were initialized. SAGA's
 GitHub SSH submodule URLs are rewritten to HTTPS in environments without GitHub
 SSH credentials.
+
+The DINOv2 semantic route uses its own `dinov2_segmentation` Conda environment.
+Create it and download the official ViT-L/14 ADE20K linear checkpoints with:
+
+```bash
+bash scripts/setup/install_dinov2_segmentation.sh
+```

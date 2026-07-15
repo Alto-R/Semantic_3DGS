@@ -28,6 +28,7 @@ clone_or_update EyeNavGS_NTHU_Dataset https://github.com/sawalee0811/EyeNavGS_NT
 clone_or_update gaussian-splatting https://github.com/graphdeco-inria/gaussian-splatting.git
 clone_or_update FlashSplat https://github.com/florinshen/FlashSplat.git
 clone_or_update SegAnyGAussians https://github.com/Jumpat/SegAnyGAussians.git
+clone_or_update dinov2 https://github.com/facebookresearch/dinov2.git
 
 echo
 echo "initializing required submodules"

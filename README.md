@@ -66,6 +66,13 @@ Detailed methods and run evidence remain in
 `docs/TASK1_SEMANTIC_ANNOTATION.md`; the source task documents are
 `TASK_BRIEF_EyeNavGS_Semantic_Annotation.md` and `INTERNSHIP_SCHEDULE.md`.
 
+A separate DINOv2 v1 route is now available for evaluation without modifying
+the accepted GroundingDINO pipeline. It uses the official ViT-L/14 ADE20K
+linear head, every real scene camera, confidence-aware abstention, and exact
+disk-backed multiview fusion. Its design and run procedure are documented in
+`docs/DINOV2_MULTIVIEW_VOTING.md`; Room is the first pilot, and no DINOv2 run is
+accepted until its overlays and final labels are reviewed.
+
 ## Superseded Task 1 Run Record
 
 These outputs may be deleted from cluster storage. "Superseded" does not mean
