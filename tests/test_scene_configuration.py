@@ -46,7 +46,7 @@ class SceneConfigurationTest(unittest.TestCase):
         self.assertIn("guitar", class_names)
         self.assertTrue(class_names.issubset(CLASS_COLORS))
 
-    def test_room_hybrid_extension_config_is_explicit_and_unpromoted(self) -> None:
+    def test_room_hybrid_extension_config_has_reviewed_defaults(self) -> None:
         path = ROOT / "configs" / "task1_hybrid_extensions.room.json"
         config = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(config["scene"], "room")
@@ -54,7 +54,10 @@ class SceneConfigurationTest(unittest.TestCase):
             config["candidate_classes"],
             ["piano", "speaker", "guitar", "media_console"],
         )
-        self.assertEqual(config["default_enabled_classes"], [])
+        self.assertEqual(config["default_enabled_classes"], ["piano", "speaker"])
+        self.assertTrue(
+            set(config["default_enabled_classes"]).issubset(config["candidate_classes"])
+        )
 
     def test_truck_class_config_is_complete_and_prioritized(self) -> None:
         config = self.assert_scene_config("truck")

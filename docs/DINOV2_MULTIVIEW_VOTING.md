@@ -252,9 +252,12 @@ cleanup branch, and merges only surviving configured extension groups. The
 standalone GroundingDINO scheduler remains available for isolated debugging.
 
 Room extension candidates live in
-`configs/task1_hybrid_extensions.room.json`. Its default-enabled list stays
-empty until per-class hybrid QA is accepted; during QA, pass an explicit
-`GROUNDING_EXTENSION_CLASSES` value.
+`configs/task1_hybrid_extensions.room.json`. Cached same-camera hybrid QA
+accepted `piano` and `speaker`, so they are the Room defaults when the toggle
+is enabled. `media_console` remains an explicit-only candidate because its
+cached mask leaked broadly into wall and floor, while `guitar` remains an
+explicit-only no-op candidate. Pass `GROUNDING_EXTENSION_CLASSES` to run a
+single candidate during further QA.
 
 ### Room pilot commands
 

@@ -7,5 +7,8 @@
     "guitar",
     "media_console"
   ],
-  "default_enabled_classes": []
+  "default_enabled_classes": [
+    "piano",
+    "speaker"
+  ]
 }
