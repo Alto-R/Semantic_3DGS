@@ -5,9 +5,13 @@ ENV_NAME="${1:-gaussian_grouping_true}"
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORKSPACE_ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
 EXTERNAL_ROOT="${2:-${WORKSPACE_ROOT}/external}"
+CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-7.5;8.6+PTX}"
+BUILD_JOBS="${MAX_JOBS:-4}"
 
 echo "conda env:     $ENV_NAME"
 echo "external root: $EXTERNAL_ROOT"
+echo "CUDA arches:   $CUDA_ARCH_LIST"
+echo "build jobs:    $BUILD_JOBS"
 
 install_editable() {
   local path="$1"
@@ -18,7 +22,14 @@ install_editable() {
   fi
   echo
   echo "installing $name"
-  conda run -n "$ENV_NAME" python -m pip install --no-build-isolation --no-deps -e "$path"
+  TORCH_CUDA_ARCH_LIST="$CUDA_ARCH_LIST" \
+    MAX_JOBS="$BUILD_JOBS" \
+    conda run -n "$ENV_NAME" python -m pip install \
+      --no-build-isolation \
+      --no-deps \
+      --no-cache-dir \
+      --force-reinstall \
+      -e "$path"
 }
 
 install_editable \

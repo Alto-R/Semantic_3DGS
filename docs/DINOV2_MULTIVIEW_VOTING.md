@@ -303,6 +303,12 @@ that alignment is accepted.
   Out of scope for this front-end; see Extensions.
 - **Memory blow-up on large scenes.** Map to the project ontology before
   accumulation and use the temporary disk-backed exact vote matrix.
+- **FlashSplat binary portability.** An extension compiled only for the RTX
+  8000's `sm_75` architecture is invalid on an L40 (`sm_89`) and can surface as
+  a nonsensical CUDA allocation rather than a clear architecture error.
+  `scripts/setup/install_semantic_extensions.sh` therefore builds native
+  `sm_75`, native `sm_86`, and `sm_86` PTX by default; the PTX is forward-JIT
+  compatible with the L40 while preserving RTX 8000 support.
 
 ## 9. Optional Extensions (not required for v1)
 
