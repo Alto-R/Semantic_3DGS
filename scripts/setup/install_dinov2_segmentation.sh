@@ -29,7 +29,7 @@ if ! conda env list | awk '{print $1}' | grep -Fxq "${ENV_NAME}"; then
   conda create -y -n "${ENV_NAME}" "python=${PYTHON_VERSION}"
 fi
 
-conda run -n "${ENV_NAME}" python -m pip install --upgrade pip
+conda run -n "${ENV_NAME}" python -m pip install --upgrade pip "setuptools<81"
 conda run -n "${ENV_NAME}" python -m pip install \
   torch==2.0.0 torchvision==0.15.0 \
   --index-url https://download.pytorch.org/whl/cu117
