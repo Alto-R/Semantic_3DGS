@@ -25,6 +25,9 @@ The alternative prompt-free DINOv2 route is implemented by:
   view, including low-confidence abstention.
 - `task1/fuse_dinov2_multiview_votes.py`: exact disk-backed vote fusion,
   thresholding, thing-instance components, pruning, and D1 export.
+- `task1/build_grounding_guard_config.py`: builds the automatic GroundingDINO
+  vocabulary from DINO classes present in the fused scene plus the selected
+  custom extension classes. DINO-derived entries are competition-only guards.
 - `task1/run_grounding_semantic_branch.py`: shared GroundingDINO/SAM,
   FlashSplat, and semantic-fusion branch used by both scheduler paths.
 - `task1/merge_semantic_extensions.py`: deterministic Gaussian-label merge for

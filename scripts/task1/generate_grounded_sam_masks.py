@@ -560,6 +560,8 @@ def main() -> None:
         "source_view_manifest": (
             str(args.source_view_manifest) if args.source_view_manifest is not None else None
         ),
+        "class_config": str(args.class_config) if args.class_config is not None else None,
+        "included_classes": args.include_classes,
         "reused_rgb_renders": source_view_manifest is not None,
         "output_directories": {
             "rgb_renders": str(rgb_dir),

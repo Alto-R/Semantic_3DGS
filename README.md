@@ -74,6 +74,12 @@ from ADE20K; `0` keeps the prompt-free DINOv2 result. The standalone
 GroundingDINO scheduler remains available for debugging. The design and run
 procedure are documented in `docs/DINOV2_MULTIVIEW_VOTING.md`.
 
+When the extension is enabled, its detector vocabulary is generated from the
+semantic classes actually present in the fused DINO scene plus the configured
+custom classes. DINO-derived classes act as distractor/ownership guards during
+GroundingDINO fusion; only the custom allowlist is eligible for the final
+merge, so guard detections cannot replace DINO labels.
+
 ## Superseded Task 1 Run Record
 
 These outputs may be deleted from cluster storage. "Superseded" does not mean

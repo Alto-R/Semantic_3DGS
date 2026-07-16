@@ -240,6 +240,7 @@ BASELINE_LABELS         (optional accepted GroundingDINO gaussian_labels.npy)
 ENABLE_GROUNDINGDINO    (default 0; set 1 for continuous extension branch)
 GROUNDING_EXTENSION_CONFIG
 GROUNDING_EXTENSION_CLASSES (optional QA override)
+GROUNDING_GUARD_MAX_PROMPT_WORDS (default 180)
 GROUNDING_BASE_VIEW_COUNT   (default 50)
 GROUNDING_TARGET_VIEW_COUNT (default 20)
 COLOR_MODE              (class by default; instance for debugging only)
@@ -248,16 +249,34 @@ COLOR_MODE              (class by default; instance for debugging only)
 When enabled, the scheduler reuses the all-camera RGB renders, selects 50
 evenly spaced seed views, adds up to 20 projection-safe views using low DINOv2
 coverage and pose diversity, runs the mature GroundingDINO/SAM/FlashSplat
-cleanup branch, and merges only surviving configured extension groups. The
+cleanup branch, and merges only surviving configured extension groups. Before
+detection it automatically builds a per-run vocabulary containing the DINOv2
+classes that survived scene fusion plus the selected extension classes. When a
+DINO class matches a richer scene prompt specification (for example,
+`television_receiver` to `television`), it reuses those prompts; otherwise it
+uses the normalized DINO class name. Thing guards are retained ahead of stuff
+guards if the conservative prompt-word budget is reached. Extension prompts
+are never dropped.
+
+Both roles participate in GroundingDINO/SAM and evidence-based fusion, which
+lets an existing DINO class compete with a custom false positive. The merger
+still accepts only `GROUNDING_EXTENSION_CLASSES`; guard groups are retained as
+debug evidence but cannot alter the DINO base. Guards are ordered ahead of
+extensions for the fusion's exact-tie fallback, while non-tied ownership
+continues to be decided by multi-view evidence. The generated config and source
+hashes are written to
+`stages/04_grounding_camera_selection/grounding_guard_config.json`. The
 standalone GroundingDINO scheduler remains available for isolated debugging.
 
 Room extension candidates live in
-`configs/task1_hybrid_extensions.room.json`. Cached same-camera hybrid QA
-accepted `piano` and `speaker`, so they are the Room defaults when the toggle
-is enabled. `media_console` remains an explicit-only candidate because its
-cached mask leaked broadly into wall and floor, while `guitar` remains an
-explicit-only no-op candidate. Pass `GROUNDING_EXTENSION_CLASSES` to run a
-single candidate during further QA.
+`configs/task1_hybrid_extensions.room.json`. Cached same-camera QA originally
+selected `piano` and `speaker` as defaults. A later full continuous run exposed
+an extension-only `piano` false positive over the television region; the
+automatic guard vocabulary addresses that failure mode without permitting a
+guard label to enter the final merge. `media_console` remains an explicit-only
+candidate because its cached mask leaked broadly into wall and floor, while
+`guitar` remains an explicit-only no-op candidate. Pass
+`GROUNDING_EXTENSION_CLASSES` to run a single candidate during further QA.
 
 ### Room pilot commands
 

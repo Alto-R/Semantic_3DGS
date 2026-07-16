@@ -28,6 +28,7 @@ VIEW_DIR="${OUT_DIR}/stages/01_real_camera_views"
 VOTE_DIR="${OUT_DIR}/stages/02_flashsplat_votes"
 FUSION_DIR="${OUT_DIR}/stages/03_exact_fusion"
 GROUNDING_SELECTION_DIR="${OUT_DIR}/stages/04_grounding_camera_selection"
+GROUNDING_GUARD_CONFIG="${GROUNDING_SELECTION_DIR}/grounding_guard_config.json"
 GROUNDING_MASK_DIR="${OUT_DIR}/stages/05_grounded_sam"
 GROUNDING_PROPOSAL_DIR="${OUT_DIR}/stages/06_grounding_flashsplat"
 GROUNDING_FUSION_DIR="${OUT_DIR}/stages/07_grounding_fusion"
@@ -55,6 +56,7 @@ COLOR_MODE="${COLOR_MODE:-class}"
 GROUNDING_CLASS_CONFIG="${GROUNDING_CLASS_CONFIG:-${PROJECT_ROOT}/configs/task1_semantic_classes.${SCENE}.json}"
 GROUNDING_EXTENSION_CONFIG="${GROUNDING_EXTENSION_CONFIG:-${PROJECT_ROOT}/configs/task1_hybrid_extensions.${SCENE}.json}"
 GROUNDING_EXTENSION_CLASSES="${GROUNDING_EXTENSION_CLASSES:-}"
+GROUNDING_GUARD_MAX_PROMPT_WORDS="${GROUNDING_GUARD_MAX_PROMPT_WORDS:-180}"
 GROUNDING_BASE_VIEW_COUNT="${GROUNDING_BASE_VIEW_COUNT:-50}"
 GROUNDING_TARGET_VIEW_COUNT="${GROUNDING_TARGET_VIEW_COUNT:-20}"
 GROUNDING_TARGET_CANDIDATE_COUNT="${GROUNDING_TARGET_CANDIDATE_COUNT:-100}"
@@ -130,6 +132,10 @@ fi
 
 GROUNDING_EXTENSION_CLASSES_RESOLVED=""
 if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
+  if ! [[ "${GROUNDING_GUARD_MAX_PROMPT_WORDS}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "GROUNDING_GUARD_MAX_PROMPT_WORDS must be a positive integer" >&2
+    exit 2
+  fi
   test -f "${GROUNDING_CLASS_CONFIG}"
   test -f "${GROUNDING_EXTENSION_CONFIG}"
   test -d "${GROUNDED_SAM_ROOT}"
@@ -170,10 +176,11 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
 fi
 
 if [[ "${CONFIG_ONLY}" = "1" ]]; then
-  printf 'scene=%s\nmodel=%s\noutput=%s\ncamera_source=%s\nview_count=%s\ndinov2_head=%s\nenable_groundingdino=%s\ngrounding_extension_classes=%s\ncolor_mode=%s\n' \
+  printf 'scene=%s\nmodel=%s\noutput=%s\ncamera_source=%s\nview_count=%s\ndinov2_head=%s\nenable_groundingdino=%s\ngrounding_extension_classes=%s\ngrounding_guard_max_prompt_words=%s\ncolor_mode=%s\n' \
     "${SCENE}" "${MODEL_DIR}" "${OUT_DIR}" "${CAMERA_SOURCE}" "${VIEW_COUNT}" \
     "${DINOV2_HEAD}" "${ENABLE_GROUNDINGDINO}" \
-    "${GROUNDING_EXTENSION_CLASSES_RESOLVED:-<disabled>}" "${COLOR_MODE}"
+    "${GROUNDING_EXTENSION_CLASSES_RESOLVED:-<disabled>}" \
+    "${GROUNDING_GUARD_MAX_PROMPT_WORDS}" "${COLOR_MODE}"
   exit 0
 fi
 
@@ -224,6 +231,7 @@ run_report() {
   echo "dinov2_head=${DINOV2_HEAD}"
   echo "enable_groundingdino=${ENABLE_GROUNDINGDINO}"
   echo "grounding_extension_classes=${GROUNDING_EXTENSION_CLASSES_RESOLVED:-<disabled>}"
+  echo "grounding_guard_max_prompt_words=${GROUNDING_GUARD_MAX_PROMPT_WORDS}"
   echo "grounding_base_view_count=${GROUNDING_BASE_VIEW_COUNT}"
   echo "grounding_target_view_count=${GROUNDING_TARGET_VIEW_COUNT}"
   echo "color_mode=${COLOR_MODE}"
@@ -305,14 +313,24 @@ FINAL_MODE="dinov2"
 MERGED_GROUNDING_GROUP_COUNT=0
 
 if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
-  run_stage 05a_grounding_seed_views "${GAUSSIAN_ENV}" \
+  run_stage 05a_grounding_guard_config "${GAUSSIAN_ENV}" \
+    python scripts/task1/build_grounding_guard_config.py \
+      --dinov2-label-map "${FUSION_DIR}/label_map.json" \
+      --scene-class-config "${GROUNDING_CLASS_CONFIG}" \
+      --extension-config "${GROUNDING_EXTENSION_CONFIG}" \
+      --include-classes "${GROUNDING_EXTENSION_CLASSES_RESOLVED}" \
+      --output "${GROUNDING_GUARD_CONFIG}" \
+      --max-prompt-words "${GROUNDING_GUARD_MAX_PROMPT_WORDS}" \
+      --overwrite
+
+  run_stage 05b_grounding_seed_views "${GAUSSIAN_ENV}" \
     python scripts/task1/select_targeted_cameras.py seed \
       --source-manifest "${VIEW_DIR}/view_manifest.json" \
       --output "${GROUNDING_SELECTION_DIR}/seed_manifest.json" \
       --indices-output "${GROUNDING_SELECTION_DIR}/seed_indices.txt" \
       --count "${GROUNDING_BASE_VIEW_COUNT}"
 
-  run_stage 05b_grounding_candidate_screen "${GAUSSIAN_ENV}" \
+  run_stage 05c_grounding_candidate_screen "${GAUSSIAN_ENV}" \
     python scripts/task1/select_targeted_cameras.py screen \
       --model-path "${MODEL_DIR}" \
       --baseline-manifest "${GROUNDING_SELECTION_DIR}/seed_manifest.json" \
@@ -334,7 +352,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
     CANDIDATE_CAMERA_INDICES="$(tr -d '\r\n' < "${GROUNDING_SELECTION_DIR}/candidate_indices.txt")"
     test -n "${CANDIDATE_CAMERA_INDICES}"
 
-    run_stage 05c_grounding_candidate_overlays "${GAUSSIAN_ENV}" \
+    run_stage 05d_grounding_candidate_overlays "${GAUSSIAN_ENV}" \
       python scripts/task1/render_auto_label_overlays.py \
         --model-path "${MODEL_DIR}" \
         --labels-npy "${FUSION_DIR}/gaussian_labels.npy" \
@@ -350,7 +368,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
         --max-labels 0 \
         --color-mode "${COLOR_MODE}"
 
-    run_stage 05d_grounding_candidate_coverage "${GAUSSIAN_ENV}" \
+    run_stage 05e_grounding_candidate_coverage "${GAUSSIAN_ENV}" \
       python scripts/task1/measure_overlay_coverage.py \
         --rgb-dir "${GROUNDING_SELECTION_DIR}/candidate_rgb" \
         --overlay-dir "${GROUNDING_SELECTION_DIR}/candidate_overlays" \
@@ -358,7 +376,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
         --difference-threshold 2 \
         --exclude-border 1
 
-    run_stage 05e_grounding_target_selection "${GAUSSIAN_ENV}" \
+    run_stage 05f_grounding_target_selection "${GAUSSIAN_ENV}" \
       python scripts/task1/select_targeted_cameras.py select \
         --model-path "${MODEL_DIR}" \
         --baseline-manifest "${GROUNDING_SELECTION_DIR}/seed_manifest.json" \
@@ -387,8 +405,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
       --label-map-path "${GROUNDING_FUSION_DIR}/label_map.json" \
       --semantic-ply-path "${GROUNDING_FUSION_DIR}/semantic_point_cloud.ply" \
       --log-dir "${RUN_LOG_DIR}" \
-      --class-config "${GROUNDING_CLASS_CONFIG}" \
-      --include-classes "${GROUNDING_EXTENSION_CLASSES_RESOLVED}" \
+      --class-config "${GROUNDING_GUARD_CONFIG}" \
       --source-view-manifest "${VIEW_DIR}/view_manifest.json" \
       --camera-indices "${GROUNDING_CAMERA_INDICES}" \
       --view-count "${GROUNDING_VIEW_COUNT}" \
