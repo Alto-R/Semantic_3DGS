@@ -58,3 +58,10 @@ scene-specific file is absent, the generic scheduler falls back to
 Semantic colors are keyed by normalized class name, not label ID or run-local
 label ordering. `COLOR_MODE=class` is the comparison default; `instance` is an
 optional debug view. Every run writes a JSON and PNG color legend.
+
+Intermediate DINOv2 fusion, GroundingDINO fusion, and hybrid merge directories
+store compact label arrays, maps, and summaries but no semantic PLY copy. The
+selected result writes one `deliverables/semantic_point_cloud.ply`. Every run
+also writes `visualizations/semantic_point_cloud_supersplat_debug.ply`; a hybrid
+run with surviving custom groups additionally writes the focused
+`grounding_extensions_supersplat_debug.ply` for direct extension QA.

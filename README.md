@@ -156,6 +156,9 @@ Future semantic runs no longer generate the redundant
 `semantic_point_cloud_rgb_debug.ply` export or its JSON inspection. SuperSplat
 debug PLYs remain the supported colorized 3D visualization, while
 `deliverables/semantic_point_cloud.ply` remains the required labeled output.
+Intermediate fusion and merge stages retain compact label arrays and metadata,
+not duplicate semantic PLYs. Hybrid runs also provide a focused
+`grounding_extensions_supersplat_debug.ply` with non-extension geometry dimmed.
 
 See:
 

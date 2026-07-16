@@ -60,7 +60,8 @@ def main() -> None:
     parser.add_argument("--proposal-dir", required=True, type=Path)
     parser.add_argument("--fusion-dir", required=True, type=Path)
     parser.add_argument("--label-map-path", required=True, type=Path)
-    parser.add_argument("--semantic-ply-path", required=True, type=Path)
+    parser.add_argument("--semantic-ply-path", type=Path)
+    parser.add_argument("--no-semantic-ply", action="store_true")
     parser.add_argument("--log-dir", required=True, type=Path)
     parser.add_argument("--class-config", required=True, type=Path)
     parser.add_argument("--include-classes", default="")
@@ -91,6 +92,8 @@ def main() -> None:
     parser.add_argument("--skip-proposal-generation", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
+    if args.no_semantic_ply and args.semantic_ply_path is not None:
+        raise ValueError("--no-semantic-ply and --semantic-ply-path are mutually exclusive")
 
     python = sys.executable
     if not args.skip_mask_generation:
@@ -187,8 +190,6 @@ def main() -> None:
         str(args.fusion_dir / "semantic_group_summary.json"),
         "--label-map-path",
         str(args.label_map_path),
-        "--semantic-ply-path",
-        str(args.semantic_ply_path),
         "--class-config",
         str(args.class_config),
         "--iteration",
@@ -254,6 +255,10 @@ def main() -> None:
         "--min-label-score",
         str(args.min_label_score),
     ]
+    if args.no_semantic_ply:
+        command.append("--no-semantic-ply")
+    else:
+        add_optional(command, "--semantic-ply-path", args.semantic_ply_path)
     if args.overwrite:
         command.append("--overwrite")
     run_logged(command, args.log_dir / "grounding_03_semantic_fusion.log")

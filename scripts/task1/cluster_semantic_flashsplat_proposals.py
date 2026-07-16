@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 from add_labels_from_npy import write_ply_with_labels
-from ply_utils import read_ply_header, vertex_data_memmap
+from ply_utils import read_ply_header, resolve_semantic_ply_output, vertex_data_memmap
 
 
 DEFAULT_STUFF_CLASSES = {"building", "ground", "road", "sidewalk", "sky", "vegetation", "terrain"}
@@ -954,11 +954,12 @@ def main() -> None:
     )
     parser.add_argument("--min-label-score", default=0.0, type=float)
     parser.add_argument("--scene", default="")
-    parser.add_argument("--semantic-ply-name", default="semantic_point_cloud.ply")
+    parser.add_argument("--semantic-ply-name")
     parser.add_argument("--labels-path", type=Path)
     parser.add_argument("--label-map-path", type=Path)
     parser.add_argument("--summary-path", type=Path)
     parser.add_argument("--semantic-ply-path", type=Path)
+    parser.add_argument("--no-semantic-ply", action="store_true")
     parser.add_argument("--require-class", action="store_true", default=True)
     parser.add_argument("--allow-unknown-class", dest="require_class", action="store_false")
     parser.add_argument("--overwrite", action="store_true")
@@ -1097,10 +1098,21 @@ def main() -> None:
     labels_path = args.labels_path or args.output_dir / "gaussian_labels.npy"
     label_map_path = args.label_map_path or args.output_dir / "label_map.json"
     summary_path = args.summary_path or args.output_dir / "semantic_group_summary.json"
-    semantic_ply = args.semantic_ply_path or args.output_dir / args.semantic_ply_name
-    for path in [labels_path, label_map_path, summary_path, semantic_ply]:
+    semantic_ply = resolve_semantic_ply_output(
+        args.output_dir,
+        semantic_ply_path=args.semantic_ply_path,
+        semantic_ply_name=args.semantic_ply_name,
+        disabled=args.no_semantic_ply,
+    )
+    output_files = [
+        labels_path,
+        label_map_path,
+        summary_path,
+        *([semantic_ply] if semantic_ply is not None else []),
+    ]
+    for path in output_files:
         path.parent.mkdir(parents=True, exist_ok=True)
-    for path in [labels_path, label_map_path, summary_path, semantic_ply]:
+    for path in output_files:
         if path.exists() and not args.overwrite:
             raise FileExistsError(f"{path} exists; pass --overwrite to replace it")
 
@@ -1180,9 +1192,11 @@ def main() -> None:
         "groups": [group_summary(group, names_by_id[group.group_id]) for group in groups],
     }
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    write_ply_with_labels(ply_path, semantic_ply, labels)
-
-    print(f"wrote {semantic_ply}")
+    if semantic_ply is not None:
+        write_ply_with_labels(ply_path, semantic_ply, labels)
+        print(f"wrote {semantic_ply}")
+    else:
+        print("semantic PLY disabled; retained labels and label map only")
     print(json.dumps(histogram, sort_keys=True))
 
 

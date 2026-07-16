@@ -81,7 +81,8 @@ load 3DGS model + cameras.json
  -> lift per-view class labels to Gaussian votes
  -> accumulate votes across all views per Gaussian
  -> argmax vote with min-support thresholds  (else unlabeled)
- -> prune / instance-ify / export semantic_point_cloud.ply + label_map.json
+ -> prune / instance-ify / retain labels + label_map.json
+ -> publish one final semantic_point_cloud.ply
  -> validate
 ```
 
@@ -187,8 +188,10 @@ contract:
   deterministic instance IDs.
 - Apply only the existing scene-neutral support-adaptive size thresholds. A
   pruned component becomes unlabeled and is not reassigned.
-- Build `label_map.json` and write `semantic_point_cloud.ply` with the added
-  `property int label` using `write_ply_with_labels`.
+- Build `label_map.json` and retain `gaussian_labels.npy` for downstream stages.
+- Do not materialize a semantic PLY inside an intermediate fusion or merge
+  stage. The selected final result alone writes
+  `deliverables/semantic_point_cloud.ply` with the added `property int label`.
 
 ### Stage 6 - Validation
 
@@ -213,6 +216,9 @@ outputs/eyenavgs_task1/<scene>_dinov2/
   deliverables/
     semantic_point_cloud.ply
     label_map.json
+  visualizations/
+    semantic_point_cloud_supersplat_debug.ply
+    grounding_extensions_supersplat_debug.ply  # hybrid mode with accepted groups
   validation/
     task1_validation.json
     visible_overlay_coverage.json
@@ -267,6 +273,14 @@ continues to be decided by multi-view evidence. The generated config and source
 hashes are written to
 `stages/04_grounding_camera_selection/grounding_guard_config.json`. The
 standalone GroundingDINO scheduler remains available for isolated debugging.
+
+The final visualization export always creates a stable-color full-scene
+SuperSplat PLY. Hybrid runs with accepted extension groups also create a focused
+SuperSplat PLY that leaves the extension classes colored and dims every other
+Gaussian. These are the supported direct 3D debugging artifacts. Intermediate
+stage semantic PLYs are intentionally omitted because they duplicate the full
+3DGS payload; stage labels, maps, summaries, masks, and overlays retain the
+actual diagnostic state without that storage duplication.
 
 Room extension candidates live in
 `configs/task1_hybrid_extensions.room.json`. Cached same-camera QA originally

@@ -21,7 +21,7 @@ from dinov2_voting import (
     threshold_winners,
     winner_metrics,
 )
-from ply_utils import read_ply_header, vertex_data_memmap
+from ply_utils import read_ply_header, resolve_semantic_ply_output, vertex_data_memmap
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -47,7 +47,7 @@ class CandidateGroup:
     final_id: int = 0
 
 
-def output_paths(output_dir: Path, semantic_ply_name: str) -> dict[str, Path]:
+def output_paths(output_dir: Path) -> dict[str, Path]:
     return {
         "labels": output_dir / "gaussian_labels.npy",
         "project_classes": output_dir / "gaussian_project_class_ids.npy",
@@ -56,7 +56,6 @@ def output_paths(output_dir: Path, semantic_ply_name: str) -> dict[str, Path]:
         "supporting_views": output_dir / "winner_supporting_views.npy",
         "label_map": output_dir / "label_map.json",
         "summary": output_dir / "dinov2_vote_summary.json",
-        "semantic_ply": output_dir / semantic_ply_name,
     }
 
 
@@ -315,7 +314,9 @@ def main() -> None:
     parser.add_argument("--adaptive-stuff-min-view-ratio", default=0.5, type=float)
     parser.add_argument("--adaptive-stuff-threshold-ratio", default=0.75, type=float)
     parser.add_argument("--adaptive-thing-threshold-floor-ratio", default=0.5, type=float)
-    parser.add_argument("--semantic-ply-name", default="semantic_point_cloud.ply")
+    parser.add_argument("--semantic-ply-name")
+    parser.add_argument("--semantic-ply-path", type=Path)
+    parser.add_argument("--no-semantic-ply", action="store_true")
     parser.add_argument("--scene", default="")
     parser.add_argument("--baseline-labels", type=Path)
     parser.add_argument("--overwrite", action="store_true")
@@ -336,8 +337,16 @@ def main() -> None:
         raise ValueError("adaptive-thing-threshold-floor-ratio must be in (0, 1]")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    paths = output_paths(args.output_dir, args.semantic_ply_name)
-    for path in paths.values():
+    paths = output_paths(args.output_dir)
+    semantic_ply = resolve_semantic_ply_output(
+        args.output_dir,
+        semantic_ply_path=args.semantic_ply_path,
+        semantic_ply_name=args.semantic_ply_name,
+        disabled=args.no_semantic_ply,
+    )
+    output_files = [*paths.values(), *([semantic_ply] if semantic_ply is not None else [])]
+    for path in output_files:
+        path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and not args.overwrite:
             raise FileExistsError(f"{path} exists; pass --overwrite to replace it")
 
@@ -454,7 +463,8 @@ def main() -> None:
     np.save(paths["raw_winners"], raw_winners)
     np.save(paths["agreements"], agreements)
     np.save(paths["supporting_views"], supporting_views)
-    write_ply_with_labels(ply_path, paths["semantic_ply"], labels)
+    if semantic_ply is not None:
+        write_ply_with_labels(ply_path, semantic_ply, labels)
 
     class_totals: dict[int, int] = {}
     for candidate in kept:
@@ -532,7 +542,10 @@ def main() -> None:
         },
     }
     paths["summary"].write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    print(f"wrote {paths['semantic_ply']}")
+    if semantic_ply is not None:
+        print(f"wrote {semantic_ply}")
+    else:
+        print("semantic PLY disabled; retained labels and label map only")
     print(json.dumps(summary["coverage"], sort_keys=True))
 
 

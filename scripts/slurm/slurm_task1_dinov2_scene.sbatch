@@ -283,6 +283,12 @@ FUSION_BASELINE_ARGS=()
 if [[ -n "${BASELINE_LABELS}" ]]; then
   FUSION_BASELINE_ARGS=(--baseline-labels "${BASELINE_LABELS}")
 fi
+DINOV2_SEMANTIC_PLY_ARGS=(--no-semantic-ply)
+if [[ "${ENABLE_GROUNDINGDINO}" = "0" ]]; then
+  DINOV2_SEMANTIC_PLY_ARGS=(
+    --semantic-ply-path "${DELIVERABLE_DIR}/semantic_point_cloud.ply"
+  )
+fi
 
 run_stage 04_exact_multiview_fusion "${GAUSSIAN_ENV}" \
   python scripts/task1/fuse_dinov2_multiview_votes.py \
@@ -306,6 +312,7 @@ run_stage 04_exact_multiview_fusion "${GAUSSIAN_ENV}" \
     --adaptive-stuff-threshold-ratio "${ADAPTIVE_STUFF_THRESHOLD_RATIO}" \
     --adaptive-thing-threshold-floor-ratio "${ADAPTIVE_THING_THRESHOLD_FLOOR_RATIO}" \
     "${FUSION_BASELINE_ARGS[@]}" \
+    "${DINOV2_SEMANTIC_PLY_ARGS[@]}" \
     --overwrite
 
 FINAL_SOURCE_DIR="${FUSION_DIR}"
@@ -403,7 +410,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
       --proposal-dir "${GROUNDING_PROPOSAL_DIR}" \
       --fusion-dir "${GROUNDING_FUSION_DIR}" \
       --label-map-path "${GROUNDING_FUSION_DIR}/label_map.json" \
-      --semantic-ply-path "${GROUNDING_FUSION_DIR}/semantic_point_cloud.ply" \
+      --no-semantic-ply \
       --log-dir "${RUN_LOG_DIR}" \
       --class-config "${GROUNDING_GUARD_CONFIG}" \
       --source-view-manifest "${VIEW_DIR}/view_manifest.json" \
@@ -442,6 +449,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
       --ontology "${ONTOLOGY}" \
       --source-ply "${MODEL_DIR}/point_cloud/iteration_30000/point_cloud.ply" \
       --output-dir "${HYBRID_DIR}" \
+      --semantic-ply-path "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
       --scene "${SCENE}" \
       --include-classes "${GROUNDING_EXTENSION_CLASSES_RESOLVED}" \
       --overwrite
@@ -452,8 +460,8 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
 fi
 
 cp "${FINAL_SOURCE_DIR}/gaussian_labels.npy" "${DELIVERABLE_DIR}/gaussian_labels.npy"
-cp "${FINAL_SOURCE_DIR}/semantic_point_cloud.ply" "${DELIVERABLE_DIR}/semantic_point_cloud.ply"
 cp "${FINAL_SOURCE_DIR}/label_map.json" "${DELIVERABLE_DIR}/label_map.json"
+test -f "${DELIVERABLE_DIR}/semantic_point_cloud.ply"
 
 run_stage 10_supersplat_debug_ply "${GAUSSIAN_ENV}" \
   python scripts/task1/export_supersplat_label_colors.py \
@@ -463,6 +471,18 @@ run_stage 10_supersplat_debug_ply "${GAUSSIAN_ENV}" \
     --metadata-json "${VISUALIZATION_DIR}/semantic_point_cloud_supersplat_debug.json" \
     --color-mode "${COLOR_MODE}" \
     --overwrite
+
+if [[ "${ENABLE_GROUNDINGDINO}" = "1" && "${MERGED_GROUNDING_GROUP_COUNT}" -gt 0 ]]; then
+  run_stage 10b_grounding_extension_supersplat_debug_ply "${GAUSSIAN_ENV}" \
+    python scripts/task1/export_supersplat_label_colors.py \
+      --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
+      --label-map "${DELIVERABLE_DIR}/label_map.json" \
+      --output-ply "${VISUALIZATION_DIR}/grounding_extensions_supersplat_debug.ply" \
+      --metadata-json "${VISUALIZATION_DIR}/grounding_extensions_supersplat_debug.json" \
+      --focus-classes "${GROUNDING_EXTENSION_CLASSES_RESOLVED}" \
+      --color-mode "${COLOR_MODE}" \
+      --overwrite
+fi
 
 run_stage 11_semantic_overlays "${GAUSSIAN_ENV}" \
   python scripts/task1/render_auto_label_overlays.py \

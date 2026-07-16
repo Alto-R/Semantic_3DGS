@@ -48,6 +48,32 @@ PLY_NUMPY_TYPES: Dict[str, str] = {
 }
 
 
+def resolve_semantic_ply_output(
+    output_dir: Path,
+    *,
+    semantic_ply_path: Optional[Path] = None,
+    semantic_ply_name: Optional[str] = None,
+    disabled: bool = False,
+) -> Optional[Path]:
+    """Resolve an explicitly requested semantic PLY output.
+
+    Intermediate fusion stages keep compact labels and metadata by default.
+    Callers that publish a final deliverable must opt in with either an
+    explicit path or a legacy output-relative filename.
+    """
+    if semantic_ply_path is not None and semantic_ply_name is not None:
+        raise ValueError("semantic PLY path and name are mutually exclusive")
+    if disabled and (semantic_ply_path is not None or semantic_ply_name is not None):
+        raise ValueError("semantic PLY output cannot be both enabled and disabled")
+    if disabled:
+        return None
+    if semantic_ply_path is not None:
+        return Path(semantic_ply_path)
+    if semantic_ply_name is not None:
+        return Path(output_dir) / semantic_ply_name
+    return None
+
+
 @dataclass
 class PlyProperty:
     name: str

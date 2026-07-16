@@ -13,7 +13,7 @@ import numpy as np
 
 from add_labels_from_npy import write_ply_with_labels
 from dinov2_ontology import load_ontology, normalize_class_name
-from ply_utils import read_ply_header
+from ply_utils import read_ply_header, resolve_semantic_ply_output
 from semantic_palette import PALETTE_VERSION, rgb8_for_class
 
 
@@ -249,18 +249,28 @@ def main() -> None:
     parser.add_argument("--ontology", required=True, type=Path)
     parser.add_argument("--source-ply", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--semantic-ply-path", type=Path)
+    parser.add_argument("--no-semantic-ply", action="store_true")
     parser.add_argument("--scene", required=True)
     parser.add_argument("--include-classes", default="")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
+    semantic_ply = resolve_semantic_ply_output(
+        args.output_dir,
+        semantic_ply_path=args.semantic_ply_path,
+        disabled=args.no_semantic_ply,
+    )
     output_paths = {
         "labels": args.output_dir / "gaussian_labels.npy",
         "label_map": args.output_dir / "label_map.json",
         "summary": args.output_dir / "hybrid_merge_summary.json",
-        "semantic_ply": args.output_dir / "semantic_point_cloud.ply",
     }
-    existing = [path for path in output_paths.values() if path.exists()]
+    output_files = [
+        *output_paths.values(),
+        *([semantic_ply] if semantic_ply is not None else []),
+    ]
+    existing = [path for path in output_files if path.exists()]
     if existing and not args.overwrite:
         raise FileExistsError(f"Hybrid outputs exist; pass --overwrite: {existing}")
 
@@ -373,10 +383,13 @@ def main() -> None:
     }
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    if semantic_ply is not None:
+        semantic_ply.parent.mkdir(parents=True, exist_ok=True)
     np.save(output_paths["labels"], merged.astype(np.int32, copy=False))
     output_paths["label_map"].write_text(json.dumps(output_map, indent=2), encoding="utf-8")
     output_paths["summary"].write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    write_ply_with_labels(args.source_ply, output_paths["semantic_ply"], merged)
+    if semantic_ply is not None:
+        write_ply_with_labels(args.source_ply, semantic_ply, merged)
     print(json.dumps({key: value for key, value in summary.items() if key != "sources"}, indent=2))
 
 
