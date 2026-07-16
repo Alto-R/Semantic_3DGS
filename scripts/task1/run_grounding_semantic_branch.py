@@ -11,11 +11,16 @@ from typing import Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FATAL_OUTPUT_PATTERNS = (
+    "no kernel image is available for execution on the device",
+    "invalid device function",
+)
 
 
 def run_logged(command: Sequence[str], log_path: Path) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"===== {log_path.stem} =====", flush=True)
+    fatal_lines: list[str] = []
     with log_path.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(
             list(command),
@@ -30,9 +35,17 @@ def run_logged(command: Sequence[str], log_path: Path) -> None:
         for line in process.stdout:
             sys.stdout.write(line)
             log.write(line)
+            if any(pattern in line.lower() for pattern in FATAL_OUTPUT_PATTERNS):
+                fatal_lines.append(line.strip())
+        process.stdout.close()
         return_code = process.wait()
     if return_code != 0:
         raise subprocess.CalledProcessError(return_code, command)
+    if fatal_lines:
+        raise RuntimeError(
+            "CUDA extension execution failed even though the child process returned zero: "
+            + " | ".join(fatal_lines[:3])
+        )
 
 
 def add_optional(command: list[str], flag: str, value: str | Path | None) -> None:

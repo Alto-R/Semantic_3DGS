@@ -278,6 +278,15 @@ candidate because its cached mask leaked broadly into wall and floor, while
 `guitar` remains an explicit-only no-op candidate. Pass
 `GROUNDING_EXTENSION_CLASSES` to run a single candidate during further QA.
 
+Cached 70-view validation of the guarded branch retained an 8,470-Gaussian
+`television_01` guard and removed the false television-shaped `piano_02` from
+the merge. The final custom result contains one 9,201-Gaussian upright piano
+and three visually coherent speaker groups totaling 14,443 Gaussians. It
+changes 23,644 DINO labels (17,183 previously unlabeled) and preserves the DINO
+array outside those four extension masks. The guard branch therefore keeps
+the configured Room defaults while correcting the extension-only competition
+failure.
+
 ### Room pilot commands
 
 Prepare the external repository, separate segmentation environment, and
@@ -286,6 +295,7 @@ official checkpoints:
 ```bash
 bash scripts/cluster/clone_external_repos.sh
 bash scripts/setup/install_dinov2_segmentation.sh
+bash scripts/setup/install_semantic_extensions.sh
 ```
 
 First submit a five-camera smoke test from the project root:

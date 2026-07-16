@@ -41,7 +41,8 @@ The alternative prompt-free DINOv2 route is implemented by:
   environment and download the official ViT-L/14 ADE20K linear artifacts.
 - `setup/install_semantic_extensions.sh`: rebuild the CUDA extensions for
   native RTX 8000 (`sm_75`) execution and L40-compatible `sm_86` PTX by
-  default; override with `TORCH_CUDA_ARCH_LIST` only when required.
+  default, including GroundingDINO's deformable-attention kernel; override
+  with `TORCH_CUDA_ARCH_LIST` only when required.
 
 The v1 defaults preserve all 150 ADE20K classes and use only real cameras. See
 `docs/DINOV2_MULTIVIEW_VOTING.md` for the vote definition and fixed scope.
