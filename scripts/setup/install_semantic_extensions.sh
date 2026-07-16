@@ -92,6 +92,7 @@ if missing:
 
 PYTHONPATH="$GROUNDINGDINO_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
   conda run -n "$ENV_NAME" python -c '
+import torch
 import groundingdino._C
 print("groundingdino._C OK")
 '
