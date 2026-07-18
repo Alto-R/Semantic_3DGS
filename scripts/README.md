@@ -28,13 +28,29 @@ The alternative prompt-free DINOv2 route is implemented by:
 - `task1/build_grounding_guard_config.py`: builds the automatic GroundingDINO
   vocabulary from DINO classes present in the fused scene plus the selected
   custom extension classes. DINO-derived entries are competition-only guards.
+- `task1/build_ade_refinement_config.py`: derives a scene-neutral same-ontology
+  Grounding vocabulary from ADE classes with surviving DINO support and can
+  optionally append explicitly declared missing-vocabulary extension classes.
 - `task1/run_grounding_semantic_branch.py`: shared GroundingDINO/SAM,
   FlashSplat, and semantic-fusion branch used by both scheduler paths.
 - `task1/merge_semantic_extensions.py`: deterministic Gaussian-label merge for
   reviewed classes outside the ADE20K ontology.
+- `task1/merge_ade_refinement.py`: guarded same-ontology merge that rejects
+  ambiguous Grounding claims, requires spatially local same-class DINO anchor
+  density, bounds accepted changes by robust instance geometry, recovers
+  repeated unanchored things from strong multiview evidence, corrects a
+  systematic competing-instance error only when at least 90% of a matching
+  prototype is one existing thing, and prevents broad masks from erasing
+  competing DINO `thing` instances.
 - `slurm/slurm_task1_dinov2_scene.sbatch`: production entry point. Set
   `ENABLE_GROUNDINGDINO=1` to run the extension branch continuously after the
   DINOv2 base; the default `0` publishes DINOv2 alone.
+- `slurm/slurm_task1_ade_refinement_scene.sbatch`: experimental cached-DINO
+  entry point for automatic ADE-overlap refinement; it never enables missing
+  vocabulary.
+- `slurm/slurm_task1_ade_refinement_replay_scene.sbatch`: merge-only replay of
+  saved ADE/Grounded-SAM evidence for guarded cross-scene QA; optional reviewed
+  extension labels can be composed without rerunning either semantic model.
 - `slurm/slurm_task1_recolor_output.sbatch`: visualization-only stable-color
   regeneration for an existing output; it does not rerun either semantic model.
 - `setup/install_dinov2_segmentation.sh`: install the separate segmentation

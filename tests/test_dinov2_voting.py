@@ -14,6 +14,9 @@ sys.path.insert(0, str(ROOT / "scripts" / "task1"))
 from dinov2_voting import (  # noqa: E402
     accumulate_vote_arrays,
     flashsplat_class_rows,
+    mean_class_confidences,
+    semantic_evidence_fractions,
+    semantic_winner_metrics,
     sparse_view_votes,
     supporting_view_counts,
     threshold_winners,
@@ -50,6 +53,32 @@ class FlashSplatClassRowsTest(unittest.TestCase):
 
 
 class SparseViewVoteTest(unittest.TestCase):
+    def test_abstain_uses_rejected_pixel_confidence(self) -> None:
+        means = mean_class_confidences(
+            np.asarray([[0, 0, 4], [8, 4, 8]], dtype=np.uint16),
+            np.asarray([[0.2, 0.4, 0.8], [0.7, 0.6, 0.9]], dtype=np.float32),
+            np.asarray([0, 4, 8], dtype=np.uint16),
+        )
+
+        np.testing.assert_allclose(means, [0.3, 0.7, 0.8], rtol=0.0, atol=1e-6)
+
+    def test_absent_abstain_pixels_have_zero_confidence(self) -> None:
+        means = mean_class_confidences(
+            np.asarray([[4, 4]], dtype=np.uint16),
+            np.asarray([[0.6, 0.8]], dtype=np.float32),
+            np.asarray([0, 4], dtype=np.uint16),
+        )
+
+        np.testing.assert_allclose(means, [0.0, 0.7], rtol=0.0, atol=1e-6)
+
+    def test_confidence_inputs_must_match(self) -> None:
+        with self.assertRaisesRegex(ValueError, "matching shapes"):
+            mean_class_confidences(
+                np.asarray([0, 4], dtype=np.uint16),
+                np.asarray([0.2], dtype=np.float32),
+                np.asarray([0, 4], dtype=np.uint16),
+            )
+
     def test_votes_are_normalized_by_per_gaussian_visibility(self) -> None:
         used = np.asarray(
             [
@@ -99,6 +128,55 @@ class MultiviewFusionTest(unittest.TestCase):
         raw, _, _, _ = winner_metrics(votes)
 
         self.assertEqual(raw.tolist(), [0])
+
+    def test_semantic_winner_separates_abstain_from_class_agreement(self) -> None:
+        votes = np.asarray(
+            [
+                [0.60, 0.35, 0.00],
+                [0.40, 0.45, 1.00],
+                [0.00, 0.10, 1.00],
+            ],
+            dtype=np.float32,
+        )
+
+        raw, winner, second, agreement, evidence = semantic_winner_metrics(votes)
+
+        self.assertEqual(raw.tolist(), [1, 1, 0])
+        np.testing.assert_allclose(winner, [0.4, 0.45, 1.0], atol=1e-6)
+        np.testing.assert_allclose(second, [0.0, 0.1, 1.0], atol=1e-6)
+        np.testing.assert_allclose(agreement, [1.0, 0.45 / 0.55, 0.5], atol=1e-6)
+        np.testing.assert_allclose(evidence, [0.4, 0.55 / 0.9, 1.0], atol=1e-6)
+
+    def test_semantic_evidence_fraction_handles_empty_votes(self) -> None:
+        evidence = semantic_evidence_fractions(
+            np.asarray([[0.0, 0.5], [0.0, 0.5]], dtype=np.float32)
+        )
+
+        np.testing.assert_allclose(evidence, [0.0, 0.5], atol=1e-6)
+
+    def test_separate_abstain_gate_requires_semantic_evidence(self) -> None:
+        thresholded = threshold_winners(
+            np.asarray([1, 1, 1], dtype=np.uint16),
+            np.asarray([0.8, 0.8, 0.8], dtype=np.float32),
+            np.asarray([2, 2, 2], dtype=np.uint16),
+            min_views=2,
+            min_agreement=0.5,
+            semantic_evidence=np.asarray([0.49, 0.50, 0.70], dtype=np.float32),
+            min_semantic_evidence=0.5,
+        )
+
+        self.assertEqual(thresholded.tolist(), [0, 1, 1])
+
+    def test_positive_semantic_evidence_threshold_requires_array(self) -> None:
+        with self.assertRaisesRegex(ValueError, "semantic_evidence is required"):
+            threshold_winners(
+                np.asarray([1], dtype=np.uint16),
+                np.asarray([0.8], dtype=np.float32),
+                np.asarray([2], dtype=np.uint16),
+                min_views=2,
+                min_agreement=0.5,
+                min_semantic_evidence=0.5,
+            )
 
     def test_repeating_consistent_views_preserves_agreement(self) -> None:
         once = np.asarray([[0.2], [0.8], [0.0]], dtype=np.float32)

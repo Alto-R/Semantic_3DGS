@@ -144,10 +144,13 @@ vote(v,g,c) = view_quality(v)
               * used_count[c,g] / visibility[g]
 ```
 
-Only rows with raw `used_count > 0.05` are stored. The abstention row uses mean
-confidence `1.0`, ensuring uncertain pixels reduce agreement instead of being
-silently removed. Each view is saved as sparse `indices`, `class_ids`, and
-`weights` arrays.
+Only rows with raw `used_count > 0.05` are stored. The abstention row uses the
+mean maximum-softmax confidence of the pixels rejected by the global threshold;
+if a view has no rejected pixels, its abstention confidence is zero. This keeps
+abstention as conservative uncertainty evidence without turning every rejected
+pixel into a unit-confidence negative vote. The per-view value is recorded as
+`abstain_mean_confidence` in the vote manifest. Each view is saved as sparse
+`indices`, `class_ids`, and `weights` arrays.
 
 Either way, the result of Stage 3 for one view is a set of
 `(gaussian_index, project_class_id, weight)` votes.
@@ -155,12 +158,24 @@ Either way, the result of Stage 3 for one view is a set of
 ### Stage 4 - Multi-view voting / fusion
 
 Accumulate votes across all views into an exact per-class, per-Gaussian score
-matrix and pick the winner.
+matrix and pick the winner. Fusion exposes three scene-neutral modes so
+abstention behavior can be isolated without rerunning DINOv2 or FlashSplat:
+
+- `joint` is the production-compatible default. Abstain row 0 participates in
+  the argmax and agreement denominator.
+- `semantic_only` is an aggressive diagnostic upper bound. The winner and
+  agreement use only semantic rows 1-150; abstain is measured but does not
+  reject a result.
+- `separate_abstain` also chooses and measures agreement over semantic rows,
+  then independently requires
+  `semantic_mass / (semantic_mass + abstain_mass) >= MIN_SEMANTIC_EVIDENCE`
+  (default 0.5). This separates class disagreement from uncertainty while
+  retaining abstain as a conservative gate.
 
 - `votes[g, c] += weight` for every vote from Stage 3.
 - Track `views_supporting[g, c]` = number of distinct views that voted
   class `c` for Gaussian `g`.
-- Assign:
+- In `joint` mode, assign:
   - `label(g) = argmax_c votes[g, c]`, **only if**
     - `views_supporting[g, argmax] >= MIN_VIEWS` (default 2), and
     - `votes[g, argmax] / sum_c votes[g, c] >= MIN_AGREEMENT` (default 0.5),
@@ -168,7 +183,12 @@ matrix and pick the winner.
   - Otherwise `label(g) = 0` (unlabeled).
 - Exact winner ties stay unlabeled. No second-choice label is assigned after a
   threshold or later pruning failure.
+- In both semantic modes, exact ties between semantic classes also stay
+  unlabeled. `MIN_VIEWS` and `MIN_AGREEMENT` still apply; only
+  `separate_abstain` additionally applies `MIN_SEMANTIC_EVIDENCE`.
 - Log raw-argmax, thresholded, and final post-pruning unlabeled ratios.
+- Save the mode-specific winner agreement and semantic-evidence fraction for
+  every Gaussian so comparisons remain auditable.
 
 **Memory note.** Fusion creates a temporary disk-backed float32 matrix of shape
 `(151, N_gaussians)`, accumulates each sparse view exactly, processes winners in
@@ -212,6 +232,8 @@ outputs/eyenavgs_task1/<scene>_dinov2/
       view_votes/          # sparse per-view votes
     03_exact_fusion/
       gaussian_labels.npy
+      winner_agreements.npy
+      winner_semantic_evidence.npy
       dinov2_vote_summary.json
   deliverables/
     semantic_point_cloud.ply
@@ -242,6 +264,8 @@ DINOV2_HEAD             (must be linear in v1)
 MIN_PIXEL_CONFIDENCE    (default 0.5)
 MIN_VIEWS               (default 2)
 MIN_AGREEMENT           (default 0.5)
+FUSION_MODE             (joint, semantic_only, or separate_abstain; default joint)
+MIN_SEMANTIC_EVIDENCE   (default 0.5; used only by separate_abstain)
 BASELINE_LABELS         (optional accepted GroundingDINO gaussian_labels.npy)
 ENABLE_GROUNDINGDINO    (default 0; set 1 for continuous extension branch)
 GROUNDING_EXTENSION_CONFIG
@@ -273,6 +297,57 @@ continues to be decided by multi-view evidence. The generated config and source
 hashes are written to
 `stages/04_grounding_camera_selection/grounding_guard_config.json`. The
 standalone GroundingDINO scheduler remains available for isolated debugging.
+
+### Experimental same-ontology ADE refinement
+
+`scripts/slurm/slurm_task1_ade_refinement_scene.sbatch` is a cached-DINO
+experimental entry point for testing Grounded-SAM boundary refinement without
+enabling custom vocabulary. It derives its Grounding vocabulary automatically
+from ADE classes that survived DINO fusion with at least 500 Gaussians and two
+source views. The vocabulary is scene-adaptive but contains no scene-specific
+class list. Dataset spellings that are poor natural-language prompts use the
+global aliases in `configs/ade20k_grounding_prompts.json`; aliases never change
+class identity.
+
+The refinement merge remains inside the ADE ontology and applies six global
+guards:
+
+1. Missing-vocabulary classes are disabled and cannot enter the output.
+2. Grounding groups must already pass the shared multi-view fusion, signed
+   evidence, size, and spatial cleanup.
+3. A Gaussian is eligible only when exactly one prompted ADE class has at least
+   two positive views and a positive-evidence ratio of at least 0.5. Competing
+   robust class claims are left at the DINO label.
+4. Each Grounding group must contain at least 500 uniquely claimed Gaussians
+   from an existing same-class DINO instance and cover at least 10% of that
+   anchor.
+5. The uniquely claimed support is split into globally scaled 3D voxel
+   components. A component can refine only when at least 10% of its Gaussians
+   already belong to the selected same-class DINO anchor. This prevents a
+   small valid anchor elsewhere in the scene from authorizing a disconnected
+   Grounding region. Accepted components can relabel only their remaining
+   uniquely claimed support.
+6. Grounding groups for ADE `stuff` classes may fill abstentions or refine
+   other `stuff`, but cannot overwrite an existing DINO `thing` instance.
+   Precise Grounded-SAM `thing` groups may still correct either kind. This
+   preserves object instances against broad connected ceiling, floor, road,
+   and stair masks without naming any scene or class exception.
+
+The cached eight-scene spatial thing-guard comparison is stored as
+`<scene>_dinov2_ade_refinement_auto_spatial_thing_guard_v3`. Reviewed support
+improved from 27.98% to 18.84% wrong bicycle on the Bicycle bench, from 17.03%
+to 93.22% windowpane on the Dr. Johnson window, from 48.08% to 94.06%
+television in Room, from 67.74% to 79.21% truck on the Truck body, and from
+44.22% to 63.52% railing on the Treehill fence. The spatial guard also blocked
+the first prototype's Train building spill. Treehill path remains essentially
+unchanged and missing-vocabulary identities remain unavailable, so this is
+still an ablation rather than the production hybrid default.
+
+These rules treat Grounded-SAM as guarded local boundary evidence rather than
+ground truth. The scheduler reuses the DINO camera renders and labels, writes a
+separate `refinement_changes.npy`, and generates both full-scene and
+changes-only overlay contact sheets. It is an ablation path, not yet the
+production hybrid default.
 
 The final visualization export always creates a stable-color full-scene
 SuperSplat PLY. Hybrid runs with accepted extension groups also create a focused

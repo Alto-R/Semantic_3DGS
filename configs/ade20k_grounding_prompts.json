@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "description": "Scene-neutral GroundingDINO prompt aliases for ADE20K class names whose dataset spelling is not a natural open-vocabulary prompt.",
+  "aliases": {
+    "ashcan": ["trash can", "waste bin"],
+    "chest_of_drawers": ["chest of drawers", "dresser"],
+    "conveyer_belt": ["conveyor belt"],
+    "crt_screen": ["crt screen"],
+    "screen_door": ["screen door"],
+    "television_receiver": ["television", "tv", "television screen"],
+    "trade_name": ["brand sign", "logo"],
+    "windowpane": ["window", "window pane"]
+  }
+}

@@ -17,6 +17,8 @@ from cluster_semantic_flashsplat_proposals import voxel_components
 from dinov2_ontology import OntologyClass, load_ontology
 from dinov2_voting import (
     accumulate_vote_arrays,
+    semantic_evidence_fractions,
+    semantic_winner_metrics,
     supporting_view_counts,
     threshold_winners,
     winner_metrics,
@@ -53,6 +55,7 @@ def output_paths(output_dir: Path) -> dict[str, Path]:
         "project_classes": output_dir / "gaussian_project_class_ids.npy",
         "raw_winners": output_dir / "raw_project_class_ids.npy",
         "agreements": output_dir / "winner_agreements.npy",
+        "semantic_evidence": output_dir / "winner_semantic_evidence.npy",
         "supporting_views": output_dir / "winner_supporting_views.npy",
         "label_map": output_dir / "label_map.json",
         "summary": output_dir / "dinov2_vote_summary.json",
@@ -301,6 +304,12 @@ def main() -> None:
     parser.add_argument("--iteration", default=30000, type=int)
     parser.add_argument("--min-views", default=2, type=int)
     parser.add_argument("--min-agreement", default=0.5, type=float)
+    parser.add_argument(
+        "--fusion-mode",
+        choices=("joint", "semantic_only", "separate_abstain"),
+        default="joint",
+    )
+    parser.add_argument("--min-semantic-evidence", default=0.5, type=float)
     parser.add_argument("--tie-epsilon", default=0.0, type=float)
     parser.add_argument("--fusion-chunk-size", default=100_000, type=int)
     parser.add_argument("--voxel-scale-multiplier", default=4.0, type=float)
@@ -327,6 +336,8 @@ def main() -> None:
         raise ValueError("tie-epsilon must be non-negative")
     if not 0.0 <= args.min_agreement <= 1.0:
         raise ValueError("min-agreement must be between zero and one")
+    if not 0.0 <= args.min_semantic_evidence <= 1.0:
+        raise ValueError("min-semantic-evidence must be between zero and one")
     if args.fusion_chunk_size <= 0:
         raise ValueError("fusion-chunk-size must be positive")
     if not 0.0 <= args.adaptive_stuff_min_view_ratio <= 1.0:
@@ -393,21 +404,44 @@ def main() -> None:
 
         raw_winners = np.zeros((gaussian_count,), dtype=np.uint16)
         agreements = np.zeros((gaussian_count,), dtype=np.float32)
+        semantic_evidence = np.zeros((gaussian_count,), dtype=np.float32)
         for start in range(0, gaussian_count, args.fusion_chunk_size):
             end = min(start + args.fusion_chunk_size, gaussian_count)
-            raw, _winner_scores, _second_scores, agreement = winner_metrics(
-                vote_matrix[:, start:end],
-                tie_epsilon=args.tie_epsilon,
-            )
+            chunk = vote_matrix[:, start:end]
+            if args.fusion_mode == "joint":
+                raw, _winner_scores, _second_scores, agreement = winner_metrics(
+                    chunk,
+                    tie_epsilon=args.tie_epsilon,
+                )
+                evidence = semantic_evidence_fractions(chunk)
+            else:
+                (
+                    raw,
+                    _winner_scores,
+                    _second_scores,
+                    agreement,
+                    evidence,
+                ) = semantic_winner_metrics(
+                    chunk,
+                    tie_epsilon=args.tie_epsilon,
+                )
             raw_winners[start:end] = raw
             agreements[start:end] = agreement
+            semantic_evidence[start:end] = evidence
         supporting_views = supporting_view_counts(vote_files, raw_winners)
+        applied_min_semantic_evidence = (
+            args.min_semantic_evidence
+            if args.fusion_mode == "separate_abstain"
+            else 0.0
+        )
         project_classes = threshold_winners(
             raw_winners,
             agreements,
             supporting_views,
             args.min_views,
             args.min_agreement,
+            semantic_evidence=semantic_evidence,
+            min_semantic_evidence=applied_min_semantic_evidence,
         )
     finally:
         if vote_matrix is not None:
@@ -462,6 +496,7 @@ def main() -> None:
     np.save(paths["project_classes"], project_classes)
     np.save(paths["raw_winners"], raw_winners)
     np.save(paths["agreements"], agreements)
+    np.save(paths["semantic_evidence"], semantic_evidence)
     np.save(paths["supporting_views"], supporting_views)
     if semantic_ply is not None:
         write_ply_with_labels(ply_path, semantic_ply, labels)
@@ -507,9 +542,23 @@ def main() -> None:
         "source_view_count": len(frames),
         "vote_accumulator": "temporary_disk_backed_float32_exact_class_by_gaussian_sum",
         "parameters": {
+            "fusion_mode": args.fusion_mode,
             "min_views": args.min_views,
             "min_agreement": args.min_agreement,
-            "agreement_denominator": "all_vote_mass_including_abstain",
+            "agreement_denominator": (
+                "all_vote_mass_including_abstain"
+                if args.fusion_mode == "joint"
+                else "semantic_vote_mass_only"
+            ),
+            "winner_domain": (
+                "all_rows_including_abstain"
+                if args.fusion_mode == "joint"
+                else "semantic_rows_only"
+            ),
+            "min_semantic_evidence": applied_min_semantic_evidence,
+            "semantic_evidence_definition": (
+                "semantic_vote_mass/(semantic_vote_mass+abstain_vote_mass)"
+            ),
             "tie_epsilon": args.tie_epsilon,
             "voxel_scale_multiplier": args.voxel_scale_multiplier,
             "min_voxel_size": args.min_voxel_size,

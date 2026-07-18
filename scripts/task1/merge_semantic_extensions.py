@@ -244,7 +244,7 @@ def main() -> None:
     parser.add_argument("--base-label-map", required=True, type=Path)
     parser.add_argument("--extension-labels", required=True, type=Path)
     parser.add_argument("--extension-label-map", required=True, type=Path)
-    parser.add_argument("--extension-manifest", required=True, type=Path)
+    parser.add_argument("--extension-manifest", type=Path)
     parser.add_argument("--extension-config", required=True, type=Path)
     parser.add_argument("--ontology", required=True, type=Path)
     parser.add_argument("--source-ply", required=True, type=Path)
@@ -294,14 +294,27 @@ def main() -> None:
         np.load(args.extension_labels), extension_items, args.extension_labels
     )
 
-    manifest = load_json(args.extension_manifest)
-    configured_classes = manifest_classes(manifest)
-    absent_from_manifest = [value for value in selected_classes if value not in configured_classes]
-    if absent_from_manifest:
-        raise ValueError(
-            "Selected classes are absent from the GroundingDINO manifest: "
-            f"{absent_from_manifest}"
-        )
+    if args.extension_manifest is not None:
+        manifest = load_json(args.extension_manifest)
+        configured_classes = manifest_classes(manifest)
+        absent_from_manifest = [
+            value for value in selected_classes if value not in configured_classes
+        ]
+        if absent_from_manifest:
+            raise ValueError(
+                "Selected classes are absent from the GroundingDINO manifest: "
+                f"{absent_from_manifest}"
+            )
+    else:
+        mapped_classes = {
+            item["class"] for label_id, item in extension_items.items() if label_id > 0
+        }
+        absent_from_map = [value for value in selected_classes if value not in mapped_classes]
+        if absent_from_map:
+            raise ValueError(
+                "Selected classes are absent from the extension label map: "
+                f"{absent_from_map}"
+            )
     header = read_ply_header(args.source_ply)
     vertex = header.element("vertex")
     if vertex is None:
@@ -366,10 +379,6 @@ def main() -> None:
                 "path": str(args.extension_label_map),
                 "sha256": sha256_file(args.extension_label_map),
             },
-            "extension_manifest": {
-                "path": str(args.extension_manifest),
-                "sha256": sha256_file(args.extension_manifest),
-            },
             "extension_config": {
                 "path": str(args.extension_config),
                 "sha256": sha256_file(args.extension_config),
@@ -381,6 +390,11 @@ def main() -> None:
         "hybrid_label_histogram": {str(key): value for key, value in merged_histogram.items()},
         "merge": merge_report,
     }
+    if args.extension_manifest is not None:
+        summary["sources"]["extension_manifest"] = {
+            "path": str(args.extension_manifest),
+            "sha256": sha256_file(args.extension_manifest),
+        }
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     if semantic_ply is not None:

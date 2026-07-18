@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "scene": "train",
+  "candidate_classes": [
+    "train",
+    "railroad_track",
+    "railway_platform"
+  ],
+  "default_enabled_classes": [
+    "train"
+  ]
+}

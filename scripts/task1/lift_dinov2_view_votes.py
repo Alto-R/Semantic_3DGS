@@ -12,7 +12,11 @@ import numpy as np
 import torch
 
 from dinov2_ontology import load_ontology
-from dinov2_voting import flashsplat_class_rows, sparse_view_votes
+from dinov2_voting import (
+    flashsplat_class_rows,
+    mean_class_confidences,
+    sparse_view_votes,
+)
 from flashsplat_cameras import (
     background_tensor,
     default_pipeline,
@@ -39,18 +43,6 @@ def local_index_map(project_ids: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     )
     indexed = np.searchsorted(class_ids, project_ids).astype(np.float32)
     return indexed, class_ids
-
-
-def mean_class_confidences(
-    project_ids: np.ndarray,
-    confidence: np.ndarray,
-    class_ids: np.ndarray,
-) -> np.ndarray:
-    means = np.ones(class_ids.shape, dtype=np.float32)
-    for local_id, project_id in enumerate(class_ids[1:], start=1):
-        selected = project_ids == project_id
-        means[local_id] = float(confidence[selected].mean())
-    return means
 
 
 def main() -> None:
@@ -168,6 +160,7 @@ def main() -> None:
                     "vote_file": vote_path.relative_to(output_dir).as_posix(),
                     "view_quality": float(frame.get("view_quality", 1.0)),
                     "present_project_class_ids": [int(value) for value in class_ids[1:]],
+                    "abstain_mean_confidence": float(means[0]),
                     "class_mean_confidences": [float(value) for value in means[1:]],
                     "sparse_vote_count": int(weights.shape[0]),
                     "abstain_pixel_ratio": float(np.mean(project_ids == 0)),
@@ -188,6 +181,9 @@ def main() -> None:
         "camera_count": len(frames),
         "vote_formula": "view_quality * mean_class_confidence * used_count / visibility",
         "visibility_definition": "sum_used_count_over_all_local_rows_including_abstain",
+        "abstain_confidence_weighting": (
+            "mean_max_softmax_confidence_over_below_threshold_pixels"
+        ),
         "parameters": {
             "min_pixel_confidence": args.min_pixel_confidence,
             "support_threshold": args.support_threshold,

@@ -91,6 +91,8 @@ MIN_PIXEL_CONFIDENCE="${MIN_PIXEL_CONFIDENCE:-0.50}"
 FLASHSPLAT_SUPPORT_THRESHOLD="${FLASHSPLAT_SUPPORT_THRESHOLD:-0.05}"
 MIN_VIEWS="${MIN_VIEWS:-2}"
 MIN_AGREEMENT="${MIN_AGREEMENT:-0.50}"
+FUSION_MODE="${FUSION_MODE:-joint}"
+MIN_SEMANTIC_EVIDENCE="${MIN_SEMANTIC_EVIDENCE:-0.50}"
 MIN_ASSIGNED_GAUSSIANS="${MIN_ASSIGNED_GAUSSIANS:-0}"
 MIN_ASSIGNED_THING_GAUSSIANS="${MIN_ASSIGNED_THING_GAUSSIANS:-5000}"
 MIN_ASSIGNED_STUFF_GAUSSIANS="${MIN_ASSIGNED_STUFF_GAUSSIANS:-10000}"
@@ -107,6 +109,12 @@ if [[ "${CAMERA_SOURCE}" != "real" ]]; then
 fi
 if [[ "${DINOV2_HEAD}" != "linear" ]]; then
   echo "v1 supports only the official ADE20K linear head" >&2
+  exit 2
+fi
+if [[ "${FUSION_MODE}" != "joint" \
+   && "${FUSION_MODE}" != "semantic_only" \
+   && "${FUSION_MODE}" != "separate_abstain" ]]; then
+  echo "FUSION_MODE must be joint, semantic_only, or separate_abstain" >&2
   exit 2
 fi
 if [[ "${ENABLE_GROUNDINGDINO}" != "0" && "${ENABLE_GROUNDINGDINO}" != "1" ]]; then
@@ -176,9 +184,10 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
 fi
 
 if [[ "${CONFIG_ONLY}" = "1" ]]; then
-  printf 'scene=%s\nmodel=%s\noutput=%s\ncamera_source=%s\nview_count=%s\ndinov2_head=%s\nenable_groundingdino=%s\ngrounding_extension_classes=%s\ngrounding_guard_max_prompt_words=%s\ncolor_mode=%s\n' \
+  printf 'scene=%s\nmodel=%s\noutput=%s\ncamera_source=%s\nview_count=%s\ndinov2_head=%s\nfusion_mode=%s\nmin_semantic_evidence=%s\nenable_groundingdino=%s\ngrounding_extension_classes=%s\ngrounding_guard_max_prompt_words=%s\ncolor_mode=%s\n' \
     "${SCENE}" "${MODEL_DIR}" "${OUT_DIR}" "${CAMERA_SOURCE}" "${VIEW_COUNT}" \
-    "${DINOV2_HEAD}" "${ENABLE_GROUNDINGDINO}" \
+    "${DINOV2_HEAD}" "${FUSION_MODE}" "${MIN_SEMANTIC_EVIDENCE}" \
+    "${ENABLE_GROUNDINGDINO}" \
     "${GROUNDING_EXTENSION_CLASSES_RESOLVED:-<disabled>}" \
     "${GROUNDING_GUARD_MAX_PROMPT_WORDS}" "${COLOR_MODE}"
   exit 0
@@ -239,6 +248,8 @@ run_report() {
   echo "flashsplat_support_threshold=${FLASHSPLAT_SUPPORT_THRESHOLD}"
   echo "min_views=${MIN_VIEWS}"
   echo "min_agreement=${MIN_AGREEMENT}"
+  echo "fusion_mode=${FUSION_MODE}"
+  echo "min_semantic_evidence=${MIN_SEMANTIC_EVIDENCE}"
   echo "baseline_labels=${BASELINE_LABELS:-<not_provided>}"
   nvidia-smi
 } | tee "${RUN_LOG_DIR}/00_run_configuration.log"
@@ -300,6 +311,8 @@ run_stage 04_exact_multiview_fusion "${GAUSSIAN_ENV}" \
     --scene "${SCENE}" \
     --min-views "${MIN_VIEWS}" \
     --min-agreement "${MIN_AGREEMENT}" \
+    --fusion-mode "${FUSION_MODE}" \
+    --min-semantic-evidence "${MIN_SEMANTIC_EVIDENCE}" \
     --voxel-scale-multiplier 4 \
     --min-voxel-size 0.01 \
     --max-voxel-size 0.20 \
