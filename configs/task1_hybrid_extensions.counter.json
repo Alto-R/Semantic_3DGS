@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "scene": "counter",
+  "candidate_classes": [
+    "oven_mitt",
+    "mixing_bowl",
+    "water_filter_pitcher",
+    "onion"
+  ],
+  "default_enabled_classes": [
+    "mixing_bowl"
+  ]
+}

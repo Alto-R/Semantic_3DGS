@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 WORKSPACE_ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
 ROOT="${1:-${WORKSPACE_ROOT}/external}"
 mkdir -p "$ROOT"
@@ -28,6 +29,7 @@ clone_or_update EyeNavGS_NTHU_Dataset https://github.com/sawalee0811/EyeNavGS_NT
 clone_or_update gaussian-splatting https://github.com/graphdeco-inria/gaussian-splatting.git
 clone_or_update FlashSplat https://github.com/florinshen/FlashSplat.git
 clone_or_update SegAnyGAussians https://github.com/Jumpat/SegAnyGAussians.git
+clone_or_update dinov2 https://github.com/facebookresearch/dinov2.git
 
 echo
 echo "initializing required submodules"
@@ -47,4 +49,4 @@ git -C SegAnyGAussians submodule update --init --recursive --depth 1
 
 echo
 echo "Recorded versions:"
-bash "$(dirname "$0")/record_external_repos.sh" "$ROOT"
+bash "${SCRIPT_DIR}/record_external_repos.sh" "$ROOT"

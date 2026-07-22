@@ -1,0 +1,114 @@
+{
+  "assignment_priority": [
+    "monitor",
+    "stroller",
+    "toy",
+    "chair",
+    "table",
+    "cushion",
+    "book",
+    "bookshelf",
+    "cabinet",
+    "picture_frame",
+    "curtain",
+    "rug",
+    "staircase",
+    "door",
+    "window",
+    "wall",
+    "floor",
+    "ceiling"
+  ],
+  "classes": [
+    {
+      "class": "monitor",
+      "type": "thing",
+      "prompts": ["computer monitor", "monitor", "display screen"]
+    },
+    {
+      "class": "stroller",
+      "type": "thing",
+      "prompts": ["baby stroller", "stroller", "pushchair", "pram"]
+    },
+    {
+      "class": "toy",
+      "type": "thing",
+      "prompts": ["toy", "children's toy", "toy phone", "toy vehicle", "toy truck", "abacus"]
+    },
+    {
+      "class": "chair",
+      "type": "thing",
+      "prompts": ["chair", "children's chair", "small chair"]
+    },
+    {
+      "class": "table",
+      "type": "thing",
+      "prompts": ["table", "children's table", "small table"]
+    },
+    {
+      "class": "cushion",
+      "type": "thing",
+      "prompts": ["cushion", "pillow", "floor cushion"]
+    },
+    {
+      "class": "book",
+      "type": "thing",
+      "prompts": ["book", "children's book"]
+    },
+    {
+      "class": "bookshelf",
+      "type": "thing",
+      "prompts": ["bookshelf", "bookcase", "book rack"]
+    },
+    {
+      "class": "cabinet",
+      "type": "thing",
+      "prompts": ["cabinet", "storage cabinet", "storage unit", "wardrobe", "cupboard", "built-in cabinet"]
+    },
+    {
+      "class": "picture_frame",
+      "type": "thing",
+      "prompts": ["picture frame", "wall picture", "drawing"]
+    },
+    {
+      "class": "curtain",
+      "type": "stuff",
+      "prompts": ["curtain", "window curtain"]
+    },
+    {
+      "class": "rug",
+      "type": "stuff",
+      "prompts": ["rug", "carpet", "foam mat", "play mat", "puzzle mat"]
+    },
+    {
+      "class": "staircase",
+      "type": "stuff",
+      "prompts": ["staircase", "stairs", "stairway"]
+    },
+    {
+      "class": "door",
+      "type": "stuff",
+      "prompts": ["door", "doorway"]
+    },
+    {
+      "class": "window",
+      "type": "stuff",
+      "prompts": ["window"]
+    },
+    {
+      "class": "wall",
+      "type": "stuff",
+      "prompts": ["wall", "interior wall", "painted wall"]
+    },
+    {
+      "class": "floor",
+      "type": "stuff",
+      "prompts": ["floor", "wood floor", "flooring"]
+    },
+    {
+      "class": "ceiling",
+      "type": "stuff",
+      "prompts": ["ceiling"]
+    }
+  ]
+}

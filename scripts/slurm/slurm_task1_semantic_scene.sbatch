@@ -73,6 +73,7 @@ ADAPTIVE_STUFF_MIN_VIEW_RATIO="${ADAPTIVE_STUFF_MIN_VIEW_RATIO:-0.50}"
 ADAPTIVE_STUFF_THRESHOLD_RATIO="${ADAPTIVE_STUFF_THRESHOLD_RATIO:-0.75}"
 ADAPTIVE_THING_THRESHOLD_FLOOR_RATIO="${ADAPTIVE_THING_THRESHOLD_FLOOR_RATIO:-0.50}"
 MIN_LABEL_SCORE="${MIN_LABEL_SCORE:-0.0}"
+COLOR_MODE="${COLOR_MODE:-class}"
 BOX_THRESHOLD="${BOX_THRESHOLD:-0.30}"
 TEXT_THRESHOLD="${TEXT_THRESHOLD:-0.25}"
 RESET_OUTPUT="${RESET_OUTPUT:-1}"
@@ -84,6 +85,11 @@ GROUNDINGDINO_CHECKPOINT="${GROUNDINGDINO_CHECKPOINT:-${ROOT}/gaussian-grouping/
 SAM_ROOT="${SAM_ROOT:-${GROUNDED_SAM_ROOT}/segment_anything}"
 TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 export TOKENIZERS_PARALLELISM
+
+if [ "${COLOR_MODE}" != "class" ] && [ "${COLOR_MODE}" != "instance" ]; then
+  echo "COLOR_MODE must be class or instance" >&2
+  exit 2
+fi
 
 test -d "${MODEL_DIR}"
 test -f "${MODEL_DIR}/cameras.json"
@@ -117,13 +123,14 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ] && [ -z "${TARGET_SELECTION_SOURCE}" ];
 fi
 
 if [ "${CONFIG_ONLY}" = "1" ]; then
-  printf 'scene=%s\nmodel=%s\noutput=%s\nclass_config=%s\nfocus_classes=%s\nview_count=%s\n' \
+  printf 'scene=%s\nmodel=%s\noutput=%s\nclass_config=%s\nfocus_classes=%s\nview_count=%s\ncolor_mode=%s\n' \
     "${SCENE}" \
     "${MODEL_DIR}" \
     "${OUT_DIR}" \
     "${CLASS_CONFIG}" \
     "${FOCUS_CLASSES:-<none>}" \
-    "${SEMANTIC_VIEW_COUNT}"
+    "${SEMANTIC_VIEW_COUNT}" \
+    "${COLOR_MODE}"
   exit 0
 fi
 
@@ -192,7 +199,7 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
   test -f "${BASELINE_LABEL_MAP}"
 
   run_stage 00a_screen_target_candidates \
-    python scripts/task1/select_targeted_cameras.py screen \
+    python -m scripts.task1.grounding.select_targeted_cameras screen \
       --model-path "${MODEL_DIR}" \
       --baseline-manifest "${BASELINE_MANIFEST}" \
       --output "${TARGET_SELECTION_DIR}/candidate_screen.json" \
@@ -206,7 +213,7 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
   test -n "${CANDIDATE_CAMERA_INDICES}"
 
   run_stage 00b_render_target_candidates \
-    python scripts/task1/render_auto_label_overlays.py \
+    python -m scripts.task1.qa.render_auto_label_overlays \
       --model-path "${MODEL_DIR}" \
       --labels-npy "${BASELINE_LABELS}" \
       --label-map "${BASELINE_LABEL_MAP}" \
@@ -219,7 +226,7 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
       --count "${TARGET_CANDIDATE_COUNT}"
 
   run_stage 00c_measure_target_candidates \
-    python scripts/task1/measure_overlay_coverage.py \
+    python -m scripts.task1.qa.measure_overlay_coverage \
       --rgb-dir "${TARGET_SELECTION_DIR}/candidate_rgb" \
       --overlay-dir "${TARGET_SELECTION_DIR}/candidate_overlays" \
       --output "${TARGET_SELECTION_DIR}/candidate_visible_coverage.json" \
@@ -227,7 +234,7 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
       --exclude-border 1
 
   run_stage 00d_select_targeted_cameras \
-    python scripts/task1/select_targeted_cameras.py select \
+    python -m scripts.task1.grounding.select_targeted_cameras select \
       --model-path "${MODEL_DIR}" \
       --baseline-manifest "${BASELINE_MANIFEST}" \
       --candidate-manifest "${TARGET_SELECTION_DIR}/candidate_overlays/label_overlay_manifest.json" \
@@ -274,87 +281,42 @@ fi
   echo "signed_class_evidence_min_positive_views=2"
   echo "signed_class_evidence_min_ratio=0.50"
   echo "consolidate_thing_instances=1"
+  echo "color_mode=${COLOR_MODE}"
   nvidia-smi
 } | tee "${RUN_LOG_DIR}/00_run_configuration.log"
 
+BRANCH_REUSE_ARGS=()
 if [ -n "${REUSE_SOURCE_OUT}" ]; then
   echo "reused ${GROUND_OUT_DIR}" | tee "${RUN_LOG_DIR}/01_grounded_sam.log"
   echo "reused ${PROPOSAL_DIR}" | tee "${RUN_LOG_DIR}/02_flashsplat.log"
-else
-  run_stage 01_grounded_sam \
-    python scripts/task1/generate_grounded_sam_masks.py \
-      --model-path "${MODEL_DIR}" \
-      --output-dir "${GROUND_OUT_DIR}" \
-      --flashsplat-root "${FLASHSPLAT_ROOT}" \
-      --groundingdino-root "${GROUNDED_SAM_ROOT}" \
-      --groundingdino-config "${GROUNDINGDINO_CONFIG}" \
-      --groundingdino-checkpoint "${GROUNDINGDINO_CHECKPOINT}" \
-      --segment-anything-root "${SAM_ROOT}" \
-      --sam-checkpoint "${SAM_CHECKPOINT}" \
-      --class-config "${CLASS_CONFIG}" \
-      --iteration 30000 \
-      --max-width "${RENDER_MAX_WIDTH}" \
-      --camera-indices "${SEMANTIC_CAMERA_INDICES}" \
-      --count "${SEMANTIC_VIEW_COUNT}" \
-      --max-detections-per-view "${MAX_DETECTIONS_PER_VIEW}" \
-      --box-threshold "${BOX_THRESHOLD}" \
-      --text-threshold "${TEXT_THRESHOLD}" \
-      --min-mask-area 100 \
-      --max-mask-area-ratio 0.80
-
-  run_stage 02_flashsplat \
-    python scripts/task1/run_flashsplat_mask_proposals.py \
-      --model-path "${MODEL_DIR}" \
-      --sam-output-dir "${GROUND_OUT_DIR}" \
-      --output-dir "${PROPOSAL_DIR}" \
-      --manifest-name grounded_sam_manifest.json \
-      --mask-dir-name mask_stacks \
-      --flashsplat-root "${FLASHSPLAT_ROOT}" \
-      --iteration 30000 \
-      --max-width "${RENDER_MAX_WIDTH}" \
-      --mask-batch-size "${MASK_BATCH_SIZE}" \
-      --max-masks-per-view "${MAX_DETECTIONS_PER_VIEW}" \
-      --support-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
-      --write-class-evidence \
-      --class-evidence-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
-      --min-support-gaussians 250
+  BRANCH_REUSE_ARGS=(--skip-mask-generation --skip-proposal-generation)
 fi
 
-run_stage 03_semantic_fusion \
-  python scripts/task1/cluster_semantic_flashsplat_proposals.py \
+run_stage 01_03_grounding_semantic_branch \
+  python -m scripts.task1.grounding.run_grounding_semantic_branch \
     --model-path "${MODEL_DIR}" \
+    --ground-output-dir "${GROUND_OUT_DIR}" \
     --proposal-dir "${PROPOSAL_DIR}" \
-    --output-dir "${FUSION_DIR}" \
-    --labels-path "${FUSION_DIR}/gaussian_labels.npy" \
-    --summary-path "${FUSION_DIR}/semantic_group_summary.json" \
+    --fusion-dir "${FUSION_DIR}" \
     --label-map-path "${DELIVERABLE_DIR}/label_map.json" \
     --semantic-ply-path "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
+    --log-dir "${RUN_LOG_DIR}" \
     --class-config "${CLASS_CONFIG}" \
-    --iteration 30000 \
+    --camera-indices "${SEMANTIC_CAMERA_INDICES}" \
+    --view-count "${SEMANTIC_VIEW_COUNT}" \
     --scene "${SCENE}" \
-    --min-proposal-gaussians 500 \
-    --min-group-gaussians 1500 \
-    --min-group-proposals 2 \
-    --merge-iou 0.35 \
-    --containment-threshold 0.70 \
-    --max-groups 96 \
-    --assignment-reliability-views 2 \
-    --assignment-min-quality 0.08 \
-    --class-evidence-dir "${PROPOSAL_DIR}/class_evidence" \
-    --class-evidence-min-positive-views 2 \
-    --class-evidence-min-ratio 0.50 \
-    --spatial-prune-thing-islands \
-    --spatial-voxel-scale-multiplier 4 \
-    --spatial-min-voxel-size 0.01 \
-    --spatial-max-voxel-size 0.20 \
-    --spatial-min-component-gaussians 500 \
-    --spatial-min-component-ratio 0.01 \
-    --consolidate-thing-instances \
-    --instance-voxel-scale-multiplier 4 \
-    --instance-min-voxel-size 0.01 \
-    --instance-max-voxel-size 0.20 \
-    --instance-min-component-gaussians 500 \
-    --instance-min-component-ratio 0.01 \
+    --flashsplat-root "${FLASHSPLAT_ROOT}" \
+    --groundingdino-root "${GROUNDED_SAM_ROOT}" \
+    --groundingdino-config "${GROUNDINGDINO_CONFIG}" \
+    --groundingdino-checkpoint "${GROUNDINGDINO_CHECKPOINT}" \
+    --segment-anything-root "${SAM_ROOT}" \
+    --sam-checkpoint "${SAM_CHECKPOINT}" \
+    --render-max-width "${RENDER_MAX_WIDTH}" \
+    --max-detections-per-view "${MAX_DETECTIONS_PER_VIEW}" \
+    --mask-batch-size "${MASK_BATCH_SIZE}" \
+    --flashsplat-support-threshold "${FLASHSPLAT_SUPPORT_THRESHOLD}" \
+    --box-threshold "${BOX_THRESHOLD}" \
+    --text-threshold "${TEXT_THRESHOLD}" \
     --min-assigned-gaussians "${MIN_ASSIGNED_GAUSSIANS}" \
     --min-assigned-thing-gaussians "${MIN_ASSIGNED_THING_GAUSSIANS}" \
     --min-assigned-stuff-gaussians "${MIN_ASSIGNED_STUFF_GAUSSIANS}" \
@@ -362,29 +324,34 @@ run_stage 03_semantic_fusion \
     --adaptive-stuff-threshold-ratio "${ADAPTIVE_STUFF_THRESHOLD_RATIO}" \
     --adaptive-thing-threshold-floor-ratio "${ADAPTIVE_THING_THRESHOLD_FLOOR_RATIO}" \
     --min-label-score "${MIN_LABEL_SCORE}" \
+    "${BRANCH_REUSE_ARGS[@]}" \
     --overwrite
+
+cp "${FUSION_DIR}/gaussian_labels.npy" "${DELIVERABLE_DIR}/gaussian_labels.npy"
 
 run_report \
   "${VALIDATION_DIR}/semantic_point_cloud_inspection.json" \
   04_semantic_ply_inspection \
-  python scripts/task1/inspect_ply.py "${DELIVERABLE_DIR}/semantic_point_cloud.ply" --json
+  python -m scripts.task1.qa.inspect_ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" --json
 
 run_stage 06_supersplat_debug_ply \
-  python scripts/task1/export_supersplat_label_colors.py \
+  python -m scripts.task1.qa.export_supersplat_label_colors \
     --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --output-ply "${PLY_VIS_DIR}/semantic_point_cloud_supersplat_debug.ply" \
     --metadata-json "${PLY_VIS_DIR}/semantic_point_cloud_supersplat_debug.json" \
+    --color-mode "${COLOR_MODE}" \
     --overwrite
 
 if [ -n "${FOCUS_CLASSES}" ]; then
   run_stage 07_focus_debug_ply \
-    python scripts/task1/export_supersplat_label_colors.py \
+    python -m scripts.task1.qa.export_supersplat_label_colors \
       --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
       --label-map "${DELIVERABLE_DIR}/label_map.json" \
       --output-ply "${PLY_VIS_DIR}/${FOCUS_NAME}_supersplat_debug.ply" \
       --metadata-json "${PLY_VIS_DIR}/${FOCUS_NAME}_supersplat_debug.json" \
       --focus-classes "${FOCUS_CLASSES}" \
+      --color-mode "${COLOR_MODE}" \
       --overwrite
 else
   echo "focus classes disabled" | tee "${RUN_LOG_DIR}/07_focus_debug_ply.log"
@@ -393,10 +360,10 @@ fi
 run_report \
   "${VALIDATION_DIR}/semantic_point_cloud_supersplat_debug_inspection.json" \
   07_supersplat_debug_ply_inspection \
-  python scripts/task1/inspect_ply.py "${PLY_VIS_DIR}/semantic_point_cloud_supersplat_debug.ply" --json
+  python -m scripts.task1.qa.inspect_ply "${PLY_VIS_DIR}/semantic_point_cloud_supersplat_debug.ply" --json
 
 run_stage 08_semantic_overlays \
-  python scripts/task1/render_auto_label_overlays.py \
+  python -m scripts.task1.qa.render_auto_label_overlays \
     --model-path "${MODEL_DIR}" \
     --labels-npy "${FUSION_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -405,11 +372,12 @@ run_stage 08_semantic_overlays \
     --iteration 30000 \
     --max-width "${RENDER_MAX_WIDTH}" \
     --camera-indices "${SEMANTIC_CAMERA_INDICES}" \
-    --count "${SEMANTIC_VIEW_COUNT}"
+    --count "${SEMANTIC_VIEW_COUNT}" \
+    --color-mode "${COLOR_MODE}"
 
 if [ -n "${FOCUS_CLASSES}" ]; then
   run_stage 09_focus_overlays \
-    python scripts/task1/render_auto_label_overlays.py \
+    python -m scripts.task1.qa.render_auto_label_overlays \
       --model-path "${MODEL_DIR}" \
       --labels-npy "${FUSION_DIR}/gaussian_labels.npy" \
       --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -419,13 +387,14 @@ if [ -n "${FOCUS_CLASSES}" ]; then
       --max-width "${RENDER_MAX_WIDTH}" \
       --camera-indices "${SEMANTIC_CAMERA_INDICES}" \
       --count "${SEMANTIC_VIEW_COUNT}" \
-      --focus-classes "${FOCUS_CLASSES}"
+      --focus-classes "${FOCUS_CLASSES}" \
+      --color-mode "${COLOR_MODE}"
 else
   echo "focus classes disabled" | tee "${RUN_LOG_DIR}/09_focus_overlays.log"
 fi
 
 run_stage 10_visible_coverage \
-  python scripts/task1/measure_overlay_coverage.py \
+  python -m scripts.task1.qa.measure_overlay_coverage \
     --rgb-dir "${GROUND_OUT_DIR}/rgb_renders" \
     --overlay-dir "${SEMANTIC_OVERLAY_DIR}" \
     --output "${VALIDATION_DIR}/visible_overlay_coverage.json" \
@@ -433,14 +402,14 @@ run_stage 10_visible_coverage \
     --exclude-border 1
 
 run_stage 11_contact_sheets \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${GROUND_OUT_DIR}/overlays" \
     --output "${CONTACT_DIR}/grounded_sam.png" \
     --columns 5 \
     --thumb-width "${CONTACT_THUMB_WIDTH}"
 
 run_stage 12_semantic_contact_sheet \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${SEMANTIC_OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/semantic_labels.png" \
     --columns 5 \
@@ -448,7 +417,7 @@ run_stage 12_semantic_contact_sheet \
 
 if [ -n "${FOCUS_CLASSES}" ]; then
   run_stage 13_focus_contact_sheet \
-    python scripts/task1/make_contact_sheet.py \
+    python -m scripts.task1.qa.make_contact_sheet \
       --image-dir "${FOCUS_OVERLAY_DIR}" \
       --output "${CONTACT_DIR}/${FOCUS_NAME}.png" \
       --columns 5 \
@@ -457,17 +426,26 @@ else
   echo "focus classes disabled" | tee "${RUN_LOG_DIR}/13_focus_contact_sheet.log"
 fi
 
+run_stage 14_semantic_color_legend \
+  python -m scripts.task1.qa.write_semantic_color_legend \
+    --label-map "${DELIVERABLE_DIR}/label_map.json" \
+    --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
+    --output-json "${VISUALIZATION_DIR}/semantic_color_legend.json" \
+    --output-png "${VISUALIZATION_DIR}/semantic_color_legend.png" \
+    --color-mode "${COLOR_MODE}" \
+    --overwrite
+
 run_report \
   "${VALIDATION_DIR}/task1_validation.json" \
-  14_task1_validation \
-  python scripts/task1/validate_task1_outputs.py \
-    --labels-npy "${FUSION_DIR}/gaussian_labels.npy" \
+  15_task1_validation \
+  python -m scripts.task1.qa.validate_task1_outputs \
+    --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --semantic-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --visible-coverage "${VALIDATION_DIR}/visible_overlay_coverage.json"
 
-run_stage 15_pipeline_summary \
-  python scripts/task1/summarize_task1_semantic_run.py \
+run_stage 16_pipeline_summary \
+  python -m scripts.task1.qa.summarize_task1_semantic_run \
     --output-dir "${OUT_DIR}" \
     --summary-path "${VALIDATION_DIR}/pipeline_run_summary.json" \
     --focus-name "${FOCUS_NAME}"

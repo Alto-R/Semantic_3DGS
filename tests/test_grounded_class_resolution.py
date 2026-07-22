@@ -1,18 +1,29 @@
 from __future__ import annotations
 
-import sys
+import json
 import unittest
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "task1"))
-
-from generate_grounded_sam_masks import ClassSpec, class_from_phrase  # noqa: E402
+from scripts.task1.grounding.generate_grounded_sam_masks import (
+    ClassSpec,
+    class_from_phrase,
+    select_class_specs,
+)
 
 
 class GroundedClassResolutionTest(unittest.TestCase):
+    def test_include_classes_preserves_requested_config_order(self) -> None:
+        selected = select_class_specs(self.specs, "media_console,piano")
+        self.assertEqual([item.name for item in selected], ["media_console", "piano"])
+
+    def test_unknown_include_class_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "absent from the class config"):
+            select_class_specs(self.specs, "radiator")
+
     def setUp(self) -> None:
         self.specs = [
+            ClassSpec(name="piano", prompts=("piano", "upright piano")),
             ClassSpec(name="guitar", prompts=("guitar", "acoustic guitar")),
             ClassSpec(name="indoor_plant", prompts=("indoor plant", "potted plant")),
             ClassSpec(name="chair", prompts=("chair", "armchair")),
@@ -41,6 +52,20 @@ class GroundedClassResolutionTest(unittest.TestCase):
     def test_shorter_prompt_inside_specific_prompt_is_ignored(self) -> None:
         self.assertEqual(class_from_phrase("floor speaker", self.specs), "speaker")
         self.assertEqual(class_from_phrase("television stand", self.specs), "media_console")
+
+    def test_remaining_scene_config_prompts_resolve_to_their_classes(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for scene in ("drjohnson", "playroom", "stump", "treehill"):
+            config_path = root / "configs" / f"task1_semantic_classes.{scene}.json"
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            specs = [
+                ClassSpec(name=item["class"], prompts=tuple(item["prompts"]))
+                for item in config["classes"]
+            ]
+            for item in config["classes"]:
+                for prompt in item["prompts"]:
+                    with self.subTest(scene=scene, prompt=prompt):
+                        self.assertEqual(class_from_phrase(prompt, specs), item["class"])
 
 
 if __name__ == "__main__":

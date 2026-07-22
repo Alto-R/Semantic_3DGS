@@ -1,0 +1,96 @@
+{
+  "assignment_priority": [
+    "fireplace",
+    "chair",
+    "table",
+    "bench",
+    "radiator",
+    "cabinet",
+    "bookshelf",
+    "picture_frame",
+    "lamp",
+    "rug",
+    "door",
+    "window",
+    "wall",
+    "floor",
+    "ceiling"
+  ],
+  "classes": [
+    {
+      "class": "fireplace",
+      "type": "thing",
+      "prompts": ["fireplace", "hearth", "mantel"]
+    },
+    {
+      "class": "chair",
+      "type": "thing",
+      "prompts": ["chair", "wooden chair", "armchair"]
+    },
+    {
+      "class": "table",
+      "type": "thing",
+      "prompts": ["table", "wooden table", "dining table"]
+    },
+    {
+      "class": "bench",
+      "type": "thing",
+      "prompts": ["bench", "wooden bench", "chest"]
+    },
+    {
+      "class": "radiator",
+      "type": "thing",
+      "prompts": ["radiator", "wall radiator", "heating radiator"]
+    },
+    {
+      "class": "cabinet",
+      "type": "thing",
+      "prompts": ["cabinet", "wooden cabinet", "secretary cabinet"]
+    },
+    {
+      "class": "bookshelf",
+      "type": "thing",
+      "prompts": ["bookshelf", "bookcase", "book cabinet"]
+    },
+    {
+      "class": "picture_frame",
+      "type": "thing",
+      "prompts": ["picture frame", "painting", "portrait", "wall art"]
+    },
+    {
+      "class": "lamp",
+      "type": "thing",
+      "prompts": ["chandelier", "ceiling light", "light fixture"]
+    },
+    {
+      "class": "rug",
+      "type": "stuff",
+      "prompts": ["rug", "carpet"]
+    },
+    {
+      "class": "door",
+      "type": "stuff",
+      "prompts": ["door", "doorway"]
+    },
+    {
+      "class": "window",
+      "type": "stuff",
+      "prompts": ["window", "window shutter", "shutter"]
+    },
+    {
+      "class": "wall",
+      "type": "stuff",
+      "prompts": ["wall", "interior wall", "painted wall"]
+    },
+    {
+      "class": "floor",
+      "type": "stuff",
+      "prompts": ["floor", "wood floor", "flooring"]
+    },
+    {
+      "class": "ceiling",
+      "type": "stuff",
+      "prompts": ["ceiling"]
+    }
+  ]
+}

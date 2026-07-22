@@ -26,7 +26,8 @@ logs/
 tmp/
 scratch/
 
-# Local task handoffs
+# Local task instructions and handoffs
+AGENTS.md
 *_HANDOFF.md
 
 # Common 3DGS / ML artifacts

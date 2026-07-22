@@ -1,0 +1,28 @@
+{
+  "assignment_priority": [
+    "oven_mitt",
+    "cutlery"
+  ],
+  "classes": [
+    {
+      "class": "oven_mitt",
+      "type": "thing",
+      "prompts": [
+        "oven mitt with thumb",
+        "padded oven glove",
+        "quilted heat-resistant oven mitt",
+        "pair of oven mitts"
+      ]
+    },
+    {
+      "class": "cutlery",
+      "type": "thing",
+      "prompts": [
+        "metal cutlery",
+        "silverware",
+        "forks knives and spoons",
+        "table cutlery"
+      ]
+    }
+  ]
+}

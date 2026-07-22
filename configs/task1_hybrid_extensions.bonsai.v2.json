@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "scene": "bonsai",
+  "candidate_classes": [
+    "electronic_keyboard"
+  ],
+  "default_enabled_classes": []
+}

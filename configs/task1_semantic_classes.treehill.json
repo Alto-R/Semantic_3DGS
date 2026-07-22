@@ -1,0 +1,48 @@
+{
+  "assignment_priority": [
+    "bench",
+    "tree",
+    "fence",
+    "path",
+    "ground",
+    "vegetation",
+    "sky"
+  ],
+  "classes": [
+    {
+      "class": "bench",
+      "type": "thing",
+      "prompts": ["bench", "wooden bench", "tree bench", "circular bench"]
+    },
+    {
+      "class": "tree",
+      "type": "thing",
+      "prompts": ["tree", "tree trunk"]
+    },
+    {
+      "class": "fence",
+      "type": "stuff",
+      "prompts": ["fence", "railing", "metal railing"]
+    },
+    {
+      "class": "path",
+      "type": "stuff",
+      "prompts": ["path", "paved path", "walkway"]
+    },
+    {
+      "class": "ground",
+      "type": "stuff",
+      "prompts": ["ground", "soil", "dirt", "gravel"]
+    },
+    {
+      "class": "vegetation",
+      "type": "stuff",
+      "prompts": ["vegetation", "grass", "bush", "plant"]
+    },
+    {
+      "class": "sky",
+      "type": "stuff",
+      "prompts": ["sky"]
+    }
+  ]
+}

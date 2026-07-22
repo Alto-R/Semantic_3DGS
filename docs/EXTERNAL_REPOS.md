@@ -1,44 +1,43 @@
-# External Repositories
+# External Repositories and Environment
 
-Third-party repositories are cloned outside the project repository under:
+The semantic pipeline uses external research repositories and model weights that
+are intentionally not vendored here. Setup scripts place them under the shared
+workspace's `external/` directory and keep the project checkout independent of
+machine-specific paths.
 
-```text
-external/
-```
+## Required capabilities
 
-Do not commit these repositories into this project.
+- Graphdeco/3D Gaussian Splatting scene rendering
+- DINOv2 ViT-L/14 and the ADE20K linear segmentation head
+- GroundingDINO text-conditioned detection
+- Segment Anything mask generation
+- FlashSplat projection and Gaussian-mask lifting
 
-## Planned Dependencies
+Exact repository revisions and environment commands are maintained by the setup
+scripts under `scripts/setup/`. Cluster helpers live under `scripts/cluster/`.
 
-| Name | Purpose | URL |
-|---|---|---|
-| EyeNavGS Software | Replay, visualization, coordinate utilities | https://github.com/symmru/EyeNavGS_Software |
-| EyeNavGS Rutgers Dataset | Dataset metadata and traces | https://github.com/symmru/EyeNavGS_Rutgers_Dataset |
-| EyeNavGS NTHU Dataset | Dataset metadata and traces | https://github.com/sawalee0811/EyeNavGS_NTHU_Dataset |
-| Gaussian Splatting | Base 3DGS model format and renderer | https://github.com/graphdeco-inria/gaussian-splatting |
-| FlashSplat | Mask-to-Gaussian proposal lifting | https://github.com/florinshen/FlashSplat |
-| SegAnyGAussians | Semantic rasterizer extensions and Segment Anything dependency | https://github.com/Jumpat/SegAnyGAussians |
-| Grounded Segment Anything | GroundingDINO and SAM semantic mask generation | https://github.com/IDEA-Research/Grounded-Segment-Anything |
-
-## Commit Recording Command
-
-From the cluster:
-
-```bash
-bash scripts/cluster/record_external_repos.sh
-```
-
-## Clone Location
-
-Current clone root:
+## Expected layout
 
 ```text
-external/
+<workspace>/
+  projects/<this-repository>/
+  external/<dependency-checkouts>/
+  data/3dgs_models/graphdeco/<scene>/
+  outputs/eyenavgs_task1/
 ```
 
-The repositories are cloned with shallow history and `GIT_LFS_SKIP_SMUDGE=1`
-to avoid pulling large assets into project storage.
+Slurm entry points derive `<workspace>` from the current repository checkout. If
+a dependency or model cache must be overridden, provide it through the documented
+job environment rather than editing a tracked script with an absolute path.
 
-Required submodules for GraphDeco, FlashSplat, and SAGA were initialized. SAGA's
-GitHub SSH submodule URLs are rewritten to HTTPS in environments without GitHub
-SSH credentials.
+## Setup and verification
+
+1. Run the applicable script in `scripts/setup/` on the target cluster.
+2. Verify that the expected scene point cloud and `cameras.json` exist.
+3. Run `scripts/slurm/slurm_gpu_check.sbatch` when validating a new environment.
+4. Resolve the intended semantic scheduler with `CONFIG_ONLY=1` before
+   submitting an expensive job when that entry point supports it.
+
+External repositories are dependencies, not synchronization targets for this
+project. Repository maintenance applies only to this repository's canonical
+`origin`; the configured `team` remote is read-only.

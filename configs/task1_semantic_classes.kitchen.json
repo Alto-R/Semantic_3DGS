@@ -1,0 +1,17 @@
+{
+  "assignment_priority": [
+    "toy_bulldozer"
+  ],
+  "classes": [
+    {
+      "class": "toy_bulldozer",
+      "type": "thing",
+      "prompts": [
+        "toy bulldozer",
+        "LEGO bulldozer",
+        "toy construction vehicle",
+        "toy front loader"
+      ]
+    }
+  ]
+}

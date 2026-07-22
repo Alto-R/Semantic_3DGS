@@ -1,0 +1,26 @@
+{
+  "assignment_priority": [
+    "bonsai_tree",
+    "electronic_keyboard"
+  ],
+  "classes": [
+    {
+      "class": "bonsai_tree",
+      "type": "thing",
+      "prompts": [
+        "bonsai tree",
+        "bonsai plant",
+        "ornamental bonsai tree"
+      ]
+    },
+    {
+      "class": "electronic_keyboard",
+      "type": "thing",
+      "prompts": [
+        "electronic keyboard",
+        "digital piano",
+        "keyboard instrument"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "scene": "counter",
+  "candidate_classes": [
+    "oven_mitt",
+    "cutlery"
+  ],
+  "default_enabled_classes": []
+}

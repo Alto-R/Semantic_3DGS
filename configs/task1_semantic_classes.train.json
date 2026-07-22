@@ -9,7 +9,6 @@
     "fence",
     "building",
     "tree",
-    "railway_platform",
     "ground",
     "road",
     "vegetation",
@@ -24,12 +23,14 @@
     {
       "class": "railroad_track",
       "type": "stuff",
-      "prompts": ["railroad track", "train track", "railway track", "rails"]
-    },
-    {
-      "class": "railway_platform",
-      "type": "stuff",
-      "prompts": ["railway platform", "train platform", "platform"]
+      "prompts": [
+        "railroad track",
+        "train track",
+        "railway track",
+        "rails",
+        "railway platform",
+        "train platform"
+      ]
     },
     {
       "class": "car",

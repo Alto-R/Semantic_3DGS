@@ -5,9 +5,15 @@ ENV_NAME="${1:-gaussian_grouping_true}"
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORKSPACE_ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
 EXTERNAL_ROOT="${2:-${WORKSPACE_ROOT}/external}"
+GROUNDINGDINO_ROOT="${GROUNDINGDINO_ROOT:-${WORKSPACE_ROOT}/gaussian-grouping/Tracking-Anything-with-DEVA/Grounded-Segment-Anything/GroundingDINO}"
+CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-7.5;8.6+PTX}"
+BUILD_JOBS="${MAX_JOBS:-4}"
 
 echo "conda env:     $ENV_NAME"
 echo "external root: $EXTERNAL_ROOT"
+echo "GroundingDINO: $GROUNDINGDINO_ROOT"
+echo "CUDA arches:   $CUDA_ARCH_LIST"
+echo "build jobs:    $BUILD_JOBS"
 
 install_editable() {
   local path="$1"
@@ -18,7 +24,32 @@ install_editable() {
   fi
   echo
   echo "installing $name"
-  conda run -n "$ENV_NAME" python -m pip install --no-build-isolation --no-deps -e "$path"
+  TORCH_CUDA_ARCH_LIST="$CUDA_ARCH_LIST" \
+    MAX_JOBS="$BUILD_JOBS" \
+    conda run -n "$ENV_NAME" python -m pip install \
+      --no-build-isolation \
+      --no-deps \
+      --no-cache-dir \
+      --force-reinstall \
+      -e "$path"
+}
+
+build_inplace() {
+  local path="$1"
+  local name="$2"
+  if [[ ! -d "$path" ]]; then
+    echo "missing $name at $path" >&2
+    return 1
+  fi
+  echo
+  echo "building $name in place"
+  (
+    cd "$path"
+    TORCH_CUDA_ARCH_LIST="$CUDA_ARCH_LIST" \
+      MAX_JOBS="$BUILD_JOBS" \
+      conda run --no-capture-output -n "$ENV_NAME" \
+        python setup.py build_ext --inplace --force
+  )
 }
 
 install_editable \
@@ -32,6 +63,13 @@ install_editable \
 install_editable \
   "$EXTERNAL_ROOT/SegAnyGAussians/submodules/diff-gaussian-rasterization-depth" \
   diff_gaussian_rasterization_depth
+
+# GroundingDINO is imported directly from this source tree, so rebuilding only
+# the pip-installed Gaussian rasterizers does not refresh its deformable-
+# attention CUDA kernel. Force an in-place build with the same native/PTX
+# architecture policy; otherwise an older sm_70/sm_75-only binary can silently
+# return zero detections on L40 GPUs.
+build_inplace "$GROUNDINGDINO_ROOT" GroundingDINO
 
 echo
 echo "verifying imports"
@@ -50,4 +88,11 @@ for mod in mods:
         missing.append(mod)
 if missing:
     raise SystemExit(f"missing imports: {missing}")
+'
+
+PYTHONPATH="$GROUNDINGDINO_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
+  conda run -n "$ENV_NAME" python -c '
+import torch
+import groundingdino._C
+print("groundingdino._C OK")
 '

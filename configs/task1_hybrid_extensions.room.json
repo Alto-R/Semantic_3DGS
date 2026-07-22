@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "scene": "room",
+  "candidate_classes": [
+    "piano",
+    "speaker",
+    "guitar"
+  ],
+  "default_enabled_classes": [
+    "piano",
+    "speaker"
+  ]
+}

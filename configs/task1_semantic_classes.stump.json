@@ -1,0 +1,30 @@
+{
+  "assignment_priority": [
+    "tree",
+    "vegetation",
+    "ground",
+    "sky"
+  ],
+  "classes": [
+    {
+      "class": "tree",
+      "type": "thing",
+      "prompts": ["tree", "tree trunk", "tree stump", "fallen tree", "fallen log"]
+    },
+    {
+      "class": "vegetation",
+      "type": "stuff",
+      "prompts": ["vegetation", "grass", "plant", "ivy", "bush"]
+    },
+    {
+      "class": "ground",
+      "type": "stuff",
+      "prompts": ["ground", "soil", "dirt", "forest floor"]
+    },
+    {
+      "class": "sky",
+      "type": "stuff",
+      "prompts": ["sky"]
+    }
+  ]
+}
