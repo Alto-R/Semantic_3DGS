@@ -179,6 +179,58 @@ were intentionally left unchanged. All six regenerated deliverables have
 structural validation status `ok`, and the cluster repository suite passed 92
 tests.
 
+## 10. Adaptive v5 and report-only singleton evidence audits
+
+The residual Playroom and Dr. Johnson review motivated a sequence of global
+singleton experiments. Adaptive v5 remains the immutable merge baseline: it
+rejects the false Playroom wardrobe/door recovery and permits one conservative
+connected-component completion for the strongly anchored Dr. Johnson window.
+The later v6 mask-augmentation and v8 point-intersection outputs were visually
+rejected because adjacent or repeated views could confirm the same lifting
+error, and because same-class detections could switch to a different physical
+instance.
+
+The v9 audit therefore stopped writing labels and required each alternate box
+to come from a fresh GroundingDINO detection in a geometrically separated
+camera. Positive-versus-negative FlashSplat contribution exposed the exact
+identity failure: Playroom proposal `310` intersected mainly an already-correct
+different door, while proposal `100` and Dr. Johnson proposals `8`, `341`, and
+`376` had balanced source-seed contribution across two independent views.
+
+The report-only v10 audit added the global identity gate and adaptive 3D
+components. The second view must support at least 20% of the source seed and at
+least half as much as the best view; components use twice the measured local
+4-neighbor Gaussian spacing and are retained only when they contain a source-
+seed Gaussian. Near-threshold quality failures are lifted for diagnosis but
+remain excluded from selection.
+
+Both v10 runs preserve all no-write invariants. Playroom reports 21 component-
+supported, 1 component-abstained, 7 identity-abstained, and 19 semantic-
+abstained scheduled candidates; Dr. Johnson reports 22 component-supported, 5
+identity-abstained, and 21 semantic-abstained candidates. The targeted findings
+are:
+
+- Playroom `310` is correctly identity-abstained (best/second seed fractions
+  0.739/0.109). Proposal `100` passes (0.437/0.399), but its retained 1,483
+  Gaussians still mix wall, unlabeled, and two existing door instances.
+- Dr. Johnson `8`, `341`, and `376` pass the identity gate. Their component-
+  retained counts are 6,162, 7,022, and 12,191; `341` and `376` still expand to
+  1.73x and 3.42x their source seeds.
+- Proposal `879` remains semantic-abstained. Its near-threshold frame `00211`
+  contributes 6,600 source-seed Gaussians (0.251), while its only quality-
+  passing view contributes 9. This diagnoses a useful shutter mask but not a
+  second valid independent confirmation.
+- Seed-touching connectivity is not a sufficient global semantic guard. The
+  same audit marks obvious lookalikes as component-supported, including window
+  candidates whose retained regions are 99.8-99.9% an existing door, 98.6% a
+  painting, or 97.5-98.2% a fireplace. These current-label histograms are proxy
+  evidence rather than ground truth, but the known repeated-door/window failure
+  and overlays make global promotion unsafe.
+
+No v10 semantic labels or PLY were written. Adaptive v5 remains unchanged, and
+the singleton route stops at report-only evidence pending a stronger global
+physical-instance/semantic-conflict guard.
+
 ## Current status
 
 - The scheduler supports DINOv2-only runs and DINOv2 plus guarded
