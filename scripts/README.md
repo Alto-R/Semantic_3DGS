@@ -1,83 +1,74 @@
-# Script Layout
+# Maintained Scripts
 
-Run project commands from the repository root so the relative paths used by
-the Slurm entry points resolve consistently.
+The active scripts are grouped by operational role. Retired utilities and
+superseded schedulers are preserved under `archive/`.
 
-- `task1/`: maintained Task 1 Python pipeline, validation, visualization, and
-  inspection tools. These files stay together because several import shared
-  local modules.
-- `slurm/`: maintained Slurm entry points. Use
-  `slurm/slurm_task1_dinov2_scene.sbatch` for the production DINOv2 route and
-  its optional continuous GroundingDINO extension. Use
-  `slurm/slurm_task1_semantic_scene.sbatch` for standalone GroundingDINO
-  debugging; the bicycle entry point is a compatibility wrapper.
-- `cluster/`: cluster bootstrap, health-check, dependency-clone, and dependency
-  inventory helpers.
-- `setup/`: renderer and semantic-extension installation helpers.
+## Slurm entry points
 
-The alternative prompt-free DINOv2 route is implemented by:
+| Scheduler | Role |
+|---|---|
+| `slurm/slurm_task1_dinov2_scene.sbatch` | Render real cameras, run DINOv2 ADE20K, lift votes, and build an immutable multiview base |
+| `slurm/slurm_task1_ade_refinement_scene.sbatch` | Run adaptive instance-guard v5 from an immutable DINOv2 base |
+| `slurm/slurm_task1_ade_refinement_replay_scene.sbatch` | Reapply the v5 merge to cached refinement evidence |
+| `slurm/slurm_task1_semantic_scene.sbatch` | Generate standalone GroundingDINO+SAM evidence for classes absent from ADE20K |
+| `slurm/slurm_task1_reviewed_extensions_scene.sbatch` | Merge an explicit allowlist of reviewed custom classes into a new output |
+| `slurm/slurm_task1_recolor_output.sbatch` | Recolor an existing accepted semantic output |
+| `slurm/slurm_gpu_check.sbatch` | Verify the cluster GPU environment |
 
-- `task1/render_task1_views.py`: render all real `cameras.json` views (or an
-  explicit smoke-test subset).
-- `task1/dinov2_segment_views.py`: official ViT-L/14 ADE20K linear-head
-  inference with raw class/confidence maps and QA overlays.
-- `task1/lift_dinov2_view_votes.py`: one compact indexed FlashSplat lift per
-  view, including low-confidence abstention.
-- `task1/fuse_dinov2_multiview_votes.py`: exact disk-backed vote fusion,
-  thresholding, thing-instance components, pruning, and D1 export.
-- `task1/build_grounding_guard_config.py`: builds the automatic GroundingDINO
-  vocabulary from DINO classes present in the fused scene plus the selected
-  custom extension classes. DINO-derived entries are competition-only guards.
-- `task1/build_ade_refinement_config.py`: derives a scene-neutral same-ontology
-  Grounding vocabulary from ADE classes with surviving DINO support and can
-  optionally append explicitly declared missing-vocabulary extension classes.
-- `task1/run_grounding_semantic_branch.py`: shared GroundingDINO/SAM,
-  FlashSplat, and semantic-fusion branch used by both scheduler paths.
-- `task1/merge_semantic_extensions.py`: deterministic Gaussian-label merge for
-  reviewed classes outside the ADE20K ontology.
-- `task1/merge_ade_refinement.py`: guarded same-ontology merge that rejects
-  ambiguous Grounding claims, requires spatially local same-class DINO anchor
-  density, bounds accepted changes by robust instance geometry, recovers
-  repeated unanchored things from strong multiview evidence, corrects a
-  systematic competing-instance error only when at least 90% of a matching
-  prototype is one existing thing, and prevents broad masks from erasing
-  competing DINO `thing` instances.
-- `slurm/slurm_task1_dinov2_scene.sbatch`: production entry point. Set
-  `ENABLE_GROUNDINGDINO=1` to run the extension branch continuously after the
-  DINOv2 base; the default `0` publishes DINOv2 alone.
-- `slurm/slurm_task1_ade_refinement_scene.sbatch`: experimental cached-DINO
-  entry point for automatic ADE-overlap refinement; it never enables missing
-  vocabulary.
-- `slurm/slurm_task1_ade_refinement_replay_scene.sbatch`: merge-only replay of
-  saved ADE/Grounded-SAM evidence for guarded cross-scene QA; optional reviewed
-  extension labels can be composed without rerunning either semantic model.
-- `slurm/slurm_task1_recolor_output.sbatch`: visualization-only stable-color
-  regeneration for an existing output; it does not rerun either semantic model.
-- `setup/install_dinov2_segmentation.sh`: install the separate segmentation
-  environment and download the official ViT-L/14 ADE20K linear artifacts.
-- `setup/install_semantic_extensions.sh`: rebuild the CUDA extensions for
-  native RTX 8000 (`sm_75`) execution and L40-compatible `sm_86` PTX by
-  default, including GroundingDINO's deformable-attention kernel; override
-  with `TORCH_CUDA_ARCH_LIST` only when required.
+The DINOv2, ADE v5, custom-source, reviewed-extension, and recolor schedulers
+support configuration inspection. Use `CONFIG_ONLY=1` with `bash` to resolve
+paths, inputs, and parameters without submitting a job. The cached ADE replay
+scheduler does not currently expose this mode.
 
-The v1 defaults preserve all 150 ADE20K classes and use only real cameras. See
-`docs/DINOV2_MULTIVIEW_VOTING.md` for the vote definition and fixed scope.
+## Task 1 package
 
-Superseded experiments and utilities are retained under
-`archive/task1_legacy/scripts/` and `archive/task1_prompt_pilot/scripts/` for
-provenance. They are not active pipeline entry points.
+The semantic implementation is split by responsibility:
 
-Scene vocabularies live in `configs/task1_semantic_classes.<scene>.json`. If a
-scene-specific file is absent, the generic scheduler falls back to
-`configs/task1_semantic_classes.example.json`.
+```text
+task1/
+  common/      shared FlashSplat camera, PLY, and palette utilities
+  dinov2/      rendering, ADE20K inference, vote lifting, and exact fusion
+  grounding/   camera selection, GroundingDINO+SAM, and 3D proposal fusion
+  merge/       guarded ADE v5 and reviewed custom-extension merges
+  qa/          PLY publishing, overlays, contact sheets, summaries, and validation
+```
 
-Semantic colors are keyed by normalized class name, not label ID or run-local
-label ordering. `COLOR_MODE=class` is the comparison default; `instance` is an
-optional debug view. Every run writes a JSON and PNG color legend.
+Schedulers invoke these as Python modules from the repository root, for example:
 
-Intermediate DINOv2 fusion, GroundingDINO fusion, and hybrid merge directories
-store compact label arrays, maps, and summaries but no semantic PLY copy. The
-selected result writes one `deliverables/semantic_point_cloud.ply`. Every run
-also writes `visualizations/semantic_point_cloud_supersplat_debug.ply`; a hybrid
-run with surviving custom groups additionally writes the focused
-`grounding_extensions_supersplat_debug.ply` for direct extension QA.
+```bash
+python -m scripts.task1.dinov2.fuse_dinov2_multiview_votes --help
+python -m scripts.task1.merge.merge_semantic_extensions --help
+python -m scripts.task1.qa.validate_task1_outputs --help
+```
+
+Package imports are absolute (`scripts.task1...`), so tests and child processes
+use the same import graph as cluster jobs. The guarded ADE merge implements the
+active class-neutral v5 policy; the reviewed-extension merge handles only
+explicitly accepted identities that are absent from the base ontology.
+
+## Setup and cluster helpers
+
+- `setup/` installs or verifies project dependencies.
+- `cluster/` contains repository and workspace helpers.
+
+These are support scripts, not semantic algorithms. They must derive runtime
+paths from the repository/workspace and must not embed personal hosts or account
+names.
+
+## Configuration
+
+Scene semantic vocabularies live in:
+
+```text
+configs/task1_semantic_classes.<scene>[.<version>].json
+```
+
+Reviewed hybrid policies live in:
+
+```text
+configs/task1_hybrid_extensions.<scene>[.<version>].json
+```
+
+Versioned source configs may exist before their classes are accepted. An empty
+hybrid default means the evidence is still pending review, not that a merge
+should infer all available source classes.
