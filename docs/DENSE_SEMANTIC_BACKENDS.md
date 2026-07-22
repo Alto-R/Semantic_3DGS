@@ -45,6 +45,12 @@ scripts/task1/dense_seg/fuse_semantic_votes.py      threshold votes, instances,
 scripts/slurm/slurm_task1_dense_semantic_scene.sbatch
 ```
 
+For initial backend QA, set `REPORT_ONLY=1`. The scheduler stops after dense
+2D segmentation, writes the RGB renders, per-view class/confidence arrays,
+overlays, manifest, and a contact sheet, and records this contract in
+`experiment_mode.txt`. It does not lift votes, fuse Gaussian labels, or write
+a semantic PLY. Report-only mode does not require a fill baseline.
+
 Fusion modes:
 
 - `--mode full`: every Gaussian labeled from votes alone (pure dense route).
@@ -75,6 +81,7 @@ SCENE, MODEL_DIR, OUTPUT_NAME
 MODE                    fill | full           (default fill)
 SEG_BACKEND             mask2former | dinov3  (default mask2former)
 VIEW_COUNT              0 = all cameras.json cameras (default)
+REPORT_ONLY             1 = stop after 2D overlay/contact-sheet QA
 MIN_CONFIDENCE          pixel gate at lift time      (default 0.35)
 MIN_VIEWS / MIN_AGREEMENT / MIN_VISIBLE_RATIO
 FILL_SOURCE             baseline run dir for fill mode
@@ -85,6 +92,10 @@ DINOV3_REPO / DINOV3_BACKBONE_WEIGHTS / DINOV3_SEGMENTOR_WEIGHTS
 
 Confidence gating happens in the lift stage, so re-lifting with a different
 `MIN_CONFIDENCE` never re-runs the segmentation model.
+
+The scheduler honors an explicitly exported `PROJECT_ROOT`; otherwise it
+derives the repository from `SLURM_SUBMIT_DIR`. This keeps isolated cluster
+checkouts usable regardless of the caller's shell directory.
 
 ## Known limitations
 

@@ -16,6 +16,9 @@ from scripts.task1.dense_seg.fuse_semantic_votes import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ONTOLOGY_PATH = PROJECT_ROOT / "configs" / "ade20k_to_project.dense_backends.json"
+SCHEDULER_PATH = (
+    PROJECT_ROOT / "scripts" / "slurm" / "slurm_task1_dense_semantic_scene.sbatch"
+)
 
 
 class OntologyConfigTest(unittest.TestCase):
@@ -190,6 +193,34 @@ class PruneSmallNewLabelsTest(unittest.TestCase):
         pruned = prune_small_new_labels(labels, records, builder, 10, 100)
         self.assertEqual(pruned, [])
         self.assertTrue((labels == 5).all())
+
+
+class DenseSemanticSchedulerContractTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.scheduler = SCHEDULER_PATH.read_text(encoding="utf-8")
+
+    def test_explicit_project_root_is_honored(self) -> None:
+        self.assertIn(
+            'PROJECT_ROOT="${PROJECT_ROOT:-$(cd -- "${SLURM_SUBMIT_DIR:-$(pwd)}" && pwd -P)}"',
+            self.scheduler,
+        )
+
+    def test_report_only_contract_writes_no_labels_or_ply(self) -> None:
+        self.assertIn('echo "mode=report_only_dense_seg"', self.scheduler)
+        self.assertIn('echo "semantic_labels_written=0"', self.scheduler)
+        self.assertIn('echo "semantic_ply_written=0"', self.scheduler)
+
+    def test_report_only_exits_before_vote_lifting(self) -> None:
+        report_only = self.scheduler.index('if [ "${REPORT_ONLY}" = "1" ]; then')
+        vote_lift = self.scheduler.index("run_stage 02_vote_lift")
+        self.assertLess(report_only, vote_lift)
+
+    def test_report_only_does_not_require_fill_baseline(self) -> None:
+        self.assertIn(
+            'if [ "${MODE}" = "fill" ] && [ "${REPORT_ONLY}" != "1" ]; then',
+            self.scheduler,
+        )
 
 
 if __name__ == "__main__":
