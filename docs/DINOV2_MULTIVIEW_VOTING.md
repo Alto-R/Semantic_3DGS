@@ -267,7 +267,60 @@ intersection used to define gaze hits.
 6. Compare unlabeled ratio (all + gaze-hit) against the GroundingDINO baseline
    on one scene (start with `room`, the smallest matched model).
 
-## 11. References
+## 11. Implementation (v1, code complete - not yet run)
+
+The route is implemented with a **pluggable 2D backend** instead of the
+DINOv2 heads specified above. Rationale: the released DINOv2 linear head is
+patch-coarse (ADE20K mIoU ~47, 14 px boundaries) and its Mask2Former variant
+depends on legacy mmcv/mmsegmentation that conflicts with the
+`gaussian_grouping_true` environment. The v1 backend is HuggingFace
+Mask2Former-Swin-L (ADE20K semantic, mIoU ~56); DINOv3 ViT-7B/16 with the
+official ADE20K M2F segmentor (mIoU ~63, needs a 40 GB-class GPU) is wired in
+as a comparison backend.
+
+Deliberate deviations from the specification above:
+
+1. **Stage 2 backend**: `--backend mask2former | dinov3` replaces the DINOv2
+   linear/M2F heads. Both emit the same per-view contract
+   (`project_class` + `confidence`).
+2. **Stage 3 lifting**: instead of one binary mask per class per view
+   (Option A), the compact class map is passed directly as a FlashSplat
+   multi-object index mask, so one rasterizer call per <=32-class batch
+   lifts every class in the view at once.
+3. **Stage 4 voting** adds a third knob `MIN_VISIBLE_RATIO`
+   (`views_supporting / visible_views`), because absolute `MIN_VIEWS` alone
+   is biased against Gaussians visible in few views.
+4. **Fusion modes**: `--mode full` (pure voting, the route as specified) and
+   `--mode fill` (votes only fill Gaussians the accepted GroundingDINO
+   baseline left unlabeled; stuff-only by default so accepted thing
+   instances stay atomic). `fill` is the production default; `full` is the
+   ablation.
+5. **Ontology mapping happens in Stage 2** (before storage), so votes are
+   accumulated in the compact project class space (memory note in Stage 4).
+   Confidence gating happens in Stage 3, so re-lifting with a different
+   `MIN_CONFIDENCE` does not re-run the model.
+
+Files:
+
+- `configs/ade20k_to_project.json` - ADE20K(150) -> project ontology.
+- `scripts/task1/ade20k_ontology.py` - ontology loader (numpy only).
+- `scripts/task1/dense_seg_backends.py` - mask2former / dinov3 backends.
+- `scripts/task1/segment_views_semantic.py` - Stage 1+2 (render + segment).
+- `scripts/task1/lift_semantic_votes.py` - Stage 3 (index-mask lifting).
+- `scripts/task1/fuse_semantic_votes.py` - Stage 4+5 (vote fusion, instances,
+  pruning, export). Pure-numpy decision core, unit-tested.
+- `scripts/slurm/slurm_task1_dense_semantic_scene.sbatch` - scheduler
+  (env: `SCENE`, `MODE=fill|full`, `SEG_BACKEND=mask2former|dinov3`,
+  `VIEW_COUNT=0` for all cameras, `FILL_SOURCE=<accepted dir>`).
+- `tests/test_dense_semantic_vote.py` - ontology + vote-logic tests.
+
+Known limitations recorded for QA: ADE20K has no railroad-track class (train
+scene tracks must stay covered by the baseline in fill mode), no wheel class
+(truck wheels only survive in fill mode), and the 150-class closed set still
+force-classifies unknown objects - the `MIN_CONFIDENCE` gate plus `ignore`
+mappings are the mitigation, exactly as Section 8 anticipated.
+
+## 12. References
 
 - DINOv2: self-supervised ViT backbone with released ADE20K/VOC segmentation
   heads (Oquab et al., 2023).
