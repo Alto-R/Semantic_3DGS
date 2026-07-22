@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,10 +7,7 @@ from pathlib import Path
 import numpy as np
 
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
-
-from dinov2_voting import (  # noqa: E402
+from scripts.task1.dinov2.dinov2_voting import (
     accumulate_vote_arrays,
     flashsplat_class_rows,
     mean_class_confidences,

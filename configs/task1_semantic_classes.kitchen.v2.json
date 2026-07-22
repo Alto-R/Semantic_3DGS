@@ -1,0 +1,28 @@
+{
+  "assignment_priority": [
+    "oven_mitt",
+    "toy_bulldozer"
+  ],
+  "classes": [
+    {
+      "class": "oven_mitt",
+      "type": "thing",
+      "prompts": [
+        "oven mitt with thumb",
+        "padded oven glove",
+        "quilted heat-resistant oven mitt",
+        "pair of oven mitts"
+      ]
+    },
+    {
+      "class": "toy_bulldozer",
+      "type": "thing",
+      "prompts": [
+        "toy bulldozer with front blade",
+        "tracked toy bulldozer",
+        "small model bulldozer",
+        "construction-set bulldozer"
+      ]
+    }
+  ]
+}

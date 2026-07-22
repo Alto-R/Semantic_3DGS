@@ -199,7 +199,7 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
   test -f "${BASELINE_LABEL_MAP}"
 
   run_stage 00a_screen_target_candidates \
-    python scripts/task1/select_targeted_cameras.py screen \
+    python -m scripts.task1.grounding.select_targeted_cameras screen \
       --model-path "${MODEL_DIR}" \
       --baseline-manifest "${BASELINE_MANIFEST}" \
       --output "${TARGET_SELECTION_DIR}/candidate_screen.json" \
@@ -213,7 +213,7 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
   test -n "${CANDIDATE_CAMERA_INDICES}"
 
   run_stage 00b_render_target_candidates \
-    python scripts/task1/render_auto_label_overlays.py \
+    python -m scripts.task1.qa.render_auto_label_overlays \
       --model-path "${MODEL_DIR}" \
       --labels-npy "${BASELINE_LABELS}" \
       --label-map "${BASELINE_LABEL_MAP}" \
@@ -226,7 +226,7 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
       --count "${TARGET_CANDIDATE_COUNT}"
 
   run_stage 00c_measure_target_candidates \
-    python scripts/task1/measure_overlay_coverage.py \
+    python -m scripts.task1.qa.measure_overlay_coverage \
       --rgb-dir "${TARGET_SELECTION_DIR}/candidate_rgb" \
       --overlay-dir "${TARGET_SELECTION_DIR}/candidate_overlays" \
       --output "${TARGET_SELECTION_DIR}/candidate_visible_coverage.json" \
@@ -234,7 +234,7 @@ if [ "${AUTO_TARGET_VIEW_COUNT}" -gt 0 ]; then
       --exclude-border 1
 
   run_stage 00d_select_targeted_cameras \
-    python scripts/task1/select_targeted_cameras.py select \
+    python -m scripts.task1.grounding.select_targeted_cameras select \
       --model-path "${MODEL_DIR}" \
       --baseline-manifest "${BASELINE_MANIFEST}" \
       --candidate-manifest "${TARGET_SELECTION_DIR}/candidate_overlays/label_overlay_manifest.json" \
@@ -293,7 +293,7 @@ if [ -n "${REUSE_SOURCE_OUT}" ]; then
 fi
 
 run_stage 01_03_grounding_semantic_branch \
-  python scripts/task1/run_grounding_semantic_branch.py \
+  python -m scripts.task1.grounding.run_grounding_semantic_branch \
     --model-path "${MODEL_DIR}" \
     --ground-output-dir "${GROUND_OUT_DIR}" \
     --proposal-dir "${PROPOSAL_DIR}" \
@@ -332,10 +332,10 @@ cp "${FUSION_DIR}/gaussian_labels.npy" "${DELIVERABLE_DIR}/gaussian_labels.npy"
 run_report \
   "${VALIDATION_DIR}/semantic_point_cloud_inspection.json" \
   04_semantic_ply_inspection \
-  python scripts/task1/inspect_ply.py "${DELIVERABLE_DIR}/semantic_point_cloud.ply" --json
+  python -m scripts.task1.qa.inspect_ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" --json
 
 run_stage 06_supersplat_debug_ply \
-  python scripts/task1/export_supersplat_label_colors.py \
+  python -m scripts.task1.qa.export_supersplat_label_colors \
     --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --output-ply "${PLY_VIS_DIR}/semantic_point_cloud_supersplat_debug.ply" \
@@ -345,7 +345,7 @@ run_stage 06_supersplat_debug_ply \
 
 if [ -n "${FOCUS_CLASSES}" ]; then
   run_stage 07_focus_debug_ply \
-    python scripts/task1/export_supersplat_label_colors.py \
+    python -m scripts.task1.qa.export_supersplat_label_colors \
       --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
       --label-map "${DELIVERABLE_DIR}/label_map.json" \
       --output-ply "${PLY_VIS_DIR}/${FOCUS_NAME}_supersplat_debug.ply" \
@@ -360,10 +360,10 @@ fi
 run_report \
   "${VALIDATION_DIR}/semantic_point_cloud_supersplat_debug_inspection.json" \
   07_supersplat_debug_ply_inspection \
-  python scripts/task1/inspect_ply.py "${PLY_VIS_DIR}/semantic_point_cloud_supersplat_debug.ply" --json
+  python -m scripts.task1.qa.inspect_ply "${PLY_VIS_DIR}/semantic_point_cloud_supersplat_debug.ply" --json
 
 run_stage 08_semantic_overlays \
-  python scripts/task1/render_auto_label_overlays.py \
+  python -m scripts.task1.qa.render_auto_label_overlays \
     --model-path "${MODEL_DIR}" \
     --labels-npy "${FUSION_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -377,7 +377,7 @@ run_stage 08_semantic_overlays \
 
 if [ -n "${FOCUS_CLASSES}" ]; then
   run_stage 09_focus_overlays \
-    python scripts/task1/render_auto_label_overlays.py \
+    python -m scripts.task1.qa.render_auto_label_overlays \
       --model-path "${MODEL_DIR}" \
       --labels-npy "${FUSION_DIR}/gaussian_labels.npy" \
       --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -394,7 +394,7 @@ else
 fi
 
 run_stage 10_visible_coverage \
-  python scripts/task1/measure_overlay_coverage.py \
+  python -m scripts.task1.qa.measure_overlay_coverage \
     --rgb-dir "${GROUND_OUT_DIR}/rgb_renders" \
     --overlay-dir "${SEMANTIC_OVERLAY_DIR}" \
     --output "${VALIDATION_DIR}/visible_overlay_coverage.json" \
@@ -402,14 +402,14 @@ run_stage 10_visible_coverage \
     --exclude-border 1
 
 run_stage 11_contact_sheets \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${GROUND_OUT_DIR}/overlays" \
     --output "${CONTACT_DIR}/grounded_sam.png" \
     --columns 5 \
     --thumb-width "${CONTACT_THUMB_WIDTH}"
 
 run_stage 12_semantic_contact_sheet \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${SEMANTIC_OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/semantic_labels.png" \
     --columns 5 \
@@ -417,7 +417,7 @@ run_stage 12_semantic_contact_sheet \
 
 if [ -n "${FOCUS_CLASSES}" ]; then
   run_stage 13_focus_contact_sheet \
-    python scripts/task1/make_contact_sheet.py \
+    python -m scripts.task1.qa.make_contact_sheet \
       --image-dir "${FOCUS_OVERLAY_DIR}" \
       --output "${CONTACT_DIR}/${FOCUS_NAME}.png" \
       --columns 5 \
@@ -427,7 +427,7 @@ else
 fi
 
 run_stage 14_semantic_color_legend \
-  python scripts/task1/write_semantic_color_legend.py \
+  python -m scripts.task1.qa.write_semantic_color_legend \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --output-json "${VISUALIZATION_DIR}/semantic_color_legend.json" \
@@ -438,14 +438,14 @@ run_stage 14_semantic_color_legend \
 run_report \
   "${VALIDATION_DIR}/task1_validation.json" \
   15_task1_validation \
-  python scripts/task1/validate_task1_outputs.py \
+  python -m scripts.task1.qa.validate_task1_outputs \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --semantic-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --visible-coverage "${VALIDATION_DIR}/visible_overlay_coverage.json"
 
 run_stage 16_pipeline_summary \
-  python scripts/task1/summarize_task1_semantic_run.py \
+  python -m scripts.task1.qa.summarize_task1_semantic_run \
     --output-dir "${OUT_DIR}" \
     --summary-path "${VALIDATION_DIR}/pipeline_run_summary.json" \
     --focus-name "${FOCUS_NAME}"

@@ -87,7 +87,7 @@ run_stage() {
 }
 
 run_stage 01_supersplat_debug \
-  python scripts/task1/export_supersplat_label_colors.py \
+  python -m scripts.task1.qa.export_supersplat_label_colors \
     --input-ply "${SOURCE_SEMANTIC_PLY}" \
     --label-map "${SOURCE_LABEL_MAP}" \
     --output-ply "${OUT_DIR}/visualizations/semantic_point_cloud_supersplat_debug.ply" \
@@ -96,7 +96,7 @@ run_stage 01_supersplat_debug \
     --overwrite
 
 run_stage 02_semantic_overlays \
-  python scripts/task1/render_auto_label_overlays.py \
+  python -m scripts.task1.qa.render_auto_label_overlays \
     --model-path "${MODEL_DIR}" \
     --labels-npy "${SOURCE_LABELS}" \
     --label-map "${SOURCE_LABEL_MAP}" \
@@ -111,7 +111,7 @@ run_stage 02_semantic_overlays \
     --color-mode "${COLOR_MODE}"
 
 run_stage 03_visible_coverage \
-  python scripts/task1/measure_overlay_coverage.py \
+  python -m scripts.task1.qa.measure_overlay_coverage \
     --rgb-dir "${RGB_DIR}" \
     --overlay-dir "${OVERLAY_DIR}" \
     --output "${VALIDATION_DIR}/visible_overlay_coverage.json" \
@@ -119,14 +119,14 @@ run_stage 03_visible_coverage \
     --exclude-border 1
 
 run_stage 04_contact_sheet \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/semantic_labels.png" \
     --columns 4 \
     --thumb-width 360
 
 run_stage 05_color_legend \
-  python scripts/task1/write_semantic_color_legend.py \
+  python -m scripts.task1.qa.write_semantic_color_legend \
     --label-map "${SOURCE_LABEL_MAP}" \
     --labels-npy "${SOURCE_LABELS}" \
     --output-json "${OUT_DIR}/visualizations/semantic_color_legend.json" \

@@ -9,10 +9,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from dinov2_ontology import load_ontology, normalize_class_name
+from scripts.task1.dinov2.dinov2_ontology import load_ontology, normalize_class_name
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ONTOLOGY = PROJECT_ROOT / "configs" / "ade20k_to_project.json"
 DEFAULT_ALIASES = PROJECT_ROOT / "configs" / "ade20k_grounding_prompts.json"
 

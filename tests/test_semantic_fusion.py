@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import sys
 import unittest
-from pathlib import Path
 
 import numpy as np
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "task1"))
-
-from cluster_semantic_flashsplat_proposals import (  # noqa: E402
+from scripts.task1.grounding.cluster_semantic_flashsplat_proposals import (
     SemanticGroup,
     assigned_prune_threshold,
     consolidate_thing_instances,

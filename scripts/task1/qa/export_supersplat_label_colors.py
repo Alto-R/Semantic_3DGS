@@ -11,8 +11,8 @@ from typing import Any
 
 import numpy as np
 
-from ply_utils import element_stride, read_ply_header, scalar_property_size
-from semantic_palette import (
+from scripts.task1.common.ply_utils import element_stride, read_ply_header, scalar_property_size
+from scripts.task1.common.semantic_palette import (
     load_label_items,
     normalize_classes,
     palette_records,

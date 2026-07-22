@@ -1,0 +1,17 @@
+{
+  "assignment_priority": [
+    "electronic_keyboard"
+  ],
+  "classes": [
+    {
+      "class": "electronic_keyboard",
+      "type": "thing",
+      "prompts": [
+        "electronic musical keyboard",
+        "digital piano with black and white keys",
+        "full-size piano keyboard",
+        "electronic keyboard on a keyboard stand"
+      ]
+    }
+  ]
+}

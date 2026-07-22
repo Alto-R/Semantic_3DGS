@@ -1,0 +1,46 @@
+{
+  "assignment_priority": [
+    "oven_mitt",
+    "mixing_bowl",
+    "water_filter_pitcher",
+    "onion"
+  ],
+  "classes": [
+    {
+      "class": "oven_mitt",
+      "type": "thing",
+      "prompts": [
+        "oven mitt",
+        "oven glove",
+        "kitchen mitt"
+      ]
+    },
+    {
+      "class": "mixing_bowl",
+      "type": "thing",
+      "prompts": [
+        "mixing bowl",
+        "metal mixing bowl",
+        "stainless steel bowl"
+      ]
+    },
+    {
+      "class": "water_filter_pitcher",
+      "type": "thing",
+      "prompts": [
+        "water filter pitcher",
+        "water filter jug",
+        "water pitcher"
+      ]
+    },
+    {
+      "class": "onion",
+      "type": "thing",
+      "prompts": [
+        "onion",
+        "yellow onion",
+        "red onion"
+      ]
+    }
+  ]
+}

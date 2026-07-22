@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import sys
 import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
-
-from ply_utils import resolve_semantic_ply_output  # noqa: E402
+from scripts.task1.common.ply_utils import resolve_semantic_ply_output
 
 
 class SemanticOutputPolicyTest(unittest.TestCase):

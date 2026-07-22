@@ -20,7 +20,7 @@ FLASHSPLAT_ROOT="${WORKSPACE_ROOT}/external/FlashSplat"
 
 SCENE="${SCENE:-room}"
 SOURCE_NAME="${SOURCE_NAME:-${SCENE}_dinov2_separate_abstain_allviews_v1}"
-OUTPUT_NAME="${OUTPUT_NAME:-${SCENE}_dinov2_ade_refinement_auto_spatial_thing_guard_v3}"
+OUTPUT_NAME="${OUTPUT_NAME:-${SCENE}_dinov2_ade_refinement_auto_adaptive_instance_guard_v5}"
 SOURCE_DIR="${TASK1_ROOT}/${SOURCE_NAME}"
 OUT_DIR="${TASK1_ROOT}/${OUTPUT_NAME}"
 MODEL_DIR="${MODEL_DIR:-${WORKSPACE_ROOT}/data/3dgs_models/graphdeco/${SCENE}}"
@@ -83,6 +83,13 @@ ADE_EVIDENCE_MIN_RATIO="${ADE_EVIDENCE_MIN_RATIO:-0.50}"
 ADE_SPATIAL_VOXEL_SCALE_MULTIPLIER="${ADE_SPATIAL_VOXEL_SCALE_MULTIPLIER:-4.0}"
 ADE_SPATIAL_MIN_VOXEL_SIZE="${ADE_SPATIAL_MIN_VOXEL_SIZE:-0.01}"
 ADE_SPATIAL_MAX_VOXEL_SIZE="${ADE_SPATIAL_MAX_VOXEL_SIZE:-0.20}"
+ADE_PROTOTYPE_MAX_PARTIAL_COMPETING_THING_RISK="${ADE_PROTOTYPE_MAX_PARTIAL_COMPETING_THING_RISK:-0.40}"
+ADE_PARTIAL_ANCHOR_EXTENSION_MIN_COVERAGE="${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_COVERAGE:-0.80}"
+ADE_PARTIAL_ANCHOR_EXTENSION_MAX_PRECISION="${ADE_PARTIAL_ANCHOR_EXTENSION_MAX_PRECISION:-0.25}"
+ADE_PARTIAL_ANCHOR_EXTENSION_MIN_ROBUST_FRACTION="${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_ROBUST_FRACTION:-0.90}"
+ADE_PARTIAL_ANCHOR_EXTENSION_MIN_SOURCE_VIEWS="${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_SOURCE_VIEWS:-5}"
+ADE_PARTIAL_ANCHOR_EXTENSION_MAX_COMPETING_THING_FRACTION="${ADE_PARTIAL_ANCHOR_EXTENSION_MAX_COMPETING_THING_FRACTION:-0.05}"
+ADE_PARTIAL_ANCHOR_EXTENSION_MIN_SPATIAL_KEEP_FRACTION="${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_SPATIAL_KEEP_FRACTION:-0.95}"
 RESET_OUTPUT="${RESET_OUTPUT:-1}"
 CONFIG_ONLY="${CONFIG_ONLY:-0}"
 
@@ -107,11 +114,14 @@ if [[ "${COLOR_MODE}" != "class" && "${COLOR_MODE}" != "instance" ]]; then
   exit 2
 fi
 if [[ "${CONFIG_ONLY}" = "1" ]]; then
-  printf 'scene=%s\nsource=%s\noutput=%s\nmissing_vocabulary_enabled=0\nmin_anchor_gaussians=%s\nmin_anchor_coverage=%s\nmin_anchor_precision=%s\nmin_source_views=%s\nmax_prompt_words=%s\n' \
+  printf 'scene=%s\nsource=%s\noutput=%s\nmissing_vocabulary_enabled=0\nmin_anchor_gaussians=%s\nmin_anchor_coverage=%s\nmin_anchor_precision=%s\nmin_source_views=%s\nmax_prompt_words=%s\nprototype_max_partial_competing_thing_risk=%s\npartial_anchor_extension_min_coverage=%s\npartial_anchor_extension_max_precision=%s\n' \
     "${SCENE}" "${SOURCE_DIR}" "${OUT_DIR}" "${ADE_MIN_ANCHOR_GAUSSIANS}" \
     "${ADE_MIN_ANCHOR_COVERAGE}" "${ADE_MIN_ANCHOR_PRECISION}" \
     "${ADE_MIN_SOURCE_VIEWS}" \
-    "${ADE_MAX_PROMPT_WORDS}"
+    "${ADE_MAX_PROMPT_WORDS}" \
+    "${ADE_PROTOTYPE_MAX_PARTIAL_COMPETING_THING_RISK}" \
+    "${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_COVERAGE}" \
+    "${ADE_PARTIAL_ANCHOR_EXTENSION_MAX_PRECISION}"
   exit 0
 fi
 
@@ -172,7 +182,7 @@ run_report() {
 } | tee "${RUN_LOG_DIR}/00_run_configuration.log"
 
 run_stage 04a_automatic_ade_refinement_config "${GAUSSIAN_ENV}" \
-  python scripts/task1/build_ade_refinement_config.py \
+  python -m scripts.task1.grounding.build_ade_refinement_config \
     --dinov2-label-map "${BASE_LABEL_MAP}" \
     --ontology "${ONTOLOGY}" \
     --prompt-aliases "${ADE_PROMPT_ALIASES}" \
@@ -183,14 +193,14 @@ run_stage 04a_automatic_ade_refinement_config "${GAUSSIAN_ENV}" \
     --overwrite
 
 run_stage 04b_grounding_seed_views "${GAUSSIAN_ENV}" \
-  python scripts/task1/select_targeted_cameras.py seed \
+  python -m scripts.task1.grounding.select_targeted_cameras seed \
     --source-manifest "${SOURCE_VIEW_DIR}/view_manifest.json" \
     --output "${SELECTION_DIR}/seed_manifest.json" \
     --indices-output "${SELECTION_DIR}/seed_indices.txt" \
     --count "${GROUNDING_BASE_VIEW_COUNT}"
 
 run_stage 04c_grounding_candidate_screen "${GAUSSIAN_ENV}" \
-  python scripts/task1/select_targeted_cameras.py screen \
+  python -m scripts.task1.grounding.select_targeted_cameras screen \
     --model-path "${MODEL_DIR}" \
     --baseline-manifest "${SELECTION_DIR}/seed_manifest.json" \
     --allowed-manifest "${SOURCE_VIEW_DIR}/view_manifest.json" \
@@ -212,7 +222,7 @@ if (( REQUESTED_ADDITIONS > 0 )); then
   test -n "${CANDIDATE_CAMERA_INDICES}"
 
   run_stage 04d_grounding_candidate_overlays "${GAUSSIAN_ENV}" \
-    python scripts/task1/render_auto_label_overlays.py \
+    python -m scripts.task1.qa.render_auto_label_overlays \
       --model-path "${MODEL_DIR}" \
       --labels-npy "${BASE_LABELS}" \
       --label-map "${BASE_LABEL_MAP}" \
@@ -228,7 +238,7 @@ if (( REQUESTED_ADDITIONS > 0 )); then
       --color-mode "${COLOR_MODE}"
 
   run_stage 04e_grounding_candidate_coverage "${GAUSSIAN_ENV}" \
-    python scripts/task1/measure_overlay_coverage.py \
+    python -m scripts.task1.qa.measure_overlay_coverage \
       --rgb-dir "${SELECTION_DIR}/candidate_rgb" \
       --overlay-dir "${SELECTION_DIR}/candidate_overlays" \
       --output "${SELECTION_DIR}/candidate_visible_coverage.json" \
@@ -236,7 +246,7 @@ if (( REQUESTED_ADDITIONS > 0 )); then
       --exclude-border 1
 
   run_stage 04f_grounding_target_selection "${GAUSSIAN_ENV}" \
-    python scripts/task1/select_targeted_cameras.py select \
+    python -m scripts.task1.grounding.select_targeted_cameras select \
       --model-path "${MODEL_DIR}" \
       --baseline-manifest "${SELECTION_DIR}/seed_manifest.json" \
       --candidate-manifest "${SELECTION_DIR}/candidate_overlays/label_overlay_manifest.json" \
@@ -256,7 +266,7 @@ GROUNDING_VIEW_COUNT="$(awk -F, '{print NF}' "${SELECTION_DIR}/final_camera_indi
 test -n "${GROUNDING_CAMERA_INDICES}"
 
 run_stage 05_07_grounding_ade_branch "${GROUNDING_ENV}" \
-  python scripts/task1/run_grounding_semantic_branch.py \
+  python -m scripts.task1.grounding.run_grounding_semantic_branch \
     --model-path "${MODEL_DIR}" \
     --ground-output-dir "${GROUNDING_MASK_DIR}" \
     --proposal-dir "${GROUNDING_PROPOSAL_DIR}" \
@@ -291,7 +301,7 @@ run_stage 05_07_grounding_ade_branch "${GROUNDING_ENV}" \
     --overwrite
 
 run_stage 08_guarded_ade_refinement_merge "${GAUSSIAN_ENV}" \
-  python scripts/task1/merge_ade_refinement.py \
+  python -m scripts.task1.merge.merge_ade_refinement \
     --base-labels "${BASE_LABELS}" \
     --base-label-map "${BASE_LABEL_MAP}" \
     --grounding-labels "${GROUNDING_FUSION_DIR}/gaussian_labels.npy" \
@@ -313,13 +323,20 @@ run_stage 08_guarded_ade_refinement_merge "${GAUSSIAN_ENV}" \
     --spatial-voxel-scale-multiplier "${ADE_SPATIAL_VOXEL_SCALE_MULTIPLIER}" \
     --spatial-min-voxel-size "${ADE_SPATIAL_MIN_VOXEL_SIZE}" \
     --spatial-max-voxel-size "${ADE_SPATIAL_MAX_VOXEL_SIZE}" \
+    --prototype-max-partial-competing-thing-risk "${ADE_PROTOTYPE_MAX_PARTIAL_COMPETING_THING_RISK}" \
+    --partial-anchor-extension-min-anchor-coverage "${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_COVERAGE}" \
+    --partial-anchor-extension-max-anchor-precision "${ADE_PARTIAL_ANCHOR_EXTENSION_MAX_PRECISION}" \
+    --partial-anchor-extension-min-robust-fraction "${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_ROBUST_FRACTION}" \
+    --partial-anchor-extension-min-source-views "${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_SOURCE_VIEWS}" \
+    --partial-anchor-extension-max-competing-thing-fraction "${ADE_PARTIAL_ANCHOR_EXTENSION_MAX_COMPETING_THING_FRACTION}" \
+    --partial-anchor-extension-min-spatial-keep-fraction "${ADE_PARTIAL_ANCHOR_EXTENSION_MIN_SPATIAL_KEEP_FRACTION}" \
     --overwrite
 
 cp "${REFINEMENT_DIR}/gaussian_labels.npy" "${DELIVERABLE_DIR}/gaussian_labels.npy"
 cp "${REFINEMENT_DIR}/label_map.json" "${DELIVERABLE_DIR}/label_map.json"
 
 run_stage 10_supersplat_debug_ply "${GAUSSIAN_ENV}" \
-  python scripts/task1/export_supersplat_label_colors.py \
+  python -m scripts.task1.qa.export_supersplat_label_colors \
     --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --output-ply "${VISUALIZATION_DIR}/semantic_point_cloud_supersplat_debug.ply" \
@@ -328,7 +345,7 @@ run_stage 10_supersplat_debug_ply "${GAUSSIAN_ENV}" \
     --overwrite
 
 run_stage 11_semantic_overlays "${GAUSSIAN_ENV}" \
-  python scripts/task1/render_auto_label_overlays.py \
+  python -m scripts.task1.qa.render_auto_label_overlays \
     --model-path "${MODEL_DIR}" \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -343,7 +360,7 @@ run_stage 11_semantic_overlays "${GAUSSIAN_ENV}" \
     --color-mode "${COLOR_MODE}"
 
 run_stage 12_ade_change_overlays "${GAUSSIAN_ENV}" \
-  python scripts/task1/render_auto_label_overlays.py \
+  python -m scripts.task1.qa.render_auto_label_overlays \
     --model-path "${MODEL_DIR}" \
     --labels-npy "${REFINEMENT_DIR}/refinement_changes.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -357,7 +374,7 @@ run_stage 12_ade_change_overlays "${GAUSSIAN_ENV}" \
     --color-mode "${COLOR_MODE}"
 
 run_stage 13_visible_coverage "${GAUSSIAN_ENV}" \
-  python scripts/task1/measure_overlay_coverage.py \
+  python -m scripts.task1.qa.measure_overlay_coverage \
     --rgb-dir "${QA_RGB_DIR}" \
     --overlay-dir "${QA_OVERLAY_DIR}" \
     --output "${VALIDATION_DIR}/visible_overlay_coverage.json" \
@@ -365,21 +382,21 @@ run_stage 13_visible_coverage "${GAUSSIAN_ENV}" \
     --exclude-border 1
 
 run_stage 14_contact_sheets "${GAUSSIAN_ENV}" \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${QA_OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/semantic_labels.png" \
     --columns 4 \
     --thumb-width 360
 
 run_stage 15_change_contact_sheet "${GAUSSIAN_ENV}" \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${CHANGE_OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/ade_refinement_changes.png" \
     --columns 4 \
     --thumb-width 360
 
 run_stage 16_semantic_color_legend "${GAUSSIAN_ENV}" \
-  python scripts/task1/write_semantic_color_legend.py \
+  python -m scripts.task1.qa.write_semantic_color_legend \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --output-json "${VISUALIZATION_DIR}/semantic_color_legend.json" \
@@ -389,13 +406,14 @@ run_stage 16_semantic_color_legend "${GAUSSIAN_ENV}" \
 
 run_report 17_task1_validation "${GAUSSIAN_ENV}" \
   "${VALIDATION_DIR}/task1_validation.json" \
-  python scripts/task1/validate_task1_outputs.py \
+  python -m scripts.task1.qa.validate_task1_outputs \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --semantic-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --visible-coverage "${VALIDATION_DIR}/visible_overlay_coverage.json"
 
-printf 'final_mode=dinov2_groundingdino_guarded_ade_spatial_thing_refinement\nsource=%s\nmissing_vocabulary_enabled=0\n' \
-  "${SOURCE_DIR}" > "${VALIDATION_DIR}/final_mode.txt"
+printf 'final_mode=dinov2_groundingdino_adaptive_instance_guard_v5\nsource=%s\nmissing_vocabulary_enabled=0\n' \
+  "${SOURCE_DIR}" \
+  > "${VALIDATION_DIR}/final_mode.txt"
 
 find "${OUT_DIR}" -maxdepth 4 -type f | sort

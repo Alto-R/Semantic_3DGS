@@ -6,10 +6,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
-
-from run_grounding_semantic_branch import run_logged  # noqa: E402
+from scripts.task1.grounding.run_grounding_semantic_branch import run_logged
 
 
 class GroundingBranchDriverTest(unittest.TestCase):

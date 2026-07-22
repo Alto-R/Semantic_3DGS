@@ -255,7 +255,7 @@ run_report() {
 } | tee "${RUN_LOG_DIR}/00_run_configuration.log"
 
 run_stage 01_render_real_camera_views "${GAUSSIAN_ENV}" \
-  python scripts/task1/render_task1_views.py \
+  python -m scripts.task1.dinov2.render_task1_views \
     --model-path "${MODEL_DIR}" \
     --output-dir "${VIEW_DIR}" \
     --flashsplat-root "${FLASHSPLAT_ROOT}" \
@@ -266,7 +266,7 @@ run_stage 01_render_real_camera_views "${GAUSSIAN_ENV}" \
     --overwrite
 
 run_stage 02_dinov2_ade20k_linear "${DINOV2_ENV}" \
-  python scripts/task1/dinov2_segment_views.py \
+  python -m scripts.task1.dinov2.dinov2_segment_views \
     --input-dir "${VIEW_DIR}" \
     --dinov2-root "${DINOV2_ROOT}" \
     --backbone-checkpoint "${DINOV2_BACKBONE}" \
@@ -278,7 +278,7 @@ run_stage 02_dinov2_ade20k_linear "${DINOV2_ENV}" \
     --overwrite
 
 run_stage 03_lift_per_view_votes "${GAUSSIAN_ENV}" \
-  python scripts/task1/lift_dinov2_view_votes.py \
+  python -m scripts.task1.dinov2.lift_dinov2_view_votes \
     --model-path "${MODEL_DIR}" \
     --input-dir "${VIEW_DIR}" \
     --output-dir "${VOTE_DIR}" \
@@ -302,7 +302,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "0" ]]; then
 fi
 
 run_stage 04_exact_multiview_fusion "${GAUSSIAN_ENV}" \
-  python scripts/task1/fuse_dinov2_multiview_votes.py \
+  python -m scripts.task1.dinov2.fuse_dinov2_multiview_votes \
     --model-path "${MODEL_DIR}" \
     --vote-dir "${VOTE_DIR}" \
     --output-dir "${FUSION_DIR}" \
@@ -334,7 +334,7 @@ MERGED_GROUNDING_GROUP_COUNT=0
 
 if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
   run_stage 05a_grounding_guard_config "${GAUSSIAN_ENV}" \
-    python scripts/task1/build_grounding_guard_config.py \
+    python -m scripts.task1.grounding.build_grounding_guard_config \
       --dinov2-label-map "${FUSION_DIR}/label_map.json" \
       --scene-class-config "${GROUNDING_CLASS_CONFIG}" \
       --extension-config "${GROUNDING_EXTENSION_CONFIG}" \
@@ -344,14 +344,14 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
       --overwrite
 
   run_stage 05b_grounding_seed_views "${GAUSSIAN_ENV}" \
-    python scripts/task1/select_targeted_cameras.py seed \
+    python -m scripts.task1.grounding.select_targeted_cameras seed \
       --source-manifest "${VIEW_DIR}/view_manifest.json" \
       --output "${GROUNDING_SELECTION_DIR}/seed_manifest.json" \
       --indices-output "${GROUNDING_SELECTION_DIR}/seed_indices.txt" \
       --count "${GROUNDING_BASE_VIEW_COUNT}"
 
   run_stage 05c_grounding_candidate_screen "${GAUSSIAN_ENV}" \
-    python scripts/task1/select_targeted_cameras.py screen \
+    python -m scripts.task1.grounding.select_targeted_cameras screen \
       --model-path "${MODEL_DIR}" \
       --baseline-manifest "${GROUNDING_SELECTION_DIR}/seed_manifest.json" \
       --allowed-manifest "${VIEW_DIR}/view_manifest.json" \
@@ -373,7 +373,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
     test -n "${CANDIDATE_CAMERA_INDICES}"
 
     run_stage 05d_grounding_candidate_overlays "${GAUSSIAN_ENV}" \
-      python scripts/task1/render_auto_label_overlays.py \
+      python -m scripts.task1.qa.render_auto_label_overlays \
         --model-path "${MODEL_DIR}" \
         --labels-npy "${FUSION_DIR}/gaussian_labels.npy" \
         --label-map "${FUSION_DIR}/label_map.json" \
@@ -389,7 +389,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
         --color-mode "${COLOR_MODE}"
 
     run_stage 05e_grounding_candidate_coverage "${GAUSSIAN_ENV}" \
-      python scripts/task1/measure_overlay_coverage.py \
+      python -m scripts.task1.qa.measure_overlay_coverage \
         --rgb-dir "${GROUNDING_SELECTION_DIR}/candidate_rgb" \
         --overlay-dir "${GROUNDING_SELECTION_DIR}/candidate_overlays" \
         --output "${GROUNDING_SELECTION_DIR}/candidate_visible_coverage.json" \
@@ -397,7 +397,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
         --exclude-border 1
 
     run_stage 05f_grounding_target_selection "${GAUSSIAN_ENV}" \
-      python scripts/task1/select_targeted_cameras.py select \
+      python -m scripts.task1.grounding.select_targeted_cameras select \
         --model-path "${MODEL_DIR}" \
         --baseline-manifest "${GROUNDING_SELECTION_DIR}/seed_manifest.json" \
         --candidate-manifest "${GROUNDING_SELECTION_DIR}/candidate_overlays/label_overlay_manifest.json" \
@@ -417,7 +417,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
   test -n "${GROUNDING_CAMERA_INDICES}"
 
   run_stage 06_08_grounding_extension_branch "${GROUNDING_ENV}" \
-    python scripts/task1/run_grounding_semantic_branch.py \
+    python -m scripts.task1.grounding.run_grounding_semantic_branch \
       --model-path "${MODEL_DIR}" \
       --ground-output-dir "${GROUNDING_MASK_DIR}" \
       --proposal-dir "${GROUNDING_PROPOSAL_DIR}" \
@@ -452,7 +452,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" ]]; then
       --overwrite
 
   run_stage 09_hybrid_merge "${GAUSSIAN_ENV}" \
-    python scripts/task1/merge_semantic_extensions.py \
+    python -m scripts.task1.merge.merge_semantic_extensions \
       --base-labels "${FUSION_DIR}/gaussian_labels.npy" \
       --base-label-map "${FUSION_DIR}/label_map.json" \
       --extension-labels "${GROUNDING_FUSION_DIR}/gaussian_labels.npy" \
@@ -477,7 +477,7 @@ cp "${FINAL_SOURCE_DIR}/label_map.json" "${DELIVERABLE_DIR}/label_map.json"
 test -f "${DELIVERABLE_DIR}/semantic_point_cloud.ply"
 
 run_stage 10_supersplat_debug_ply "${GAUSSIAN_ENV}" \
-  python scripts/task1/export_supersplat_label_colors.py \
+  python -m scripts.task1.qa.export_supersplat_label_colors \
     --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --output-ply "${VISUALIZATION_DIR}/semantic_point_cloud_supersplat_debug.ply" \
@@ -487,7 +487,7 @@ run_stage 10_supersplat_debug_ply "${GAUSSIAN_ENV}" \
 
 if [[ "${ENABLE_GROUNDINGDINO}" = "1" && "${MERGED_GROUNDING_GROUP_COUNT}" -gt 0 ]]; then
   run_stage 10b_grounding_extension_supersplat_debug_ply "${GAUSSIAN_ENV}" \
-    python scripts/task1/export_supersplat_label_colors.py \
+    python -m scripts.task1.qa.export_supersplat_label_colors \
       --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
       --label-map "${DELIVERABLE_DIR}/label_map.json" \
       --output-ply "${VISUALIZATION_DIR}/grounding_extensions_supersplat_debug.ply" \
@@ -498,7 +498,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" && "${MERGED_GROUNDING_GROUP_COUNT}" -gt 0
 fi
 
 run_stage 11_semantic_overlays "${GAUSSIAN_ENV}" \
-  python scripts/task1/render_auto_label_overlays.py \
+  python -m scripts.task1.qa.render_auto_label_overlays \
     --model-path "${MODEL_DIR}" \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -514,7 +514,7 @@ run_stage 11_semantic_overlays "${GAUSSIAN_ENV}" \
 
 if [[ "${ENABLE_GROUNDINGDINO}" = "1" && "${MERGED_GROUNDING_GROUP_COUNT}" -gt 0 ]]; then
   run_stage 12_grounding_extension_overlays "${GAUSSIAN_ENV}" \
-    python scripts/task1/render_auto_label_overlays.py \
+    python -m scripts.task1.qa.render_auto_label_overlays \
       --model-path "${MODEL_DIR}" \
       --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
       --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -530,7 +530,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" && "${MERGED_GROUNDING_GROUP_COUNT}" -gt 0
 fi
 
 run_stage 13_visible_coverage "${GAUSSIAN_ENV}" \
-  python scripts/task1/measure_overlay_coverage.py \
+  python -m scripts.task1.qa.measure_overlay_coverage \
     --rgb-dir "${QA_RGB_DIR}" \
     --overlay-dir "${QA_OVERLAY_DIR}" \
     --output "${VALIDATION_DIR}/visible_overlay_coverage.json" \
@@ -538,7 +538,7 @@ run_stage 13_visible_coverage "${GAUSSIAN_ENV}" \
     --exclude-border 1
 
 run_stage 14_contact_sheets "${GAUSSIAN_ENV}" \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${QA_OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/semantic_labels.png" \
     --columns 4 \
@@ -546,7 +546,7 @@ run_stage 14_contact_sheets "${GAUSSIAN_ENV}" \
 
 if [[ "${ENABLE_GROUNDINGDINO}" = "1" && "${MERGED_GROUNDING_GROUP_COUNT}" -gt 0 ]]; then
   run_stage 15_grounding_extension_contact_sheet "${GAUSSIAN_ENV}" \
-    python scripts/task1/make_contact_sheet.py \
+    python -m scripts.task1.qa.make_contact_sheet \
       --image-dir "${FOCUS_OVERLAY_DIR}" \
       --output "${CONTACT_DIR}/grounding_extensions.png" \
       --columns 4 \
@@ -554,7 +554,7 @@ if [[ "${ENABLE_GROUNDINGDINO}" = "1" && "${MERGED_GROUNDING_GROUP_COUNT}" -gt 0
 fi
 
 run_stage 16_semantic_color_legend "${GAUSSIAN_ENV}" \
-  python scripts/task1/write_semantic_color_legend.py \
+  python -m scripts.task1.qa.write_semantic_color_legend \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --output-json "${VISUALIZATION_DIR}/semantic_color_legend.json" \
@@ -563,7 +563,7 @@ run_stage 16_semantic_color_legend "${GAUSSIAN_ENV}" \
     --overwrite
 
 run_report 17_task1_validation "${GAUSSIAN_ENV}" "${VALIDATION_DIR}/task1_validation.json" \
-  python scripts/task1/validate_task1_outputs.py \
+  python -m scripts.task1.qa.validate_task1_outputs \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --semantic-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \

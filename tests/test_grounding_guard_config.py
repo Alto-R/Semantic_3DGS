@@ -1,14 +1,8 @@
 from __future__ import annotations
 
-import sys
 import unittest
-from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
-
-from build_grounding_guard_config import build_guard_config  # noqa: E402
+from scripts.task1.grounding.build_grounding_guard_config import build_guard_config
 
 
 class GroundingGuardConfigTest(unittest.TestCase):

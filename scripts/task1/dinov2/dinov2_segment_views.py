@@ -14,11 +14,11 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from dinov2_ontology import load_ontology
-from semantic_palette import rgb8_for_class
+from scripts.task1.common.semantic_palette import rgb8_for_class
+from scripts.task1.dinov2.dinov2_ontology import load_ontology
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ONTOLOGY = PROJECT_ROOT / "configs" / "ade20k_to_project.json"
 
 

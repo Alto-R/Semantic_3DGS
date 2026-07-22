@@ -11,18 +11,22 @@ from typing import Any
 
 import numpy as np
 
-from add_labels_from_npy import write_ply_with_labels
-from cluster_semantic_flashsplat_proposals import voxel_components
-from dinov2_ontology import load_ontology, normalize_class_name
-from merge_semantic_extensions import (
+from scripts.task1.common.ply_utils import (
+    read_ply_header,
+    resolve_semantic_ply_output,
+    vertex_data_memmap,
+)
+from scripts.task1.common.semantic_palette import PALETTE_VERSION, rgb8_for_class
+from scripts.task1.dinov2.dinov2_ontology import load_ontology, normalize_class_name
+from scripts.task1.grounding.cluster_semantic_flashsplat_proposals import voxel_components
+from scripts.task1.merge.merge_semantic_extensions import (
     histogram,
     label_items_by_id,
     load_json,
     transition_records,
     validate_label_array,
 )
-from ply_utils import read_ply_header, resolve_semantic_ply_output, vertex_data_memmap
-from semantic_palette import PALETTE_VERSION, rgb8_for_class
+from scripts.task1.qa.add_labels_from_npy import write_ply_with_labels
 
 
 def sha256_file(path: Path, block_size: int = 1024 * 1024) -> str:
@@ -254,6 +258,74 @@ def prototype_geometry_matches(
     return False
 
 
+def competing_thing_metrics(
+    candidate_indices: np.ndarray,
+    base_labels: np.ndarray,
+    base_items: dict[int, dict[str, Any]],
+    base_classes: np.ndarray,
+    thing_class_values: np.ndarray,
+    target_class: str,
+) -> dict[str, Any]:
+    """Measure semantic conflict and its impact on the dominant base instance."""
+    empty = {
+        "dominant_class": "",
+        "dominant_class_fraction": 0.0,
+        "dominant_instance_label_id": 0,
+        "dominant_instance_overlap": 0,
+        "dominant_instance_gaussian_count": 0,
+        "dominant_instance_coverage": 0.0,
+        "partial_overlap_risk": 0.0,
+    }
+    if candidate_indices.shape[0] == 0 or thing_class_values.shape[0] == 0:
+        return empty
+
+    candidate_classes = base_classes[candidate_indices]
+    competing = np.isin(candidate_classes, thing_class_values) & (
+        candidate_classes != target_class
+    )
+    if not np.any(competing):
+        return empty
+
+    competing_candidate_indices = candidate_indices[competing]
+    competing_classes = candidate_classes[competing]
+    class_names, class_counts = np.unique(competing_classes, return_counts=True)
+    dominant_class_position = int(np.argmax(class_counts))
+    dominant_class = str(class_names[dominant_class_position])
+    dominant_class_fraction = float(class_counts[dominant_class_position]) / float(
+        max(candidate_indices.shape[0], 1)
+    )
+
+    competing_label_ids = base_labels[
+        competing_candidate_indices[competing_classes == dominant_class]
+    ]
+    competing_label_ids = competing_label_ids[competing_label_ids > 0]
+    if competing_label_ids.shape[0] == 0:
+        return {
+            **empty,
+            "dominant_class": dominant_class,
+            "dominant_class_fraction": dominant_class_fraction,
+        }
+    label_ids, label_counts = np.unique(competing_label_ids, return_counts=True)
+    dominant_position = int(np.argmax(label_counts))
+    dominant_label_id = int(label_ids[dominant_position])
+    dominant_overlap = int(label_counts[dominant_position])
+    dominant_size = int(np.count_nonzero(base_labels == dominant_label_id))
+    dominant_coverage = dominant_overlap / float(max(dominant_size, 1))
+
+    if dominant_label_id not in base_items:
+        raise ValueError(f"Competing base label {dominant_label_id} is absent from label map")
+    partial_overlap_risk = dominant_class_fraction * (1.0 - dominant_coverage)
+    return {
+        "dominant_class": dominant_class,
+        "dominant_class_fraction": dominant_class_fraction,
+        "dominant_instance_label_id": dominant_label_id,
+        "dominant_instance_overlap": dominant_overlap,
+        "dominant_instance_gaussian_count": dominant_size,
+        "dominant_instance_coverage": dominant_coverage,
+        "partial_overlap_risk": partial_overlap_risk,
+    }
+
+
 def anchor_envelope_membership(
     anchor_indices: np.ndarray,
     candidate_indices: np.ndarray,
@@ -391,9 +463,16 @@ def refine_ade_labels(
     prototype_min_source_views: int = 3,
     prototype_strong_source_views: int = 5,
     prototype_max_dominant_competing_thing_fraction: float = 0.50,
+    prototype_max_partial_competing_thing_risk: float = 0.40,
     prototype_ambiguous_min_dominant_competing_thing_fraction: float = 0.90,
     prototype_max_shape_ratio: float = 2.50,
     prototype_max_size_ratio: float = 3.00,
+    partial_anchor_extension_min_anchor_coverage: float = 0.80,
+    partial_anchor_extension_max_anchor_precision: float = 0.25,
+    partial_anchor_extension_min_robust_fraction: float = 0.90,
+    partial_anchor_extension_min_source_views: int = 5,
+    partial_anchor_extension_max_competing_thing_fraction: float = 0.05,
+    partial_anchor_extension_min_spatial_keep_fraction: float = 0.95,
 ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]], dict[str, Any]]:
     if base_labels.shape != grounding_labels.shape or base_labels.shape != claim_count.shape:
         raise ValueError("Base, Grounding, and claim-count arrays must have matching shapes")
@@ -433,10 +512,28 @@ def refine_ade_labels(
         raise ValueError(
             "Prototype competing-thing fraction must be between zero and one"
         )
+    if not 0.0 <= prototype_max_partial_competing_thing_risk <= 1.0:
+        raise ValueError(
+            "Prototype partial competing-thing risk must be between zero and one"
+        )
     if not 0.0 <= prototype_ambiguous_min_dominant_competing_thing_fraction <= 1.0:
         raise ValueError(
             "Ambiguous prototype competing-thing fraction must be between zero and one"
         )
+    if not 0.0 <= partial_anchor_extension_min_anchor_coverage <= 1.0:
+        raise ValueError("Partial-anchor minimum coverage must be between zero and one")
+    if not 0.0 <= partial_anchor_extension_max_anchor_precision <= 1.0:
+        raise ValueError("Partial-anchor maximum precision must be between zero and one")
+    if not 0.0 <= partial_anchor_extension_min_robust_fraction <= 1.0:
+        raise ValueError("Partial-anchor robust fraction must be between zero and one")
+    if partial_anchor_extension_min_source_views < 1:
+        raise ValueError("Partial-anchor source-view threshold must be positive")
+    if not 0.0 <= partial_anchor_extension_max_competing_thing_fraction <= 1.0:
+        raise ValueError(
+            "Partial-anchor competing-thing fraction must be between zero and one"
+        )
+    if not 0.0 <= partial_anchor_extension_min_spatial_keep_fraction <= 1.0:
+        raise ValueError("Partial-anchor spatial keep fraction must be between zero and one")
 
     eligible = set(eligible_classes)
     base_classes = class_array(base_labels, base_items)
@@ -668,18 +765,17 @@ def refine_ade_labels(
             prototype_candidate_fraction = prototype_candidate_indices.shape[0] / float(
                 max(source_count, 1)
             )
-            candidate_competing_classes = base_classes[prototype_candidate_indices]
-            candidate_competing_classes = candidate_competing_classes[
-                np.isin(candidate_competing_classes, thing_class_values)
-                & (candidate_competing_classes != class_name)
-            ]
-            if candidate_competing_classes.shape[0]:
-                _candidate_names, candidate_counts = np.unique(
-                    candidate_competing_classes, return_counts=True
-                )
-                prototype_candidate_dominant_competing_thing_fraction = float(
-                    candidate_counts.max()
-                ) / float(max(prototype_candidate_indices.shape[0], 1))
+            candidate_competing_metrics = competing_thing_metrics(
+                prototype_candidate_indices,
+                base_labels,
+                base_items,
+                base_classes,
+                thing_class_values,
+                class_name,
+            )
+            prototype_candidate_dominant_competing_thing_fraction = float(
+                candidate_competing_metrics["dominant_class_fraction"]
+            )
             prototype_candidate_robust_fraction = prototype_candidate_fraction
             if (
                 prototype_candidate_indices.shape[0] >= min_anchor_gaussians
@@ -709,20 +805,20 @@ def refine_ade_labels(
                         ),
                     }
                 )
-        competing_thing_classes = base_classes[guarded_indices]
-        competing_thing_classes = competing_thing_classes[
-            np.isin(competing_thing_classes, thing_class_values)
-            & (competing_thing_classes != class_name)
-        ]
-        if competing_thing_classes.shape[0]:
-            _competing_names, competing_counts = np.unique(
-                competing_thing_classes, return_counts=True
-            )
-            dominant_competing_thing_fraction = float(competing_counts.max()) / float(
-                max(pre_spatial_guarded_count, 1)
-            )
-        else:
-            dominant_competing_thing_fraction = 0.0
+        competing_metrics = competing_thing_metrics(
+            guarded_indices,
+            base_labels,
+            base_items,
+            base_classes,
+            thing_class_values,
+            class_name,
+        )
+        dominant_competing_thing_fraction = float(
+            competing_metrics["dominant_class_fraction"]
+        )
+        dominant_competing_thing_partial_overlap_risk = float(
+            competing_metrics["partial_overlap_risk"]
+        )
         prototype_geometry_match = prototype_geometry_matches(
             prototype_signature,
             anchored_prototypes.get(class_name, []),
@@ -734,6 +830,8 @@ def refine_ade_labels(
             and report["source_view_count"] >= prototype_strong_source_views
             and dominant_competing_thing_fraction
             <= prototype_max_dominant_competing_thing_fraction
+            and dominant_competing_thing_partial_overlap_risk
+            <= prototype_max_partial_competing_thing_risk
         )
         prototype_acceptance = (
             is_thing
@@ -761,6 +859,24 @@ def refine_ade_labels(
                     prototype_candidate_dominant_competing_thing_fraction
                 ),
                 "dominant_competing_thing_fraction": dominant_competing_thing_fraction,
+                "dominant_competing_thing_class": str(
+                    competing_metrics["dominant_class"]
+                ),
+                "dominant_competing_thing_label_id": int(
+                    competing_metrics["dominant_instance_label_id"]
+                ),
+                "dominant_competing_thing_overlap": int(
+                    competing_metrics["dominant_instance_overlap"]
+                ),
+                "dominant_competing_thing_gaussian_count": int(
+                    competing_metrics["dominant_instance_gaussian_count"]
+                ),
+                "dominant_competing_thing_instance_coverage": float(
+                    competing_metrics["dominant_instance_coverage"]
+                ),
+                "dominant_competing_thing_partial_overlap_risk": (
+                    dominant_competing_thing_partial_overlap_risk
+                ),
             }
         )
         if not anchored_acceptance and not prototype_acceptance:
@@ -770,6 +886,14 @@ def refine_ade_labels(
                 reasons.append(f"anchor_coverage<{min_anchor_coverage}")
             if is_thing and class_name in anchored_prototypes:
                 reasons.append("no_matching_anchored_instance_prototype")
+                if (
+                    dominant_competing_thing_partial_overlap_risk
+                    > prototype_max_partial_competing_thing_risk
+                ):
+                    reasons.append(
+                        "partial_competing_thing_risk>"
+                        f"{prototype_max_partial_competing_thing_risk}"
+                    )
             report.update({"status": "rejected", "reasons": reasons})
             group_reports.append(report)
             continue
@@ -808,6 +932,22 @@ def refine_ade_labels(
         post_spatial_precision = post_spatial_anchor_overlap / float(
             max(guarded_indices.shape[0], 1)
         )
+        spatial_keep_fraction = guarded_indices.shape[0] / float(
+            max(pre_spatial_guarded_count, 1)
+        )
+        partial_anchor_component_extension = (
+            anchored_acceptance
+            and is_thing
+            and coverage >= partial_anchor_extension_min_anchor_coverage
+            and post_spatial_precision <= partial_anchor_extension_max_anchor_precision
+            and robust_fraction >= partial_anchor_extension_min_robust_fraction
+            and report["source_view_count"] >= partial_anchor_extension_min_source_views
+            and dominant_competing_thing_fraction
+            <= partial_anchor_extension_max_competing_thing_fraction
+            and int(spatial_report.get("kept_component_count", 0)) == 1
+            and spatial_keep_fraction
+            >= partial_anchor_extension_min_spatial_keep_fraction
+        )
         report.update(
             {
                 "spatial_anchor_guard": spatial_report,
@@ -816,7 +956,11 @@ def refine_ade_labels(
                 - int(guarded_indices.shape[0]),
                 "post_spatial_anchor_overlap": post_spatial_anchor_overlap,
                 "post_spatial_anchor_precision": post_spatial_precision,
+                "spatial_keep_fraction": spatial_keep_fraction,
                 "acceptance_mode": acceptance_mode,
+                "partial_anchor_component_extension": (
+                    partial_anchor_component_extension
+                ),
             }
         )
         if guarded_indices.shape[0] == 0:
@@ -831,6 +975,7 @@ def refine_ade_labels(
 
         envelope_global = np.zeros(base_labels.shape, dtype=bool)
         envelope_report: dict[str, Any] = {"enabled": False}
+        partial_anchor_extension_added_count = 0
         if anchored_acceptance and is_thing:
             anchor_instance_indices = np.flatnonzero(base_labels == dominant_anchor_id)
             envelope_keep, envelope_report = anchor_envelope_membership(
@@ -841,6 +986,11 @@ def refine_ade_labels(
                 anchor_envelope_margin_ratio,
             )
             envelope_global[guarded_indices[envelope_keep]] = True
+            if partial_anchor_component_extension:
+                partial_anchor_extension_added_count = int(
+                    np.count_nonzero(~envelope_keep)
+                )
+                envelope_global[guarded_indices] = True
 
             group_anchor_ratio = source_count / float(max(dominant_size, 1))
             ambiguous_indices = source_indices[robust_here & ~unique_here]
@@ -906,6 +1056,9 @@ def refine_ade_labels(
                 }
             )
         report["anchor_envelope_guard"] = envelope_report
+        report["partial_anchor_extension_added_count"] = (
+            partial_anchor_extension_added_count
+        )
         if anchored_acceptance and is_thing:
             accepted_thing_regions.append(
                 {
@@ -1044,12 +1197,37 @@ def main() -> None:
         "--prototype-max-dominant-competing-thing-fraction", default=0.50, type=float
     )
     parser.add_argument(
+        "--prototype-max-partial-competing-thing-risk", default=0.40, type=float
+    )
+    parser.add_argument(
         "--prototype-ambiguous-min-dominant-competing-thing-fraction",
         default=0.90,
         type=float,
     )
     parser.add_argument("--prototype-max-shape-ratio", default=2.50, type=float)
     parser.add_argument("--prototype-max-size-ratio", default=3.00, type=float)
+    parser.add_argument(
+        "--partial-anchor-extension-min-anchor-coverage", default=0.80, type=float
+    )
+    parser.add_argument(
+        "--partial-anchor-extension-max-anchor-precision", default=0.25, type=float
+    )
+    parser.add_argument(
+        "--partial-anchor-extension-min-robust-fraction", default=0.90, type=float
+    )
+    parser.add_argument(
+        "--partial-anchor-extension-min-source-views", default=5, type=int
+    )
+    parser.add_argument(
+        "--partial-anchor-extension-max-competing-thing-fraction",
+        default=0.05,
+        type=float,
+    )
+    parser.add_argument(
+        "--partial-anchor-extension-min-spatial-keep-fraction",
+        default=0.95,
+        type=float,
+    )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -1132,9 +1310,16 @@ def main() -> None:
         args.prototype_min_source_views,
         args.prototype_strong_source_views,
         args.prototype_max_dominant_competing_thing_fraction,
+        args.prototype_max_partial_competing_thing_risk,
         args.prototype_ambiguous_min_dominant_competing_thing_fraction,
         args.prototype_max_shape_ratio,
         args.prototype_max_size_ratio,
+        args.partial_anchor_extension_min_anchor_coverage,
+        args.partial_anchor_extension_max_anchor_precision,
+        args.partial_anchor_extension_min_robust_fraction,
+        args.partial_anchor_extension_min_source_views,
+        args.partial_anchor_extension_max_competing_thing_fraction,
+        args.partial_anchor_extension_min_spatial_keep_fraction,
     )
     merged_histogram = histogram(merged)
     final_items: list[dict[str, Any]] = []
@@ -1201,13 +1386,41 @@ def main() -> None:
             "prototype_max_dominant_competing_thing_fraction": (
                 args.prototype_max_dominant_competing_thing_fraction
             ),
+            "prototype_max_partial_competing_thing_risk": (
+                args.prototype_max_partial_competing_thing_risk
+            ),
             "prototype_ambiguous_min_dominant_competing_thing_fraction": (
                 args.prototype_ambiguous_min_dominant_competing_thing_fraction
             ),
             "prototype_max_shape_ratio": args.prototype_max_shape_ratio,
             "prototype_max_size_ratio": args.prototype_max_size_ratio,
+            "partial_anchor_extension_min_anchor_coverage": (
+                args.partial_anchor_extension_min_anchor_coverage
+            ),
+            "partial_anchor_extension_max_anchor_precision": (
+                args.partial_anchor_extension_max_anchor_precision
+            ),
+            "partial_anchor_extension_min_robust_fraction": (
+                args.partial_anchor_extension_min_robust_fraction
+            ),
+            "partial_anchor_extension_min_source_views": (
+                args.partial_anchor_extension_min_source_views
+            ),
+            "partial_anchor_extension_max_competing_thing_fraction": (
+                args.partial_anchor_extension_max_competing_thing_fraction
+            ),
+            "partial_anchor_extension_min_spatial_keep_fraction": (
+                args.partial_anchor_extension_min_spatial_keep_fraction
+            ),
             "ambiguity_rule": "exactly_one_robust_eligible_ade_class_claim",
-            "spatial_rule": "keep_only_anchor_seeded_components_at_minimum_precision",
+            "spatial_rule": (
+                "keep_anchor_seeded_components; complete_one_strong_partial-anchor_"
+                "component_under_multiview_and_conflict_guards"
+            ),
+            "prototype_competing_instance_rule": (
+                "candidate_conflict_weighted_by_uncovered_fraction_of_dominant_"
+                "competing_instance"
+            ),
             "ontology_rule": "grounding_stuff_does_not_overwrite_base_thing_instances",
         },
         "evidence": evidence_report,

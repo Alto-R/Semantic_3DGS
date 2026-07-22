@@ -21,7 +21,7 @@ FLASHSPLAT_ROOT="${WORKSPACE_ROOT}/external/FlashSplat"
 SCENE="${SCENE:-room}"
 SOURCE_NAME="${SOURCE_NAME:-${SCENE}_dinov2_separate_abstain_allviews_v1}"
 CACHE_NAME="${CACHE_NAME:-${SCENE}_dinov2_ade_refinement_auto_spatial_thing_guard_v3}"
-OUTPUT_NAME="${OUTPUT_NAME:-${SCENE}_dinov2_ade_refinement_instance_guard_v4}"
+OUTPUT_NAME="${OUTPUT_NAME:-${SCENE}_dinov2_ade_refinement_adaptive_instance_guard_v5}"
 SOURCE_DIR="${TASK1_ROOT}/${SOURCE_NAME}"
 CACHE_DIR="${TASK1_ROOT}/${CACHE_NAME}"
 OUT_DIR="${TASK1_ROOT}/${OUTPUT_NAME}"
@@ -108,7 +108,7 @@ run_report() {
 }
 
 run_stage 08_guarded_ade_refinement_replay \
-  python scripts/task1/merge_ade_refinement.py \
+  python -m scripts.task1.merge.merge_ade_refinement \
     --base-labels "${BASE_LABELS}" \
     --base-label-map "${BASE_LABEL_MAP}" \
     --grounding-labels "${CACHE_FUSION}/gaussian_labels.npy" \
@@ -142,14 +142,22 @@ run_stage 08_guarded_ade_refinement_replay \
     --prototype-min-source-views 3 \
     --prototype-strong-source-views 5 \
     --prototype-max-dominant-competing-thing-fraction 0.50 \
+    --prototype-max-partial-competing-thing-risk 0.40 \
     --prototype-ambiguous-min-dominant-competing-thing-fraction 0.90 \
     --prototype-max-shape-ratio 2.50 \
     --prototype-max-size-ratio 3.00 \
+    --partial-anchor-extension-min-anchor-coverage 0.80 \
+    --partial-anchor-extension-max-anchor-precision 0.25 \
+    --partial-anchor-extension-min-robust-fraction 0.90 \
+    --partial-anchor-extension-min-source-views 5 \
+    --partial-anchor-extension-max-competing-thing-fraction 0.05 \
+    --partial-anchor-extension-min-spatial-keep-fraction 0.95 \
     --overwrite
 
 FINAL_LABELS="${REFINEMENT_DIR}/gaussian_labels.npy"
 FINAL_LABEL_MAP="${REFINEMENT_DIR}/label_map.json"
 FINAL_PLY="${REFINEMENT_DIR}/semantic_point_cloud.ply"
+FINAL_MODE="dinov2_groundingdino_adaptive_instance_guard_v5"
 
 if [[ "${MISSING_VOCABULARY_ENABLED}" = "1" ]]; then
   MANIFEST_ARGS=()
@@ -157,7 +165,7 @@ if [[ "${MISSING_VOCABULARY_ENABLED}" = "1" ]]; then
     MANIFEST_ARGS=(--extension-manifest "${EXTENSION_MANIFEST}")
   fi
   run_stage 09_missing_vocabulary_merge \
-    python scripts/task1/merge_semantic_extensions.py \
+    python -m scripts.task1.merge.merge_semantic_extensions \
       --base-labels "${FINAL_LABELS}" \
       --base-label-map "${FINAL_LABEL_MAP}" \
       --extension-labels "${EXTENSION_LABELS}" \
@@ -181,7 +189,7 @@ cp "${FINAL_LABEL_MAP}" "${DELIVERABLE_DIR}/label_map.json"
 cp "${FINAL_PLY}" "${DELIVERABLE_DIR}/semantic_point_cloud.ply"
 
 run_stage 10_supersplat_debug_ply \
-  python scripts/task1/export_supersplat_label_colors.py \
+  python -m scripts.task1.qa.export_supersplat_label_colors \
     --input-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --output-ply "${VISUALIZATION_DIR}/semantic_point_cloud_supersplat_debug.ply" \
@@ -190,7 +198,7 @@ run_stage 10_supersplat_debug_ply \
     --overwrite
 
 run_stage 11_semantic_overlays \
-  python scripts/task1/render_auto_label_overlays.py \
+  python -m scripts.task1.qa.render_auto_label_overlays \
     --model-path "${MODEL_DIR}" \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
@@ -205,7 +213,7 @@ run_stage 11_semantic_overlays \
     --color-mode "${COLOR_MODE}"
 
 run_stage 12_visible_coverage \
-  python scripts/task1/measure_overlay_coverage.py \
+  python -m scripts.task1.qa.measure_overlay_coverage \
     --rgb-dir "${QA_RGB_DIR}" \
     --overlay-dir "${QA_OVERLAY_DIR}" \
     --output "${VALIDATION_DIR}/visible_overlay_coverage.json" \
@@ -213,14 +221,14 @@ run_stage 12_visible_coverage \
     --exclude-border 1
 
 run_stage 13_contact_sheet \
-  python scripts/task1/make_contact_sheet.py \
+  python -m scripts.task1.qa.make_contact_sheet \
     --image-dir "${QA_OVERLAY_DIR}" \
     --output "${CONTACT_DIR}/semantic_labels.png" \
     --columns 4 \
     --thumb-width 360
 
 run_stage 14_semantic_color_legend \
-  python scripts/task1/write_semantic_color_legend.py \
+  python -m scripts.task1.qa.write_semantic_color_legend \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --output-json "${VISUALIZATION_DIR}/semantic_color_legend.json" \
@@ -229,14 +237,15 @@ run_stage 14_semantic_color_legend \
     --overwrite
 
 run_report 15_task1_validation "${VALIDATION_DIR}/task1_validation.json" \
-  python scripts/task1/validate_task1_outputs.py \
+  python -m scripts.task1.qa.validate_task1_outputs \
     --labels-npy "${DELIVERABLE_DIR}/gaussian_labels.npy" \
     --label-map "${DELIVERABLE_DIR}/label_map.json" \
     --semantic-ply "${DELIVERABLE_DIR}/semantic_point_cloud.ply" \
     --visible-coverage "${VALIDATION_DIR}/visible_overlay_coverage.json"
 
-printf 'final_mode=dinov2_groundingdino_instance_guard_v4\nsource=%s\ncache=%s\nmissing_vocabulary_enabled=%s\n' \
-  "${SOURCE_DIR}" "${CACHE_DIR}" "${MISSING_VOCABULARY_ENABLED}" \
+printf 'final_mode=%s\nsource=%s\ncache=%s\nmissing_vocabulary_enabled=%s\n' \
+  "${FINAL_MODE}" "${SOURCE_DIR}" "${CACHE_DIR}" \
+  "${MISSING_VOCABULARY_ENABLED}" \
   > "${VALIDATION_DIR}/final_mode.txt"
 
 find "${OUT_DIR}" -maxdepth 4 -type f | sort

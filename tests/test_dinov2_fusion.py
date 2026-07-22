@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-import sys
 import unittest
-from pathlib import Path
 
 import numpy as np
 
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
-
-from dinov2_ontology import OntologyClass  # noqa: E402
-from fuse_dinov2_multiview_votes import (  # noqa: E402
+from scripts.task1.dinov2.dinov2_ontology import OntologyClass
+from scripts.task1.dinov2.fuse_dinov2_multiview_votes import (
     CandidateGroup,
     adaptive_threshold,
     build_candidate_groups,

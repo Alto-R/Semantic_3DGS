@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw
 
-from flashsplat_cameras import (
+from scripts.task1.common.flashsplat_cameras import (
     background_tensor,
     camera_filename,
     default_pipeline,
@@ -25,10 +25,15 @@ from flashsplat_cameras import (
     selected_camera_items,
     tensor_to_rgb_array,
 )
-from semantic_palette import load_label_items, normalize_classes, palette_records, rgb_for_label
+from scripts.task1.common.semantic_palette import (
+    load_label_items,
+    normalize_classes,
+    palette_records,
+    rgb_for_label,
+)
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
 DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
 

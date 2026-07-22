@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import sys
 import unittest
 from pathlib import Path
 
 import numpy as np
 
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
-
-from merge_semantic_extensions import (  # noqa: E402
+from scripts.task1.merge.merge_semantic_extensions import (
     merge_extensions,
     resolve_selected_classes,
+    resolve_source_classes,
     validate_label_array,
 )
 
@@ -62,6 +59,31 @@ class HybridMergeTest(unittest.TestCase):
         self.assertEqual(report["newly_labeled_count"], 1)
         self.assertEqual(report["relabeled_count"], 2)
 
+    def test_source_class_union_becomes_one_output_group(self) -> None:
+        extension_labels = np.asarray([0, 3, 5, 4, 5, 0], dtype=np.int32)
+        extension_items = {
+            0: {"id": 0, "name": "unlabeled", "class": "unlabeled"},
+            3: {"id": 3, "name": "railroad_track", "class": "railroad_track"},
+            4: {"id": 4, "name": "speaker_01", "class": "speaker"},
+            5: {"id": 5, "name": "railway_platform", "class": "railway_platform"},
+        }
+        merged, appended, report = merge_extensions(
+            self.base_labels,
+            self.base_items,
+            extension_labels,
+            extension_items,
+            ["railroad_track"],
+            {"railroad_track": ["railroad_track", "railway_platform"]},
+        )
+        self.assertEqual(merged.tolist(), [0, 3, 3, 2, 3, 2])
+        self.assertEqual(len(appended), 1)
+        self.assertEqual(appended[0]["class"], "railroad_track")
+        self.assertEqual(appended[0]["source_label_ids"], [3, 5])
+        self.assertEqual(report["merged_group_count"], 1)
+        self.assertEqual(report["changed_gaussian_count"], 3)
+        self.assertEqual(report["newly_labeled_count"], 1)
+        self.assertEqual(report["relabeled_count"], 2)
+
     def test_missing_final_group_is_a_noop(self) -> None:
         merged, appended, report = merge_extensions(
             self.base_labels,
@@ -88,9 +110,14 @@ class HybridMergeTest(unittest.TestCase):
         config = {
             "candidate_classes": ["piano", "speaker"],
             "default_enabled_classes": ["piano"],
+            "source_class_unions": {"speaker": ["speaker", "loudspeaker"]},
         }
         self.assertEqual(resolve_selected_classes(config, ""), ["piano"])
         self.assertEqual(resolve_selected_classes(config, "speaker"), ["speaker"])
+        self.assertEqual(
+            resolve_source_classes(config, ["speaker"]),
+            ["speaker", "loudspeaker"],
+        )
         with self.assertRaisesRegex(ValueError, "not candidates"):
             resolve_selected_classes(config, "chair")
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Overlay accepted GroundingDINO semantic groups on a DINOv2 Gaussian base."""
+"""Overlay reviewed GroundingDINO groups, including declared source unions."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ from typing import Any
 
 import numpy as np
 
-from add_labels_from_npy import write_ply_with_labels
-from dinov2_ontology import load_ontology, normalize_class_name
-from ply_utils import read_ply_header, resolve_semantic_ply_output
-from semantic_palette import PALETTE_VERSION, rgb8_for_class
+from scripts.task1.common.ply_utils import read_ply_header, resolve_semantic_ply_output
+from scripts.task1.common.semantic_palette import PALETTE_VERSION, rgb8_for_class
+from scripts.task1.dinov2.dinov2_ontology import load_ontology, normalize_class_name
+from scripts.task1.qa.add_labels_from_npy import write_ply_with_labels
 
 
 def sha256_file(path: Path, block_size: int = 1024 * 1024) -> str:
@@ -59,10 +59,41 @@ def load_extension_config(path: Path, scene: str) -> dict[str, Any]:
         raise ValueError(f"Default extension classes are not candidates: {unknown_defaults}")
     if not candidates:
         raise ValueError("Extension config must contain candidate_classes")
+    raw_unions = config.get("source_class_unions", {})
+    if not isinstance(raw_unions, dict):
+        raise ValueError("source_class_unions must be an object")
+    source_class_unions: dict[str, list[str]] = {}
+    source_owners: dict[str, str] = {}
+    for raw_output_class, raw_source_classes in raw_unions.items():
+        output_class = normalize_class_name(raw_output_class)
+        if not output_class or output_class in source_class_unions:
+            raise ValueError("source_class_unions contains an invalid or duplicate output class")
+        if output_class not in candidates:
+            raise ValueError(
+                f"Source-class union output is not a candidate: {output_class}"
+            )
+        if not isinstance(raw_source_classes, list) or not raw_source_classes:
+            raise ValueError(
+                f"Source-class union for {output_class} must contain source classes"
+            )
+        source_classes = normalized_unique(
+            raw_source_classes,
+            f"source_class_unions[{output_class}]",
+        )
+        for source_class in source_classes:
+            previous_owner = source_owners.get(source_class)
+            if previous_owner is not None and previous_owner != output_class:
+                raise ValueError(
+                    f"Source class {source_class} is assigned to both "
+                    f"{previous_owner} and {output_class}"
+                )
+            source_owners[source_class] = output_class
+        source_class_unions[output_class] = source_classes
     return {
         **config,
         "candidate_classes": candidates,
         "default_enabled_classes": defaults,
+        "source_class_unions": source_class_unions,
     }
 
 
@@ -83,6 +114,16 @@ def resolve_selected_classes(config: dict[str, Any], include_classes: str) -> li
     if unknown:
         raise ValueError(f"Selected extension classes are not candidates: {unknown}")
     return selected
+
+
+def resolve_source_classes(config: dict[str, Any], selected_classes: list[str]) -> list[str]:
+    unions = config.get("source_class_unions", {})
+    result: list[str] = []
+    for output_class in selected_classes:
+        for source_class in unions.get(output_class, [output_class]):
+            if source_class not in result:
+                result.append(source_class)
+    return result
 
 
 def label_items_by_id(label_map: dict[str, Any], path: Path) -> dict[int, dict[str, Any]]:
@@ -155,6 +196,7 @@ def merge_extensions(
     extension_labels: np.ndarray,
     extension_items: dict[int, dict[str, Any]],
     selected_classes: list[str],
+    source_class_unions: dict[str, list[str]] | None = None,
 ) -> tuple[np.ndarray, list[dict[str, Any]], dict[str, Any]]:
     if base_labels.shape != extension_labels.shape:
         raise ValueError(
@@ -166,20 +208,26 @@ def merge_extensions(
     appended_items: list[dict[str, Any]] = []
     class_reports: list[dict[str, Any]] = []
     changed_mask = np.zeros(base_labels.shape, dtype=bool)
+    source_class_unions = source_class_unions or {}
 
     for class_name in selected_classes:
+        source_classes = source_class_unions.get(class_name, [class_name])
         source_items = sorted(
             (
                 item
                 for label_id, item in extension_items.items()
-                if label_id > 0 and item["class"] == class_name
+                if label_id > 0 and item["class"] in source_classes
             ),
             key=lambda item: int(item["id"]),
         )
+        if class_name in source_class_unions:
+            merge_groups = [source_items]
+        else:
+            merge_groups = [[item] for item in source_items]
         group_reports: list[dict[str, Any]] = []
-        for source_item in source_items:
-            source_id = int(source_item["id"])
-            mask = extension_labels == source_id
+        for source_group in merge_groups:
+            source_ids = [int(item["id"]) for item in source_group]
+            mask = np.isin(extension_labels, source_ids)
             count = int(mask.sum())
             if count <= 0:
                 continue
@@ -187,32 +235,42 @@ def merge_extensions(
             next_id += 1
             changed_mask |= mask
             merged[mask] = new_id
-            copied = dict(source_item)
+            copied = dict(source_group[0])
             copied.update(
                 {
                     "id": new_id,
+                    "name": class_name if len(source_group) > 1 else copied.get("name", class_name),
+                    "class": class_name,
                     "gaussian_count": count,
                     "source_pipeline": "groundingdino_sam_flashsplat",
-                    "source_label_id": source_id,
+                    "source_label_ids": source_ids,
+                    "source_classes": source_classes,
                     "color_key": class_name,
                     "rgb": rgb8_for_class(class_name),
                 }
             )
+            if len(source_ids) == 1:
+                copied["source_label_id"] = source_ids[0]
+            else:
+                copied.pop("source_label_id", None)
             appended_items.append(copied)
-            group_reports.append(
-                {
-                    "source_label_id": source_id,
-                    "output_label_id": new_id,
-                    "name": str(source_item.get("name", "")),
-                    "gaussian_count": count,
-                    "newly_labeled_count": int(np.count_nonzero(base_labels[mask] == 0)),
-                    "relabeled_count": int(np.count_nonzero(base_labels[mask] != 0)),
-                    "base_transitions": transition_records(base_labels, mask, base_items),
-                }
-            )
+            group_report = {
+                "source_label_ids": source_ids,
+                "source_classes": source_classes,
+                "output_label_id": new_id,
+                "name": str(copied.get("name", "")),
+                "gaussian_count": count,
+                "newly_labeled_count": int(np.count_nonzero(base_labels[mask] == 0)),
+                "relabeled_count": int(np.count_nonzero(base_labels[mask] != 0)),
+                "base_transitions": transition_records(base_labels, mask, base_items),
+            }
+            if len(source_ids) == 1:
+                group_report["source_label_id"] = source_ids[0]
+            group_reports.append(group_report)
         class_reports.append(
             {
                 "class": class_name,
+                "source_classes": source_classes,
                 "status": "merged" if group_reports else "no_final_group",
                 "group_count": len(group_reports),
                 "gaussian_count": sum(item["gaussian_count"] for item in group_reports),
@@ -276,6 +334,7 @@ def main() -> None:
 
     config = load_extension_config(args.extension_config, args.scene)
     selected_classes = resolve_selected_classes(config, args.include_classes)
+    selected_source_classes = resolve_source_classes(config, selected_classes)
     ontology = load_ontology(args.ontology)
     ontology_classes = {item.project_class for item in ontology.classes}
     collisions = [value for value in selected_classes if value in ontology_classes]
@@ -298,7 +357,7 @@ def main() -> None:
         manifest = load_json(args.extension_manifest)
         configured_classes = manifest_classes(manifest)
         absent_from_manifest = [
-            value for value in selected_classes if value not in configured_classes
+            value for value in selected_source_classes if value not in configured_classes
         ]
         if absent_from_manifest:
             raise ValueError(
@@ -309,7 +368,7 @@ def main() -> None:
         mapped_classes = {
             item["class"] for label_id, item in extension_items.items() if label_id > 0
         }
-        absent_from_map = [value for value in selected_classes if value not in mapped_classes]
+        absent_from_map = [value for value in selected_source_classes if value not in mapped_classes]
         if absent_from_map:
             raise ValueError(
                 "Selected classes are absent from the extension label map: "
@@ -330,6 +389,7 @@ def main() -> None:
         extension_labels,
         extension_items,
         selected_classes,
+        config["source_class_unions"],
     )
     merged_histogram = histogram(merged)
     final_items: list[dict[str, Any]] = []
@@ -352,6 +412,7 @@ def main() -> None:
         "base_source": str(args.base_label_map),
         "extension_source": str(args.extension_label_map),
         "selected_extension_classes": selected_classes,
+        "selected_extension_source_classes": selected_source_classes,
         "labels": final_items,
     }
     base_histogram = histogram(base_labels)

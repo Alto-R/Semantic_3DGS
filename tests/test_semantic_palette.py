@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import json
-import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
 
-from semantic_palette import (  # noqa: E402
+from scripts.task1.common.semantic_palette import (
     PALETTE_VERSION,
     fallback_class_color,
     label_palette,

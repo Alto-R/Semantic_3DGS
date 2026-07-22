@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import json
-import sys
 import unittest
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "task1"))
-
-from generate_grounded_sam_masks import (  # noqa: E402
+from scripts.task1.grounding.generate_grounded_sam_masks import (
     ClassSpec,
     class_from_phrase,
     select_class_specs,

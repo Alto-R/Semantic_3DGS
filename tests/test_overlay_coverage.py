@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,9 +8,7 @@ import numpy as np
 from PIL import Image
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "task1"))
-
-from measure_overlay_coverage import measure_directory  # noqa: E402
+from scripts.task1.qa.measure_overlay_coverage import measure_directory
 
 
 class OverlayCoverageTest(unittest.TestCase):

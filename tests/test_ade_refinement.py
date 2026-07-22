@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 import unittest
 from pathlib import Path
 
@@ -8,14 +7,13 @@ import numpy as np
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
 
-from build_ade_refinement_config import (  # noqa: E402
+from scripts.task1.dinov2.dinov2_ontology import load_ontology
+from scripts.task1.grounding.build_ade_refinement_config import (
     augment_with_extensions,
     build_refinement_config,
 )
-from dinov2_ontology import load_ontology  # noqa: E402
-from merge_ade_refinement import refine_ade_labels  # noqa: E402
+from scripts.task1.merge.merge_ade_refinement import refine_ade_labels
 
 
 class AdeRefinementConfigTest(unittest.TestCase):
@@ -437,6 +435,155 @@ class AdeRefinementMergeTest(unittest.TestCase):
         )
         self.assertTrue(np.all(merged[3:] == 3))
         self.assertEqual(report["groups"][1]["acceptance_mode"], "anchored_instance_prototype")
+
+    def test_strong_view_fallback_rejects_partial_overlap_with_large_competing_instance(
+        self,
+    ) -> None:
+        base = np.asarray(
+            [1, 1, 1, *([2] * 4), *([3] * 4), *([2] * 20)], dtype=np.int32
+        )
+        grounding = np.asarray(
+            [10, 10, 10, *([11] * 8), *([0] * 20)], dtype=np.int32
+        )
+        claim_count = np.asarray([*([1] * 11), *([0] * 20)], dtype=np.uint16)
+        vertex = self.spatial_vertex(
+            [0.0, 0.1, 0.2]
+            + [10.0 + 0.1 * index for index in range(8)]
+            + [20.0 + index for index in range(20)]
+        )
+        _merged, _changes, _appended, report = refine_ade_labels(
+            base,
+            {
+                0: {"id": 0, "name": "unlabeled", "class": "unlabeled"},
+                1: {"id": 1, "name": "door_001", "class": "door"},
+                2: {"id": 2, "name": "wardrobe_001", "class": "wardrobe"},
+                3: {"id": 3, "name": "wall", "class": "wall"},
+            },
+            grounding,
+            {
+                0: {"id": 0, "name": "unlabeled", "class": "unlabeled"},
+                10: {
+                    "id": 10,
+                    "name": "door_01",
+                    "class": "door",
+                    "proposal_count": 4,
+                    "source_view_count": 4,
+                },
+                11: {
+                    "id": 11,
+                    "name": "door_02",
+                    "class": "door",
+                    "proposal_count": 6,
+                    "source_view_count": 6,
+                },
+            },
+            ["door"],
+            claim_count,
+            {"door": np.arange(11, dtype=np.uint32)},
+            min_anchor_gaussians=1,
+            min_anchor_coverage=0.10,
+            min_group_proposals=2,
+            min_group_source_views=2,
+            vertex_data=vertex,
+            class_kinds={"door": "thing", "wardrobe": "thing", "wall": "stuff"},
+        )
+        rejected = report["groups"][1]
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertFalse(rejected["prototype_geometry_match"])
+        self.assertAlmostEqual(
+            rejected["dominant_competing_thing_instance_coverage"], 4.0 / 24.0
+        )
+        self.assertGreater(
+            rejected["dominant_competing_thing_partial_overlap_risk"], 0.40
+        )
+        self.assertIn("partial_competing_thing_risk>0.4", rejected["reasons"])
+
+    def test_strong_view_fallback_allows_high_coverage_small_competing_instance(
+        self,
+    ) -> None:
+        base = np.asarray([1, 1, 1, 2, 2, 3, 3, 3, 3], dtype=np.int32)
+        grounding = np.asarray([10, 10, 10, 11, 11, 11, 11, 11, 11], dtype=np.int32)
+        vertex = self.spatial_vertex(
+            [0.0, 0.1, 0.2, 10.0, 10.18, 10.36, 10.54, 10.72, 10.90]
+        )
+        merged, _changes, _appended, report = refine_ade_labels(
+            base,
+            {
+                0: {"id": 0, "name": "unlabeled", "class": "unlabeled"},
+                1: {"id": 1, "name": "bookcase_001", "class": "bookcase"},
+                2: {"id": 2, "name": "cabinet_001", "class": "cabinet"},
+                3: {"id": 3, "name": "wall", "class": "wall"},
+            },
+            grounding,
+            {
+                0: {"id": 0, "name": "unlabeled", "class": "unlabeled"},
+                10: {
+                    "id": 10,
+                    "name": "bookcase_01",
+                    "class": "bookcase",
+                    "proposal_count": 4,
+                    "source_view_count": 4,
+                },
+                11: {
+                    "id": 11,
+                    "name": "bookcase_02",
+                    "class": "bookcase",
+                    "proposal_count": 6,
+                    "source_view_count": 6,
+                },
+            },
+            ["bookcase"],
+            np.ones(base.shape, dtype=np.uint16),
+            {"bookcase": np.arange(base.shape[0], dtype=np.uint32)},
+            min_anchor_gaussians=1,
+            min_anchor_coverage=0.10,
+            min_group_proposals=2,
+            min_group_source_views=2,
+            vertex_data=vertex,
+            class_kinds={"bookcase": "thing", "cabinet": "thing", "wall": "stuff"},
+        )
+        accepted = report["groups"][1]
+        self.assertEqual(accepted["status"], "refined")
+        self.assertFalse(accepted["prototype_geometry_match"])
+        self.assertTrue(accepted["prototype_strong_view_fallback"])
+        self.assertEqual(accepted["dominant_competing_thing_instance_coverage"], 1.0)
+        self.assertEqual(accepted["dominant_competing_thing_partial_overlap_risk"], 0.0)
+        self.assertTrue(np.all(merged[3:] == accepted["output_label_id"]))
+
+    def test_partial_anchor_can_complete_one_strong_connected_component(self) -> None:
+        base = np.asarray([1, 1, 1, *([2] * 9)], dtype=np.int32)
+        merged, _changes, _appended, report = refine_ade_labels(
+            base,
+            {
+                0: {"id": 0, "name": "unlabeled", "class": "unlabeled"},
+                1: {"id": 1, "name": "window_001", "class": "windowpane"},
+                2: {"id": 2, "name": "wall", "class": "wall"},
+            },
+            np.full(base.shape, 10, dtype=np.int32),
+            {
+                0: {"id": 0, "name": "unlabeled", "class": "unlabeled"},
+                10: {
+                    "id": 10,
+                    "name": "windowpane_01",
+                    "class": "windowpane",
+                    "proposal_count": 5,
+                    "source_view_count": 5,
+                },
+            },
+            ["windowpane"],
+            np.ones(base.shape, dtype=np.uint16),
+            {"windowpane": np.arange(base.shape[0], dtype=np.uint32)},
+            min_anchor_gaussians=1,
+            min_anchor_coverage=0.10,
+            min_group_proposals=2,
+            min_group_source_views=2,
+            vertex_data=self.spatial_vertex([0.1 * index for index in range(12)]),
+            class_kinds={"windowpane": "thing", "wall": "stuff"},
+        )
+        group = report["groups"][0]
+        self.assertTrue(group["partial_anchor_component_extension"])
+        self.assertGreater(group["partial_anchor_extension_added_count"], 0)
+        self.assertTrue(np.all(merged[3:] == group["output_label_id"]))
 
     def test_high_precision_fusion_halo_resolves_weak_thing_competition(self) -> None:
         base = np.asarray([1, 1, 1, 1, 1, 1, 2, 2, 2, 2], dtype=np.int32)

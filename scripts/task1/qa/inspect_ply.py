@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-from ply_utils import element_stride, read_ply_header
+from scripts.task1.common.ply_utils import element_stride, read_ply_header
 
 
 def build_summary(path: Path) -> Dict[str, Any]:
@@ -78,4 +78,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -13,8 +13,12 @@ from typing import Any
 
 import numpy as np
 
-from add_labels_from_npy import write_ply_with_labels
-from ply_utils import read_ply_header, resolve_semantic_ply_output, vertex_data_memmap
+from scripts.task1.common.ply_utils import (
+    read_ply_header,
+    resolve_semantic_ply_output,
+    vertex_data_memmap,
+)
+from scripts.task1.qa.add_labels_from_npy import write_ply_with_labels
 
 
 DEFAULT_STUFF_CLASSES = {"building", "ground", "road", "sidewalk", "sky", "vegetation", "terrain"}

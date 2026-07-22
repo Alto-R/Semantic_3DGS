@@ -3,10 +3,15 @@
   "scene": "train",
   "candidate_classes": [
     "train",
-    "railroad_track",
-    "railway_platform"
+    "railroad_track"
   ],
   "default_enabled_classes": [
     "train"
-  ]
+  ],
+  "source_class_unions": {
+    "railroad_track": [
+      "railroad_track",
+      "railway_platform"
+    ]
+  }
 }

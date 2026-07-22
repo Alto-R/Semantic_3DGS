@@ -4,8 +4,7 @@
   "candidate_classes": [
     "piano",
     "speaker",
-    "guitar",
-    "media_console"
+    "guitar"
   ],
   "default_enabled_classes": [
     "piano",

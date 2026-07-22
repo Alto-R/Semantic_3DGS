@@ -12,10 +12,13 @@ from typing import Any
 
 import numpy as np
 
-from add_labels_from_npy import write_ply_with_labels
-from cluster_semantic_flashsplat_proposals import voxel_components
-from dinov2_ontology import OntologyClass, load_ontology
-from dinov2_voting import (
+from scripts.task1.common.ply_utils import (
+    read_ply_header,
+    resolve_semantic_ply_output,
+    vertex_data_memmap,
+)
+from scripts.task1.dinov2.dinov2_ontology import OntologyClass, load_ontology
+from scripts.task1.dinov2.dinov2_voting import (
     accumulate_vote_arrays,
     semantic_evidence_fractions,
     semantic_winner_metrics,
@@ -23,10 +26,11 @@ from dinov2_voting import (
     threshold_winners,
     winner_metrics,
 )
-from ply_utils import read_ply_header, resolve_semantic_ply_output, vertex_data_memmap
+from scripts.task1.grounding.cluster_semantic_flashsplat_proposals import voxel_components
+from scripts.task1.qa.add_labels_from_npy import write_ply_with_labels
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ONTOLOGY = PROJECT_ROOT / "configs" / "ade20k_to_project.json"
 
 

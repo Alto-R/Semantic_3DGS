@@ -15,9 +15,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from semantic_palette import rgb8_for_class
-
-from flashsplat_cameras import (
+from scripts.task1.common.flashsplat_cameras import (
     background_tensor,
     camera_filename,
     default_pipeline,
@@ -30,9 +28,10 @@ from flashsplat_cameras import (
     selected_camera_items,
     tensor_to_rgb_array,
 )
+from scripts.task1.common.semantic_palette import rgb8_for_class
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
 DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
 DEFAULT_DEVA_ROOT = WORKSPACE_ROOT / "gaussian-grouping" / "Tracking-Anything-with-DEVA"

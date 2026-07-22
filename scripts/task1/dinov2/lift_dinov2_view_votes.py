@@ -11,13 +11,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from dinov2_ontology import load_ontology
-from dinov2_voting import (
-    flashsplat_class_rows,
-    mean_class_confidences,
-    sparse_view_votes,
-)
-from flashsplat_cameras import (
+from scripts.task1.common.flashsplat_cameras import (
     background_tensor,
     default_pipeline,
     load_cameras,
@@ -27,9 +21,15 @@ from flashsplat_cameras import (
     point_cloud_path,
     render_flashsplat,
 )
+from scripts.task1.dinov2.dinov2_ontology import load_ontology
+from scripts.task1.dinov2.dinov2_voting import (
+    flashsplat_class_rows,
+    mean_class_confidences,
+    sparse_view_votes,
+)
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
 DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
 DEFAULT_ONTOLOGY = PROJECT_ROOT / "configs" / "ade20k_to_project.json"

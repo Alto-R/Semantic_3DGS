@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "scene": "bonsai",
+  "candidate_classes": [
+    "bonsai_tree",
+    "electronic_keyboard"
+  ],
+  "default_enabled_classes": [
+    "bonsai_tree"
+  ]
+}

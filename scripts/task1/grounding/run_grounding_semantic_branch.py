@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Sequence
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 FATAL_OUTPUT_PATTERNS = (
     "no kernel image is available for execution on the device",
     "invalid device function",
@@ -99,7 +99,8 @@ def main() -> None:
     if not args.skip_mask_generation:
         command = [
             python,
-            "scripts/task1/generate_grounded_sam_masks.py",
+            "-m",
+            "scripts.task1.grounding.generate_grounded_sam_masks",
             "--model-path",
             str(args.model_path),
             "--output-dir",
@@ -144,7 +145,8 @@ def main() -> None:
     if not args.skip_proposal_generation:
         command = [
             python,
-            "scripts/task1/run_flashsplat_mask_proposals.py",
+            "-m",
+            "scripts.task1.grounding.run_flashsplat_mask_proposals",
             "--model-path",
             str(args.model_path),
             "--sam-output-dir",
@@ -177,7 +179,8 @@ def main() -> None:
 
     command = [
         python,
-        "scripts/task1/cluster_semantic_flashsplat_proposals.py",
+        "-m",
+        "scripts.task1.grounding.cluster_semantic_flashsplat_proposals",
         "--model-path",
         str(args.model_path),
         "--proposal-dir",

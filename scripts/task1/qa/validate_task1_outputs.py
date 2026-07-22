@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from ply_utils import read_ply_header
+from scripts.task1.common.ply_utils import read_ply_header
 
 
 def load_label_map(path: Path) -> dict[str, Any]:

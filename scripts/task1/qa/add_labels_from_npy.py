@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ply_utils import element_stride, read_ply_header
+from scripts.task1.common.ply_utils import element_stride, read_ply_header
 
 
 def insert_vertex_property(lines: list[str], property_name: str) -> bytes:

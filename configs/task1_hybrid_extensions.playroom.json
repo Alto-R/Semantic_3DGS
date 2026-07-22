@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "scene": "playroom",
+  "candidate_classes": [
+    "stroller"
+  ],
+  "default_enabled_classes": [
+    "stroller"
+  ]
+}

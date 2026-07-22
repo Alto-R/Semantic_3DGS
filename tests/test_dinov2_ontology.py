@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts" / "task1"))
 
-from dinov2_ontology import load_ontology  # noqa: E402
+from scripts.task1.dinov2.dinov2_ontology import load_ontology
 
 
 class Dinov2OntologyTest(unittest.TestCase):

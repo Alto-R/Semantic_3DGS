@@ -1,7 +1,5 @@
 {
   "assignment_priority": [
-    "tree_stump",
-    "log",
     "tree",
     "vegetation",
     "ground",
@@ -9,19 +7,9 @@
   ],
   "classes": [
     {
-      "class": "tree_stump",
-      "type": "thing",
-      "prompts": ["tree stump", "stump"]
-    },
-    {
-      "class": "log",
-      "type": "thing",
-      "prompts": ["fallen log", "wooden log", "log"]
-    },
-    {
       "class": "tree",
       "type": "thing",
-      "prompts": ["tree", "tree trunk"]
+      "prompts": ["tree", "tree trunk", "tree stump", "fallen tree", "fallen log"]
     },
     {
       "class": "vegetation",

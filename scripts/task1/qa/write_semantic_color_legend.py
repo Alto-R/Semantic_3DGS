@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from semantic_palette import (
+from scripts.task1.common.semantic_palette import (
     PALETTE_VERSION,
     label_color_key,
     normalize_class_name,

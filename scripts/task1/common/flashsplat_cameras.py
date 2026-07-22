@@ -14,7 +14,7 @@ import torch
 
 
 CameraItem = Tuple[int, Dict[str, Any]]
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
 DEFAULT_GRAPHDECO_ROOT = WORKSPACE_ROOT / "external" / "gaussian-splatting"
 

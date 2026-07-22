@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "scene": "kitchen",
+  "candidate_classes": [
+    "oven_mitt",
+    "toy_bulldozer"
+  ],
+  "default_enabled_classes": []
+}
