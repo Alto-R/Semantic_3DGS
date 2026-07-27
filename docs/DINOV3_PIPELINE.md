@@ -575,3 +575,40 @@ The PNG overlays are proposal-level QA: they show the full cached 2D source
 regions whose components produced retained cores. They are not an exact
 projection of the filtered 3D core footprint. Exact retained support is stored
 in the boolean masks and compressed sparse support file.
+
+## Incremental spatial-core fill audit
+
+Use
+`scripts/slurm/slurm_task1_dinov3_incremental_spatial_core_fill_audit_scene.sbatch`
+after the multiview spatial-core audit to test only additions that cannot
+change the accepted 24-view v2 result:
+
+```text
+resolved post-ownership spatial-core supports
+  -> subtract every Gaussian with a nonzero preferred-v2 label
+  -> re-split each unlabeled residual with adaptive 26-neighbor voxels
+  -> require at least 500 Gaussians and two independent source cameras
+  -> retain sparse fill supports for report-only review
+  -> render the exact accepted 3D supports into the matched cached RGB views
+```
+
+The preferred label array is opened read-only, hashed before and after the
+audit, and never copied into an output label array. The spatial-core overlap
+decision is not rerun: this stage consumes only the already-exclusive sparse
+supports from the reviewed spatial-core report. After subtracting preferred
+labels, only the global residual-size and independent-camera gates remain.
+The scale-adaptive voxel rule keeps the same `4.0` multiplier and `0.01` to
+`0.20` bounds used by the source audit.
+
+This audit is also permanently report-only. It writes an exact incremental
+fill mask, an unlabeled residual-candidate mask, an excluded-preferred-label
+mask, compressed sparse residual supports, a JSON report, exact matched-view
+mask renders, semantic-palette overlays, and contact sheets. Class colors are
+constructed in memory directly from the sparse supports. No semantic label
+array, project-class array, label map, or PLY is written.
+
+The exact mask renders, unlike the source spatial-core proposal overlays, show
+only accepted residual Gaussians after immutable-label subtraction and spatial
+re-splitting. A separate fresh v3 fill-only materializer may be considered
+only after both scene audits pass visual review. Such a materializer must
+preserve every nonzero v2 label and fill only v2-unlabeled Gaussians.
