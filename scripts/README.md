@@ -1,24 +1,39 @@
-# Maintained Scripts
+# Script Inventory
 
-The active scripts are grouped by operational role. Retired utilities and
-superseded schedulers are preserved under `archive/`.
+Operational and research scripts are grouped by role. Retired utilities and
+superseded schedulers are preserved under `archive/`. DINOv3 audit schedulers
+remain experimental unless their documentation explicitly records an accepted
+materialization checkpoint; the multiview spatial-core route is permanently
+report-only.
 
 ## Slurm entry points
 
 | Scheduler | Role |
 |---|---|
 | `slurm/slurm_task1_dinov2_scene.sbatch` | Render real cameras, run DINOv2 ADE20K, lift votes, and build an immutable multiview base |
+| `slurm/slurm_task1_dinov3_scene.a100.sbatch` | Audit DINOv3 ViT-7B ADE20K on A100; report-only by default, with optional maintained lift/fusion |
+| `slurm/slurm_task1_dinov3_boundary_identity_audit_scene.sbatch` | Report-only DINOv3 query-boundary, DINOv2 identity, immutable-v5, and adaptive 3D audit |
+| `slurm/slurm_task1_dinov3_3d_first_scene.sbatch` | Independent report-only DINOv3 full-query-evidence, class-agnostic 3D association, and component identity audit; reads no prior semantic output |
+| `slurm/slurm_task1_dinov3_targeted_50plus20_scene.sbatch` | Select 50 even plus 20 low-coverage, pose-diverse cameras from a reviewed DINOv3 label source, then run a fresh independent 3D-first report on those 70 cameras |
+| `slurm/slurm_task1_dinov3_anchored_association_audit_scene.sbatch` | Reuse cached 24- and larger-view DINOv3 proposal supports to audit immutable-anchor association, one-view-outlier consensus, and multiview extensions without labels or PLY |
+| `slurm/slurm_task1_dinov3_multiview_spatial_core_audit_scene.sbatch` | Reuse a cached larger-view DINOv3 report, exclude one stable dissenting camera, and audit multiview-supported adaptive spatial cores without labels or PLY |
+| `slurm/slurm_task1_dinov3_3d_first_materialize_scene.sbatch` | Materialize reviewed DINOv3 3D components with cross-class conflict abstention |
+| `slurm/slurm_task1_dinov3_region_vote_scene.sbatch` | Fuse cached DINOv3 query regions directly with strict multiview majority |
+| `slurm/slurm_task1_dinov3_dense_vote_scene.sbatch` | Lift every cached dense DINOv3 pixel class and fuse complete per-camera class mass, with end-to-end visual QA |
+| `slurm/slurm_task1_dinov3_seeded_dense_scene.sbatch` | Preserve direct-region DINOv3 seeds and fill only matching, conflict-free dense 3D components, with provenance and end-to-end visual QA |
+| `slurm/slurm_task1_dinov3_plurality_dense_scene.sbatch` | Give each camera one equal component-identity vote, optionally resolve cross-class overlap by a unique maximum supporting-camera count, combine with direct-region seeds, and run guarded dense propagation plus visual QA |
 | `slurm/slurm_task1_ade_refinement_scene.sbatch` | Run adaptive instance-guard v5 from an immutable DINOv2 base |
 | `slurm/slurm_task1_ade_refinement_replay_scene.sbatch` | Reapply the v5 merge to cached refinement evidence |
 | `slurm/slurm_task1_semantic_scene.sbatch` | Generate standalone GroundingDINO+SAM evidence for classes absent from ADE20K |
+| `slurm/slurm_task1_sam_mask2former_hybrid_scene.sbatch` | Run SAM-seeded boundary refinement, one controlled 3D propagation round, and 3D audit in one job |
 | `slurm/slurm_task1_reviewed_extensions_scene.sbatch` | Merge an explicit allowlist of reviewed custom classes into a new output |
 | `slurm/slurm_task1_recolor_output.sbatch` | Recolor an existing accepted semantic output |
 | `slurm/slurm_gpu_check.sbatch` | Verify the cluster GPU environment |
 
-The DINOv2, ADE v5, custom-source, reviewed-extension, and recolor schedulers
-support configuration inspection. Use `CONFIG_ONLY=1` with `bash` to resolve
-paths, inputs, and parameters without submitting a job. The cached ADE replay
-scheduler does not currently expose this mode.
+The DINOv2, DINOv3, ADE v5, custom-source, reviewed-extension, and recolor
+schedulers support configuration inspection. Use `CONFIG_ONLY=1` with `bash`
+to resolve paths, inputs, and parameters without submitting a job. The cached
+ADE replay scheduler does not currently expose this mode.
 
 ## Task 1 package
 
@@ -28,7 +43,9 @@ The semantic implementation is split by responsibility:
 task1/
   common/      shared FlashSplat camera, PLY, and palette utilities
   dinov2/      rendering, ADE20K inference, vote lifting, and exact fusion
+  dinov3/      contract-compatible DINOv3 ADE20K segmentation
   grounding/   camera selection, GroundingDINO+SAM, and 3D proposal fusion
+  hybrid_refinement/  SAM/Mask2Former matching, guarded 3D propagation, and base QA
   merge/       guarded ADE v5 and reviewed custom-extension merges
   qa/          PLY publishing, overlays, contact sheets, summaries, and validation
 ```

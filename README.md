@@ -16,6 +16,12 @@ VR integration work are not implemented in this repository yet.
   incomplete ADE20K instances, but never overwrites its immutable DINOv2 base.
 - Classes missing from ADE20K are handled separately with reviewed
   GroundingDINO+SAM evidence. They are not merged automatically.
+- The report-only SAM-Mask2Former hybrid was validated and rejected as a
+  semantic-label source because large coherent false components survived its
+  global gates. It remains available for research reproduction only.
+- The independent DINOv3 3D-first route remains experimental. Its reviewed
+  24-view v2 result is the preferred DINOv3 checkpoint; current larger-view
+  spatial-core work is report-only and cannot publish labels or a PLY.
 - The experimental v6-v10 singleton-recovery methods were rejected after an
   independent multiview audit and are retained under `archive/`.
 - Every accepted result remains versioned. No stage overwrites a base output.
@@ -59,6 +65,7 @@ are documented in [Pipeline guide](docs/PIPELINE.md).
 | Run adaptive instance-guard v5 | `scripts/slurm/slurm_task1_ade_refinement_scene.sbatch` |
 | Replay a v5 merge from cached evidence | `scripts/slurm/slurm_task1_ade_refinement_replay_scene.sbatch` |
 | Generate custom-class source evidence | `scripts/slurm/slurm_task1_semantic_scene.sbatch` |
+| Audit SAM-seeded Mask2Former refinement and one-round propagation in one pass | `scripts/slurm/slurm_task1_sam_mask2former_hybrid_scene.sbatch` |
 | Merge explicitly reviewed custom classes | `scripts/slurm/slurm_task1_reviewed_extensions_scene.sbatch` |
 | Recolor an existing semantic output | `scripts/slurm/slurm_task1_recolor_output.sbatch` |
 
@@ -125,6 +132,7 @@ diagnostic, not a measurement of semantic accuracy.
 - [Pipeline guide](docs/PIPELINE.md)
 - [Current project status](docs/PROJECT_STATUS.md)
 - [DINOv2 multiview fusion](docs/DINOV2_MULTIVIEW_VOTING.md)
+- [SAM-Mask2Former hybrid refinement](docs/SAM_MASK2FORMER_HYBRID.md)
 - [External repositories and setup](docs/EXTERNAL_REPOS.md)
 - [Script and scheduler map](scripts/README.md)
 - [Archive index](archive/README.md)
