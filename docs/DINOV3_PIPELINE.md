@@ -684,3 +684,93 @@ scenes. Per-scene profile selection is also prohibited. Completely unanchored
 objects are intentionally abstained by this incremental route; recovering
 them must be evaluated through the separate automatic core-first
 semantic-identity audit, not a manual exception.
+
+## Dense per-Gaussian core cross-validation
+
+Exact projections from the core-first and automatic-anchor audits showed that
+spatially coherent support can still carry systematic 2D semantic leakage
+across painting/wall, wall/ceiling, door/wall, railing, floor, and stair
+boundaries. The next gate therefore checks the proposed core identity at every
+currently unlabeled Gaussian using independent dense camera evidence:
+
+```text
+core-first sparse support
+  + immutable preferred-v2 labels
+  -> remove every Gaussian already labeled by preferred v2
+  -> lift cached dense DINOv3 class evidence with explicit abstention
+  -> choose at most one reliable semantic winner per camera and Gaussian
+  -> require the pooled dense winner to match the core proposal
+  -> require a strict majority of reliable camera winners
+  -> require global winner, runner-up, and boundary-class margins
+  -> spatially re-split only after semantic validation
+  -> require global component-size and independent-camera support
+  -> render exact masks and overlays
+```
+
+The original
+`scripts/slurm/slurm_task1_dinov3_core_first_dense_cross_validation_audit_scene.sbatch`
+used three global profiles with fixed absolute thresholds for relative margin,
+maximum softmax probability, and normalized entropy confidence. Those
+thresholds were not calibrated to the released DINOv3 Mask2Former head:
+Playroom retained no pixels and Dr. Johnson retained only negligible evidence,
+so every profile produced zero validated Gaussians. That scheduler remains
+available only to reproduce the rejected diagnostic and is not the current
+route.
+
+## Joint empirical dense-confidence calibration
+
+Use
+`scripts/slurm/slurm_task1_dinov3_core_first_calibrated_dense_cross_validation_audit_scene.sbatch`
+for the automatic successor. Before lifting either target, it streams all
+cached pixels from both complete 70-view scene manifests and builds one joint
+empirical CDF for each stored metric:
+
+- relative top-1/top-2 margin;
+- maximum softmax probability;
+- normalized entropy confidence.
+
+Each pixel receives the minimum of its three empirical percentile ranks. This
+weakest-metric score prevents one unusually favorable metric from hiding weak
+support in another metric. Four class-neutral nested profiles are then derived
+from the joint score distribution:
+
+| Profile | Target joint pixel retention |
+|---|---:|
+| `baseline` | 100% |
+| `permissive` | 50% |
+| `balanced` | 25% |
+| `strict` | 10% |
+
+These are global retained quantiles, not manually chosen probability cutoffs,
+scene-specific tuning, or class-specific thresholds. Calibration reads the
+existing complete confidence maps and does not rerun DINOv3 inference.
+
+For each camera, the lift encodes the confidence level together with the
+project class. Because FlashSplat accumulation is linear, all four nested
+profiles are reconstructed from one render per camera. Pixels below a
+profile's level remain explicit abstention mass rather than disappearing
+through semantic renormalization.
+
+Camera validation separates two questions that the fixed-threshold audit had
+combined:
+
+1. accepted semantic coverage must exceed an automatic floor equal to half the
+   profile's actual joint retained ratio;
+2. winner share and winner margin are measured within the accepted semantic
+   mass.
+
+Pooled cross-camera winner share remains normalized by pooled semantic mass.
+The proposed class must also pass strict camera majority, pooled runner-up
+margin, and wall/ceiling/floor competitor-margin gates. Only then is support
+spatially re-split and subjected to the shared size and camera-count rules.
+
+The calibrated scheduler writes calibration histograms, per-profile sparse
+votes, reason masks, reports, exact masks and overlays, and a comparison
+summary. It explicitly disables automatic profile selection. Preferred-v2
+labels are read-only, and the stage writes no semantic label array,
+project-class array, label map, or PLY.
+
+This calibrated route is prepared for report-only evaluation. It is not an
+accepted materialization path. No profile may be selected or converted into a
+new label output until the same global behavior has passed exact visual review
+across both calibration scenes.
