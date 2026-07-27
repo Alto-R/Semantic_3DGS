@@ -612,3 +612,47 @@ only accepted residual Gaussians after immutable-label subtraction and spatial
 re-splitting. A separate fresh v3 fill-only materializer may be considered
 only after both scene audits pass visual review. Such a materializer must
 preserve every nonzero v2 label and fill only v2-unlabeled Gaussians.
+
+The completed audits retained 234,908 Dr. Johnson and 160,674 Playroom
+Gaussians after residual re-splitting. Their exact projections showed that a
+blanket fill was still unsafe: Dr. Johnson painting components included broad
+surrounding-wall halos, while Playroom had a broad door halo and one hanging
+stair item classified as lamp. The report-only audit therefore remains
+unmaterialized as a whole.
+
+## Reviewed incremental-fill candidate v3
+
+Use
+`scripts/slurm/slurm_task1_dinov3_reviewed_incremental_fill_scene.sbatch`
+to create a fresh, reversible candidate from the exact-QA-reviewed subset:
+
+```text
+accepted preferred-v2 labels = immutable base
+accepted incremental residual components
+  -> apply explicit component decisions from the scene review config
+  -> assign included support only where preferred v2 is zero
+  -> assert every nonzero preferred label is unchanged
+  -> write fresh candidate labels, semantic PLY, SuperSplat debug PLY,
+     matched 70-view overlays, contact sheet, coverage, and legend
+```
+
+The reviewed decisions are stored in:
+
+- `configs/dinov3_incremental_fill_review.drjohnson.json`;
+- `configs/dinov3_incremental_fill_review.playroom.json`.
+
+Dr. Johnson excludes the eleven accepted painting residual components because
+the exact views demonstrate wall halos. Playroom excludes residual component
+54 (`door`) for its surrounding-wall halo and residual component 105 (`lamp`)
+because it labels the hanging stair item as lamp. These are explicit visual
+review decisions, not learned thresholds or scene-specific algorithm gates.
+All other accepted residual components remain candidates.
+
+The materializer hashes the preferred label source, requires the preferred
+label map to use identity-mapped project-class IDs, checks that every included
+support is still preferred-unlabeled, and verifies the preferred hash again
+after writing the fresh output. It emits fill and exclusion masks, per-Gaussian
+fill-component provenance, reviewed sparse supports, and a summary recording
+every included and excluded component. The result is marked
+`candidate_only=1`; it does not replace or modify v2 and is not accepted until
+the combined semantic overlays and SuperSplat result pass review.
