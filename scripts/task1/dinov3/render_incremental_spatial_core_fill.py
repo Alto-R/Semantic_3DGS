@@ -32,6 +32,18 @@ DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
 REPORT_CONTRACTS = {
     "report_only_dinov3_incremental_spatial_core_fill_v1",
     "report_only_dinov3_automatic_anchor_guard_fill_v1",
+    "report_only_dinov3_core_first_semantic_identity_v1",
+}
+EXPECTED_COUNT_FIELDS = {
+    "report_only_dinov3_incremental_spatial_core_fill_v1": (
+        "incremental_fill_gaussian_count"
+    ),
+    "report_only_dinov3_automatic_anchor_guard_fill_v1": (
+        "incremental_fill_gaussian_count"
+    ),
+    "report_only_dinov3_core_first_semantic_identity_v1": (
+        "proposed_core_gaussian_count"
+    ),
 }
 
 
@@ -87,10 +99,11 @@ def build_exact_residual_colors(
             },
         )
 
-    expected_count = int(report.get("incremental_fill_gaussian_count", -1))
+    contract = str(report["contract"])
+    expected_count = int(report.get(EXPECTED_COUNT_FIELDS[contract], -1))
     actual_count = int(np.count_nonzero(selected_mask))
     if expected_count != actual_count:
-        raise ValueError("sparse support count differs from incremental-fill report")
+        raise ValueError("sparse support count differs from report")
     return colors, selected_mask, [
         palette_by_class[key] for key in sorted(palette_by_class)
     ]
@@ -256,8 +269,11 @@ def main() -> None:
     manifest = {
         "source": str(args.audit_report),
         "contract": str(report["contract"]),
-        "visualization_scope": (
-            "exact_projection_of_report_only_incremental_fill_3d_support"
+        "visualization_scope": str(
+            report.get(
+                "visualization_scope",
+                "exact_projection_of_report_only_incremental_fill_3d_support",
+            )
         ),
         "support_npz": str(args.support_npz),
         "model_path": str(args.model_path),

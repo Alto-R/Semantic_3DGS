@@ -576,6 +576,39 @@ regions whose components produced retained cores. They are not an exact
 projection of the filtered 3D core footprint. Exact retained support is stored
 in the boolean masks and compressed sparse support file.
 
+## Core-first semantic-identity audit
+
+Use
+`scripts/slurm/slurm_task1_dinov3_core_first_semantic_identity_audit_scene.sbatch`
+to test the opposite order on every cached 70-view proposal graph, including
+graphs whose whole-component identity was mixed or unstable:
+
+```text
+cached class-agnostic proposal graph
+  -> one presence vote per camera and Gaussian
+  -> retain support present in at least two cameras
+  -> split into adaptive 26-neighbor voxel cores
+  -> find the independent camera proposals intersecting each core
+  -> fuse DINOv3 identity independently inside that core
+  -> if exactly one stable outlier exists, remove it
+  -> recompute multiview support and spatially re-split
+  -> require at least 500 Gaussians and two independent cameras
+  -> resolve cross-class overlap by a unique maximum camera count
+  -> equal cross-class counts abstain
+```
+
+This differs from the earlier multiview spatial-core audit at the decisive
+step: no source graph is rejected for mixed identity before its first spatial
+split. The report separately counts how many mixed source graphs produce
+accepted per-core identities and how many Gaussians they recover.
+
+All thresholds are global and class-neutral. The stage reuses cached DINOv3
+query probabilities and FlashSplat proposal supports, performs no inference or
+lifting rerun, and makes no scene, class, or component decisions. It writes an
+audit report, boolean and ownership masks, compressed sparse accepted supports,
+and exact matched-view masks and overlays. It writes no semantic labels,
+project-class arrays, label map, or PLY and is not a materialization path.
+
 ## Incremental spatial-core fill audit
 
 Use
@@ -649,5 +682,5 @@ retaining useful fills.
 No candidate v3 may be materialized until one global profile passes both
 scenes. Per-scene profile selection is also prohibited. Completely unanchored
 objects are intentionally abstained by this incremental route; recovering
-them requires the separate automatic core-first semantic-identity path, not a
-manual exception.
+them must be evaluated through the separate automatic core-first
+semantic-identity audit, not a manual exception.
