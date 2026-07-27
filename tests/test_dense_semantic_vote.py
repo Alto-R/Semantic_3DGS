@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from scripts.task1.dense_seg.ade20k_ontology import ADE20K_NUM_CLASSES, load_ontology
+from scripts.task1.dense_seg.dense_seg_backends import Mask2FormerBackend
 from scripts.task1.dense_seg.fuse_semantic_votes import (
     LabelBuilder,
     decide_vote_labels,
@@ -18,6 +19,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ONTOLOGY_PATH = PROJECT_ROOT / "configs" / "ade20k_to_project.dense_backends.json"
 SCHEDULER_PATH = (
     PROJECT_ROOT / "scripts" / "slurm" / "slurm_task1_dense_semantic_scene.sbatch"
+)
+BACKEND_PATH = (
+    PROJECT_ROOT / "scripts" / "task1" / "dense_seg" / "dense_seg_backends.py"
 )
 
 
@@ -220,6 +224,74 @@ class DenseSemanticSchedulerContractTest(unittest.TestCase):
         self.assertIn(
             'if [ "${MODE}" = "fill" ] && [ "${REPORT_ONLY}" != "1" ]; then',
             self.scheduler,
+        )
+
+
+class Mask2FormerPrecisionContractTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.backend = BACKEND_PATH.read_text(encoding="utf-8")
+
+    def test_model_and_inputs_are_not_globally_converted_to_half(self) -> None:
+        self.assertNotIn("model = model.half()", self.backend)
+        self.assertNotIn("pixel_values = pixel_values.half()", self.backend)
+
+    def test_fp16_uses_cuda_autocast_and_records_precision(self) -> None:
+        self.assertIn("with torch.cuda.amp.autocast(enabled=amp_enabled):", self.backend)
+        self.assertIn('"precision": (', self.backend)
+        self.assertIn('"amp_fp16" if self.fp16', self.backend)
+
+
+class Mask2FormerRegionExportTest(unittest.TestCase):
+    def test_queries_become_compact_class_agnostic_regions(self) -> None:
+        import torch
+
+        backend = Mask2FormerBackend(
+            device="cpu",
+            fp16=False,
+            region_min_objectness=0.20,
+            region_mask_threshold=0.50,
+            region_min_pixel_score=0.10,
+            region_min_area=1,
+            region_max_area_ratio=1.0,
+            region_max_queries=8,
+        )
+        class_probabilities = torch.zeros((1, 2, ADE20K_NUM_CLASSES + 1))
+        class_probabilities[0, 0, 4] = 0.90
+        class_probabilities[0, 0, -1] = 0.10
+        class_probabilities[0, 1, 12] = 0.80
+        class_probabilities[0, 1, -1] = 0.20
+        mask_probabilities = torch.tensor(
+            [
+                [
+                    [[0.90, 0.10], [0.90, 0.10]],
+                    [[0.10, 0.90], [0.10, 0.90]],
+                ]
+            ],
+            dtype=torch.float32,
+        )
+
+        region_id, confidence, regions = backend._class_agnostic_regions(
+            class_probabilities,
+            mask_probabilities,
+            2,
+            2,
+        )
+
+        np.testing.assert_array_equal(
+            region_id,
+            np.asarray([[1, 2], [1, 2]], dtype=np.uint16),
+        )
+        self.assertTrue((confidence > 0).all())
+        self.assertEqual([item["region_id"] for item in regions], [1, 2])
+        self.assertEqual(
+            [item["diagnostic_ade20k_class"] for item in regions],
+            [4, 12],
+        )
+        self.assertFalse(
+            backend.describe()["class_agnostic_regions"][
+                "semantic_class_used_for_matching"
+            ]
         )
 
 

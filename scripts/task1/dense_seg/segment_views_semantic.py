@@ -10,6 +10,8 @@ into the compact project ontology, and written as one npz per view:
       project_class : (H, W) uint8   compact project ids, 0 = ignore
       confidence    : (H, W) float16 backend confidence in [0, 1]
       ade20k_class  : (H, W) int16   raw ADE20K ids (only with --save-raw)
+      region_id     : (H, W) uint16  class-agnostic query region, 0 = none
+      region_confidence : (H, W) float16 (only with --save-regions)
 
 Confidence gating happens later in lift_semantic_votes.py, so a lift rerun
 with a different threshold never requires re-running the model.
@@ -85,6 +87,32 @@ def frame_histogram(project_class: np.ndarray, ontology: ProjectOntology) -> dic
     }
 
 
+def region_overlay_image(
+    rgb: np.ndarray,
+    region_id: np.ndarray,
+    alpha: float = 0.55,
+) -> Image.Image:
+    """Render class-agnostic region ids without exposing semantic predictions."""
+
+    max_region_id = int(region_id.max()) if region_id.size else 0
+    color_map = np.zeros((max_region_id + 1, 3), dtype=np.uint8)
+    for compact_id in range(1, max_region_id + 1):
+        # Stable, high-contrast arithmetic palette independent of class names.
+        color_map[compact_id] = (
+            (compact_id * 73 + 41) % 256,
+            (compact_id * 151 + 97) % 256,
+            (compact_id * 199 + 17) % 256,
+        )
+    colored = color_map[region_id]
+    assigned = region_id > 0
+    blended = rgb.astype(np.float32)
+    blended[assigned] = (
+        (1.0 - alpha) * blended[assigned]
+        + alpha * colored[assigned].astype(np.float32)
+    )
+    return Image.fromarray(blended.clip(0.0, 255.0).astype(np.uint8))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True, type=Path)
@@ -103,6 +131,11 @@ def main() -> None:
     )
     parser.add_argument("--white-background", action="store_true")
     parser.add_argument("--save-raw", action="store_true", help="Also store raw ADE20K ids")
+    parser.add_argument(
+        "--save-regions",
+        action="store_true",
+        help="Store compact class-agnostic Mask2Former query regions",
+    )
     parser.add_argument("--overlay-alpha", default=0.55, type=float)
     parser.add_argument("--device", default="cuda")
 
@@ -112,6 +145,12 @@ def main() -> None:
         default="facebook/mask2former-swin-large-ade-semantic",
     )
     parser.add_argument("--no-fp16", action="store_true")
+    parser.add_argument("--region-min-objectness", default=0.30, type=float)
+    parser.add_argument("--region-mask-threshold", default=0.50, type=float)
+    parser.add_argument("--region-min-pixel-score", default=0.25, type=float)
+    parser.add_argument("--region-min-area", default=100, type=int)
+    parser.add_argument("--region-max-area-ratio", default=0.80, type=float)
+    parser.add_argument("--region-max-queries", default=64, type=int)
     parser.add_argument("--dinov3-repo", default="")
     parser.add_argument("--dinov3-backbone-weights", default="")
     parser.add_argument("--dinov3-segmentor-weights", default="")
@@ -119,6 +158,9 @@ def main() -> None:
     parser.add_argument("--dinov3-crop-size", default=896, type=int)
     parser.add_argument("--dinov3-stride", default=448, type=int)
     args = parser.parse_args()
+
+    if args.save_regions and args.backend != "mask2former":
+        raise ValueError("--save-regions currently requires --backend mask2former")
 
     ontology = load_ontology(args.ontology)
     backend = build_backend(args.backend, args)
@@ -135,8 +177,12 @@ def main() -> None:
 
     seg_dir = args.output_dir / "seg"
     overlay_dir = args.output_dir / "overlays"
+    region_overlay_dir = args.output_dir / "region_overlays"
     rgb_dir = args.output_dir / "rgb_renders"
-    for directory in (seg_dir, overlay_dir, rgb_dir):
+    directories = [seg_dir, overlay_dir, rgb_dir]
+    if args.save_regions:
+        directories.append(region_overlay_dir)
+    for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
 
     frames: list[dict[str, Any]] = []
@@ -151,7 +197,24 @@ def main() -> None:
             filename = camera_filename(output_index, camera_json)
             Image.fromarray(rgb).save(rgb_dir / filename)
 
-            ade_class, confidence = backend.segment(rgb)
+            region_id: np.ndarray | None = None
+            region_confidence: np.ndarray | None = None
+            regions: list[dict[str, Any]] = []
+            if args.save_regions:
+                segment_with_regions = getattr(backend, "segment_with_regions", None)
+                if segment_with_regions is None:
+                    raise RuntimeError(
+                        f"Backend {args.backend!r} does not export class-agnostic regions"
+                    )
+                (
+                    ade_class,
+                    confidence,
+                    region_id,
+                    region_confidence,
+                    regions,
+                ) = segment_with_regions(rgb)
+            else:
+                ade_class, confidence = backend.segment(rgb)
             project_class = ontology.remap(ade_class).astype(np.uint8)
 
             seg_file = f"{Path(filename).stem}.npz"
@@ -161,11 +224,22 @@ def main() -> None:
             }
             if args.save_raw:
                 arrays["ade20k_class"] = ade_class.astype(np.int16)
+            if args.save_regions:
+                if region_id is None or region_confidence is None:
+                    raise AssertionError("Region export was enabled but arrays are missing")
+                arrays["region_id"] = region_id.astype(np.uint16)
+                arrays["region_confidence"] = region_confidence.astype(np.float16)
             np.savez_compressed(seg_dir / seg_file, **arrays)
 
             overlay_image(rgb, project_class, ontology, args.overlay_alpha).save(
                 overlay_dir / filename
             )
+            if args.save_regions:
+                if region_id is None:
+                    raise AssertionError("Region export was enabled but region_id is missing")
+                region_overlay_image(rgb, region_id, args.overlay_alpha).save(
+                    region_overlay_dir / filename
+                )
 
             histogram = frame_histogram(project_class, ontology)
             frames.append(
@@ -180,6 +254,11 @@ def main() -> None:
                     "mean_confidence": float(np.asarray(confidence, dtype=np.float32).mean()),
                     "labeled_pixel_ratio": float((project_class > 0).mean()),
                     "class_histogram": histogram,
+                    "region_count": len(regions),
+                    "region_labeled_pixel_ratio": (
+                        float((region_id > 0).mean()) if region_id is not None else 0.0
+                    ),
+                    "regions": regions,
                 }
             )
             print(
@@ -200,6 +279,7 @@ def main() -> None:
         "backend": backend.describe(),
         "ontology": ontology.describe(),
         "save_raw": bool(args.save_raw),
+        "save_regions": bool(args.save_regions),
         "elapsed_seconds": time.time() - started,
         "frames": frames,
     }
