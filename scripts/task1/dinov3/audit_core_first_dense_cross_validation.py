@@ -322,7 +322,7 @@ def _boundary_project_ids(ontology: Ontology) -> tuple[int, ...]:
 
 def _camera_count_from_bits(bits: np.ndarray) -> int:
     words = np.bitwise_or.reduce(np.asarray(bits, dtype=np.uint64), axis=0)
-    return sum(int(value).bit_count() for value in words)
+    return sum(bin(int(value)).count("1") for value in words)
 
 
 def main() -> None:
