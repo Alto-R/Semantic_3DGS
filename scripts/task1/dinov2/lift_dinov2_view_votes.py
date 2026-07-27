@@ -50,6 +50,14 @@ def main() -> None:
     parser.add_argument("--model-path", required=True, type=Path)
     parser.add_argument("--input-dir", required=True, type=Path)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument(
+        "--segmentation-manifest",
+        type=Path,
+        help=(
+            "Raw ADE20K segmentation manifest. Defaults to "
+            "<input-dir>/dinov2_manifest.json for backward compatibility."
+        ),
+    )
     parser.add_argument("--flashsplat-root", default=DEFAULT_FLASHSPLAT_ROOT, type=Path)
     parser.add_argument("--ontology", default=DEFAULT_ONTOLOGY, type=Path)
     parser.add_argument("--iteration", default=30000, type=int)
@@ -74,14 +82,18 @@ def main() -> None:
             f"{output_manifest_path} exists; pass --overwrite to replace it"
         )
 
-    segmentation_manifest_path = args.input_dir / "dinov2_manifest.json"
+    segmentation_manifest_path = (
+        args.segmentation_manifest
+        if args.segmentation_manifest is not None
+        else args.input_dir / "dinov2_manifest.json"
+    )
     segmentation_manifest = json.loads(
         segmentation_manifest_path.read_text(encoding="utf-8")
     )
     manifest_threshold = float(segmentation_manifest["min_pixel_confidence"])
     if abs(manifest_threshold - args.min_pixel_confidence) > 1e-8:
         raise ValueError(
-            "min-pixel-confidence must match the DINOv2 manifest "
+            "min-pixel-confidence must match the segmentation manifest "
             f"({manifest_threshold})"
         )
     ontology = load_ontology(args.ontology)
@@ -172,6 +184,21 @@ def main() -> None:
 
     output_manifest = {
         "source": "dinov2_flashsplat_per_view_votes",
+        "segmentation_source": str(
+            segmentation_manifest.get("source", "dinov2_vitl14_ade20k_linear")
+        ),
+        "segmentation_contract": str(
+            segmentation_manifest.get(
+                "contract",
+                "raw_ade20k_class_and_max_softmax_confidence_v1",
+            )
+        ),
+        "segmentation_confidence_metric": str(
+            segmentation_manifest.get(
+                "confidence_metric",
+                "max_softmax_probability",
+            )
+        ),
         "model_path": str(args.model_path),
         "ply_path": str(ply_path),
         "segmentation_manifest": str(segmentation_manifest_path),
@@ -179,10 +206,12 @@ def main() -> None:
         "iteration": args.iteration,
         "gaussian_count": gaussian_count,
         "camera_count": len(frames),
-        "vote_formula": "view_quality * mean_class_confidence * used_count / visibility",
+        "vote_formula": (
+            "view_quality * mean_segmentation_confidence * used_count / visibility"
+        ),
         "visibility_definition": "sum_used_count_over_all_local_rows_including_abstain",
         "abstain_confidence_weighting": (
-            "mean_max_softmax_confidence_over_below_threshold_pixels"
+            "mean_segmentation_confidence_over_below_threshold_pixels"
         ),
         "parameters": {
             "min_pixel_confidence": args.min_pixel_confidence,

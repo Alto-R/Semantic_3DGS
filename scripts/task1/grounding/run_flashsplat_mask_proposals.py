@@ -239,6 +239,14 @@ def proposal_metadata(
         "sam_score",
         "bbox",
         "bbox_xyxy",
+        "hybrid_refinement",
+        "identity_audit",
+        "region_id",
+        "query_index",
+        "query_evidence_file",
+        "query_evidence_row",
+        "dinov3_query_diagnostic",
+        "semantic_identity_assigned",
     ]:
         if key in mask_meta:
             record[key] = mask_meta[key]
@@ -311,6 +319,7 @@ def main() -> None:
         "min_support_gaussians": args.min_support_gaussians,
         "write_class_evidence": args.write_class_evidence,
         "class_evidence_threshold": args.class_evidence_threshold,
+        "vertex_count": int(gaussians.get_xyz.shape[0]),
         "proposals": proposals,
     }
 
