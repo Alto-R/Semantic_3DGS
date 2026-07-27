@@ -33,6 +33,7 @@ REPORT_CONTRACTS = {
     "report_only_dinov3_incremental_spatial_core_fill_v1",
     "report_only_dinov3_automatic_anchor_guard_fill_v1",
     "report_only_dinov3_core_first_semantic_identity_v1",
+    "report_only_dinov3_core_first_dense_cross_validation_v1",
 }
 EXPECTED_COUNT_FIELDS = {
     "report_only_dinov3_incremental_spatial_core_fill_v1": (
@@ -43,6 +44,9 @@ EXPECTED_COUNT_FIELDS = {
     ),
     "report_only_dinov3_core_first_semantic_identity_v1": (
         "proposed_core_gaussian_count"
+    ),
+    "report_only_dinov3_core_first_dense_cross_validation_v1": (
+        "validated_fill_gaussian_count"
     ),
 }
 
