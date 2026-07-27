@@ -18,7 +18,7 @@ report-only.
 | `slurm/slurm_task1_dinov3_anchored_association_audit_scene.sbatch` | Reuse cached 24- and larger-view DINOv3 proposal supports to audit immutable-anchor association, one-view-outlier consensus, and multiview extensions without labels or PLY |
 | `slurm/slurm_task1_dinov3_multiview_spatial_core_audit_scene.sbatch` | Reuse a cached larger-view DINOv3 report, exclude one stable dissenting camera, and audit multiview-supported adaptive spatial cores without labels or PLY |
 | `slurm/slurm_task1_dinov3_incremental_spatial_core_fill_audit_scene.sbatch` | Subtract immutable preferred labels from resolved spatial cores, re-split unlabeled residuals, and render exact matched-view fill masks without labels or PLY |
-| `slurm/slurm_task1_dinov3_reviewed_incremental_fill_scene.sbatch` | Build a fresh candidate v3 by applying explicit exact-QA component exclusions and filling only preferred-v2-unlabeled Gaussians, with complete semantic and SuperSplat QA |
+| `slurm/slurm_task1_dinov3_automatic_anchor_guard_audit_scene.sbatch` | Apply global class-consistent nearest-anchor profiles to cached incremental residuals and render exact report-only diagnostics without scene/component exceptions |
 | `slurm/slurm_task1_dinov3_3d_first_materialize_scene.sbatch` | Materialize reviewed DINOv3 3D components with cross-class conflict abstention |
 | `slurm/slurm_task1_dinov3_region_vote_scene.sbatch` | Fuse cached DINOv3 query regions directly with strict multiview majority |
 | `slurm/slurm_task1_dinov3_dense_vote_scene.sbatch` | Lift every cached dense DINOv3 pixel class and fuse complete per-camera class mass, with end-to-end visual QA |

@@ -620,39 +620,34 @@ surrounding-wall halos, while Playroom had a broad door halo and one hanging
 stair item classified as lamp. The report-only audit therefore remains
 unmaterialized as a whole.
 
-## Reviewed incremental-fill candidate v3
+## Automatic class-consistent anchor guard
 
-Use
-`scripts/slurm/slurm_task1_dinov3_reviewed_incremental_fill_scene.sbatch`
-to create a fresh, reversible candidate from the exact-QA-reviewed subset:
+Do not convert exact visual-QA findings into scene names, component IDs, class
+exceptions, or manual fill decisions. The next cached-evidence stage is a
+report-only automatic anchor-guard audit:
 
 ```text
-accepted preferred-v2 labels = immutable base
-accepted incremental residual components
-  -> apply explicit component decisions from the scene review config
-  -> assign included support only where preferred v2 is zero
-  -> assert every nonzero preferred label is unchanged
-  -> write fresh candidate labels, semantic PLY, SuperSplat debug PLY,
-     matched 70-view overlays, contact sheet, coverage, and legend
+accepted incremental residual supports
+  + immutable preferred-v2 labels and 3D coordinates
+  -> query nearby preferred nonzero anchors for every proposed fill Gaussian
+  -> require enough same-class anchors
+  -> require a global same-class-neighbor fraction
+  -> require the nearest same-class anchor to beat the nearest competing class
+  -> re-split retained support spatially
+  -> reapply global size and independent-camera gates
+  -> render exact matched-view masks and overlays for global radius profiles
 ```
 
-The reviewed decisions are stored in:
+The profiles vary only the radius as a global multiple of the source
+component's adaptive voxel size. Neighbor count, same-class fraction, distance
+competition, retained-component size, and independent-camera gates are shared
+across scenes and classes. The audit writes no semantic labels, label map, or
+PLY. Its purpose is to determine whether local immutable-label evidence can
+automatically remove wall halos and abstain on unsupported objects while
+retaining useful fills.
 
-- `configs/dinov3_incremental_fill_review.drjohnson.json`;
-- `configs/dinov3_incremental_fill_review.playroom.json`.
-
-Dr. Johnson excludes the eleven accepted painting residual components because
-the exact views demonstrate wall halos. Playroom excludes residual component
-54 (`door`) for its surrounding-wall halo and residual component 105 (`lamp`)
-because it labels the hanging stair item as lamp. These are explicit visual
-review decisions, not learned thresholds or scene-specific algorithm gates.
-All other accepted residual components remain candidates.
-
-The materializer hashes the preferred label source, requires the preferred
-label map to use identity-mapped project-class IDs, checks that every included
-support is still preferred-unlabeled, and verifies the preferred hash again
-after writing the fresh output. It emits fill and exclusion masks, per-Gaussian
-fill-component provenance, reviewed sparse supports, and a summary recording
-every included and excluded component. The result is marked
-`candidate_only=1`; it does not replace or modify v2 and is not accepted until
-the combined semantic overlays and SuperSplat result pass review.
+No candidate v3 may be materialized until one global profile passes both
+scenes. Per-scene profile selection is also prohibited. Completely unanchored
+objects are intentionally abstained by this incremental route; recovering
+them requires the separate automatic core-first semantic-identity path, not a
+manual exception.

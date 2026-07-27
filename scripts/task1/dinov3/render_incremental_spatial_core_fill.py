@@ -29,7 +29,10 @@ from scripts.task1.common.semantic_palette import rgb8_for_class, rgb_for_class
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE_ROOT = PROJECT_ROOT.parents[1]
 DEFAULT_FLASHSPLAT_ROOT = WORKSPACE_ROOT / "external" / "FlashSplat"
-REPORT_CONTRACT = "report_only_dinov3_incremental_spatial_core_fill_v1"
+REPORT_CONTRACTS = {
+    "report_only_dinov3_incremental_spatial_core_fill_v1",
+    "report_only_dinov3_automatic_anchor_guard_fill_v1",
+}
 
 
 def build_exact_residual_colors(
@@ -41,7 +44,7 @@ def build_exact_residual_colors(
 
     if vertex_count < 1:
         raise ValueError("vertex_count must be positive")
-    if report.get("contract") != REPORT_CONTRACT:
+    if report.get("contract") not in REPORT_CONTRACTS:
         raise ValueError("incremental-fill report has the wrong contract")
     if int(report.get("vertex_count", -1)) != vertex_count:
         raise ValueError("incremental-fill report vertex count differs from model")
@@ -252,9 +255,9 @@ def main() -> None:
 
     manifest = {
         "source": str(args.audit_report),
-        "contract": REPORT_CONTRACT,
+        "contract": str(report["contract"]),
         "visualization_scope": (
-            "exact_projection_of_accepted_unlabeled_residual_3d_support"
+            "exact_projection_of_report_only_incremental_fill_3d_support"
         ),
         "support_npz": str(args.support_npz),
         "model_path": str(args.model_path),
