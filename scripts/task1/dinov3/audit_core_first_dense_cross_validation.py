@@ -31,6 +31,9 @@ from scripts.task1.dinov3.lift_confident_dense_view_votes import (
     CONTRACT as VOTE_CONTRACT,
     SOURCE as VOTE_SOURCE,
 )
+from scripts.task1.dinov3.lift_calibrated_dense_view_votes import (
+    CONTRACT as CALIBRATED_VOTE_CONTRACT,
+)
 from scripts.task1.dinov3.propagate_dense_labels_from_region_seeds import (
     adaptive_voxel_size,
 )
@@ -213,15 +216,20 @@ def validate_vote_manifest(
 ) -> None:
     if manifest.get("source") != VOTE_SOURCE:
         raise ValueError("vote manifest is not confident dense DINOv3 evidence")
-    if manifest.get("contract") != VOTE_CONTRACT:
+    vote_contract = str(manifest.get("contract", ""))
+    if vote_contract not in {VOTE_CONTRACT, CALIBRATED_VOTE_CONTRACT}:
         raise ValueError("unsupported confident dense vote contract")
     if int(manifest.get("gaussian_count", -1)) != vertex_count:
         raise ValueError("vote manifest Gaussian count differs from labels")
     if Path(str(manifest.get("ply_path", ""))).resolve() != source_ply.resolve():
         raise ValueError("vote manifest source PLY differs from requested PLY")
+    expected_confidence_filter = (
+        vote_contract != CALIBRATED_VOTE_CONTRACT
+        or str(manifest.get("profile_name")) != "baseline"
+    )
     for field, expected in (
         ("query_region_filtering_used", False),
-        ("confidence_threshold_used", True),
+        ("confidence_threshold_used", expected_confidence_filter),
         ("inference_rerun", False),
         ("flashsplat_rerun", True),
         ("abstain_mass_preserved", True),
@@ -233,6 +241,20 @@ def validate_vote_manifest(
     ):
         if manifest.get(field) is not expected:
             raise ValueError(f"vote manifest violates {field}={expected}")
+    if vote_contract == CALIBRATED_VOTE_CONTRACT:
+        for field, expected in (
+            ("joint_calibration_used", True),
+            ("single_flashsplat_render_shared_across_profiles", True),
+        ):
+            if manifest.get(field) is not expected:
+                raise ValueError(f"calibrated vote manifest violates {field}")
+        automatic_fraction = float(
+            manifest.get("automatic_min_camera_accepted_fraction", -1.0)
+        )
+        if not 0.0 < automatic_fraction <= 0.5:
+            raise ValueError(
+                "calibrated vote manifest has invalid automatic camera coverage"
+            )
     frames = manifest.get("frames", [])
     if not isinstance(frames, list) or not frames:
         raise ValueError("vote manifest has no frames")
@@ -298,10 +320,22 @@ def decide_camera_winners(
         if np.any(equal_positive):
             tied[positions[equal_positive]] = True
 
+    best_share = np.divide(
+        best,
+        accepted,
+        out=np.zeros_like(best),
+        where=accepted > 0.0,
+    )
+    winner_margin = np.divide(
+        best - runner,
+        accepted,
+        out=np.zeros_like(best),
+        where=accepted > 0.0,
+    )
     reliable = (
         (accepted >= min_accepted_fraction)
-        & (best >= min_winner_share)
-        & ((best - runner) >= min_winner_margin)
+        & (best_share >= min_winner_share)
+        & (winner_margin >= min_winner_margin)
         & (winner > 0)
         & ~tied
     )
@@ -338,7 +372,7 @@ def main() -> None:
     parser.add_argument("--min-reliable-cameras", default=3, type=int)
     parser.add_argument(
         "--min-camera-accepted-fraction",
-        default=0.50,
+        default=None,
         type=float,
     )
     parser.add_argument("--min-camera-winner-share", default=0.50, type=float)
@@ -368,9 +402,22 @@ def main() -> None:
             raise FileNotFoundError(path)
     if args.chunk_size < 1:
         raise ValueError("chunk_size must be positive")
+    vote_manifest = json.loads(args.vote_manifest.read_text(encoding="utf-8"))
+    if args.min_camera_accepted_fraction is None:
+        min_camera_accepted_fraction = float(
+            vote_manifest.get("automatic_min_camera_accepted_fraction", 0.50)
+        )
+        camera_coverage_threshold_source = (
+            "half_joint_profile_retained_ratio"
+            if "automatic_min_camera_accepted_fraction" in vote_manifest
+            else "legacy_default"
+        )
+    else:
+        min_camera_accepted_fraction = args.min_camera_accepted_fraction
+        camera_coverage_threshold_source = "explicit_argument"
     thresholds = DenseCrossValidationThresholds(
         min_reliable_cameras=args.min_reliable_cameras,
-        min_camera_accepted_fraction=args.min_camera_accepted_fraction,
+        min_camera_accepted_fraction=min_camera_accepted_fraction,
         min_camera_winner_share=args.min_camera_winner_share,
         min_camera_winner_margin=args.min_camera_winner_margin,
         min_global_winner_share=args.min_global_winner_share,
@@ -396,7 +443,6 @@ def main() -> None:
     core_report = json.loads(args.core_first_report.read_text(encoding="utf-8"))
     with np.load(args.core_first_supports, allow_pickle=False) as archive:
         cores = load_core_candidates(core_report, archive, vertex_count)
-    vote_manifest = json.loads(args.vote_manifest.read_text(encoding="utf-8"))
     validate_vote_manifest(
         vote_manifest,
         vertex_count=vertex_count,
@@ -807,8 +853,10 @@ def main() -> None:
             "core_first_support_intersect_preferred_v2_black_gaussians"
         ),
         "camera_vote_policy": (
-            "one_confidence_filtered_dense_winner_per_independent_camera"
+            "one_confidence_filtered_dense_winner_per_independent_camera_"
+            "with_separate_accepted_coverage_and_normalized_semantic_share"
         ),
+        "camera_coverage_threshold_source": camera_coverage_threshold_source,
         "global_vote_policy": (
             "proposed_class_must_be_unique_pooled_winner_with_strict_camera_"
             "majority_share_margin_and_boundary_margin"
