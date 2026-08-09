@@ -511,6 +511,7 @@ def prune_thing_label_islands(
     max_voxel_size: float,
     min_component_gaussians: int,
     min_component_ratio: float,
+    include_stuff: bool = False,
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
     required = {"x", "y", "z", "scale_0", "scale_1", "scale_2"}
     missing = sorted(required - set(vertex_data.dtype.names or ()))
@@ -519,7 +520,7 @@ def prune_thing_label_islands(
 
     reports: list[dict[str, Any]] = []
     for group in groups:
-        if group.is_stuff:
+        if group.is_stuff and not include_stuff:
             continue
         indices = np.flatnonzero(labels == group.group_id)
         if indices.shape[0] == 0:
@@ -927,6 +928,11 @@ def main() -> None:
     parser.add_argument("--class-evidence-min-positive-views", default=2, type=int)
     parser.add_argument("--class-evidence-min-ratio", default=0.50, type=float)
     parser.add_argument("--spatial-prune-thing-islands", action="store_true")
+    parser.add_argument(
+        "--spatial-prune-all-classes",
+        action="store_true",
+        help="Apply adaptive connected-component pruning to stuff and thing groups",
+    )
     parser.add_argument("--spatial-voxel-scale-multiplier", default=4.0, type=float)
     parser.add_argument("--spatial-min-voxel-size", default=0.01, type=float)
     parser.add_argument("--spatial-max-voxel-size", default=0.20, type=float)
@@ -964,6 +970,11 @@ def main() -> None:
     parser.add_argument("--summary-path", type=Path)
     parser.add_argument("--semantic-ply-path", type=Path)
     parser.add_argument("--no-semantic-ply", action="store_true")
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Write only the fusion/group summary; do not write labels, label map, or PLY",
+    )
     parser.add_argument("--require-class", action="store_true", default=True)
     parser.add_argument("--allow-unknown-class", dest="require_class", action="store_false")
     parser.add_argument("--overwrite", action="store_true")
@@ -1082,6 +1093,7 @@ def main() -> None:
             args.spatial_max_voxel_size,
             args.spatial_min_component_gaussians,
             args.spatial_min_component_ratio,
+            args.spatial_prune_all_classes,
         )
         labels, groups = prune_and_compact_groups(labels, groups)
         labels, groups, spatial_tiny_pruned = prune_assigned_groups(
@@ -1106,24 +1118,28 @@ def main() -> None:
         args.output_dir,
         semantic_ply_path=args.semantic_ply_path,
         semantic_ply_name=args.semantic_ply_name,
-        disabled=args.no_semantic_ply,
+        disabled=args.no_semantic_ply or args.report_only,
     )
-    output_files = [
-        labels_path,
-        label_map_path,
-        summary_path,
-        *([semantic_ply] if semantic_ply is not None else []),
-    ]
+    output_files = [summary_path]
+    if not args.report_only:
+        output_files.extend(
+            [
+                labels_path,
+                label_map_path,
+                *([semantic_ply] if semantic_ply is not None else []),
+            ]
+        )
     for path in output_files:
         path.parent.mkdir(parents=True, exist_ok=True)
     for path in output_files:
         if path.exists() and not args.overwrite:
             raise FileExistsError(f"{path} exists; pass --overwrite to replace it")
 
-    np.save(labels_path, labels)
     scene_name = args.scene or args.model_path.name
     label_map, names_by_id = build_label_map(scene_name, groups)
-    label_map_path.write_text(json.dumps(label_map, indent=2), encoding="utf-8")
+    if not args.report_only:
+        np.save(labels_path, labels)
+        label_map_path.write_text(json.dumps(label_map, indent=2), encoding="utf-8")
 
     histogram = {str(label): int(count) for label, count in zip(*np.unique(labels, return_counts=True))}
     summary = {
@@ -1132,6 +1148,12 @@ def main() -> None:
         "model_path": str(args.model_path),
         "ply_path": str(ply_path),
         "proposal_dir": str(args.proposal_dir),
+        "outputs": {
+            "report_only": bool(args.report_only),
+            "semantic_labels_written": not args.report_only,
+            "label_map_written": not args.report_only,
+            "semantic_ply_written": semantic_ply is not None,
+        },
         "parameters": {
             "min_proposal_gaussians": args.min_proposal_gaussians,
             "max_proposal_gaussians": args.max_proposal_gaussians,
@@ -1158,6 +1180,7 @@ def main() -> None:
             "class_evidence_min_positive_views": args.class_evidence_min_positive_views,
             "class_evidence_min_ratio": args.class_evidence_min_ratio,
             "spatial_prune_thing_islands": args.spatial_prune_thing_islands,
+            "spatial_prune_all_classes": args.spatial_prune_all_classes,
             "spatial_voxel_scale_multiplier": args.spatial_voxel_scale_multiplier,
             "spatial_min_voxel_size": args.spatial_min_voxel_size,
             "spatial_max_voxel_size": args.spatial_max_voxel_size,
@@ -1196,7 +1219,9 @@ def main() -> None:
         "groups": [group_summary(group, names_by_id[group.group_id]) for group in groups],
     }
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    if semantic_ply is not None:
+    if args.report_only:
+        print("report-only fusion; semantic labels, label map, and PLY were not written")
+    elif semantic_ply is not None:
         write_ply_with_labels(ply_path, semantic_ply, labels)
         print(f"wrote {semantic_ply}")
     else:

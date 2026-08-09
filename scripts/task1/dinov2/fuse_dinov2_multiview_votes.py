@@ -367,6 +367,13 @@ def main() -> None:
 
     vote_manifest_path = args.vote_dir / "vote_manifest.json"
     vote_manifest = json.loads(vote_manifest_path.read_text(encoding="utf-8"))
+    segmentation_source = str(
+        vote_manifest.get(
+            "segmentation_source",
+            "dinov2_vitl14_ade20k_linear",
+        )
+    )
+    fused_source = f"{segmentation_source}_multiview_voting"
     frames = vote_manifest["frames"]
     vote_files = [args.vote_dir / str(frame["vote_file"]) for frame in frames]
     if not vote_files:
@@ -525,7 +532,7 @@ def main() -> None:
         labels_json.append({"name": name, **group_record(candidate, len(frames))})
     label_map = {
         "scene": args.scene or args.model_path.name,
-        "source": "dinov2_vitl14_ade20k_linear_multiview_voting",
+        "source": fused_source,
         "ontology": str(args.ontology),
         "labels": labels_json,
     }
@@ -536,7 +543,8 @@ def main() -> None:
         for label, count in zip(*np.unique(labels, return_counts=True))
     }
     summary = {
-        "source": "dinov2_vitl14_ade20k_linear_multiview_voting",
+        "source": fused_source,
+        "segmentation_source": segmentation_source,
         "stage": "exact_vote_fusion_and_instance_postprocessing",
         "model_path": str(args.model_path),
         "ply_path": str(ply_path),
