@@ -88,6 +88,31 @@ The script works with or without Slurm. It accepts `CAMERA_INDICES` and
 environment variables as the staged schedulers. `CONFIG_ONLY=1` resolves
 paths and parameters without running anything.
 
+Key environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SCENE` | required | scene name used to derive the model directory |
+| `MODEL_DIR` | `<workspace>/data/3dgs_models/graphdeco/<SCENE>` | scene model root |
+| `OUTPUT_NAME` | `<SCENE>_dinov3_abstention_recovery_review_v1` | output root name |
+| `CAMERA_INDICES` | empty | explicit comma-separated camera indices |
+| `VIEW_COUNT` | 0 | camera count; 0 = every real camera |
+| `RENDER_MAX_WIDTH` | 960 | render width for views and vote lifting |
+| `ITERATION` | 30000 | Gaussian model iteration |
+| `GAUSSIAN_ENV` | `semantic_3dgs_renderer` | conda env for render/lift/materialize |
+| `DINOV3_ENV` | `dinov3_semantic` | conda env for DINOv3 inference |
+| `DINOV3_ROOT` | `<workspace>/external/dinov3` | pinned DINOv3 repository |
+| `DINOV3_BACKBONE` | `<workspace>/data/models/dinov3/...pretrain...pth` | ViT-7B backbone checkpoint |
+| `DINOV3_SEGMENTOR` | `<workspace>/data/models/dinov3/...m2f_head...pth` | ADE20K Mask2Former head |
+| `DINOV3_PRECISION` | `bfloat16` | inference precision (`bfloat16` or `float32`) |
+| `DINOV3_CROP_SIZE` | 896 | sliding-window crop (multiple of 32) |
+| `DINOV3_STRIDE` | 596 | sliding-window stride |
+| `DINOV3_CHECKPOINT_LOAD_MODE` | `local_mmap` | `standard` or `local_mmap` |
+| `DINOV3_MAX_CUDA_MEMORY_GIB` | 42 | CUDA allocator memory cap |
+| `ONTOLOGY` | `configs/ade20k_to_project.json` | project ontology |
+| `CONFIG_ONLY` | 0 | resolve paths/parameters and exit without running |
+| `RESET_OUTPUT` | 0 | allow replacing an existing output root |
+
 ## Output policy
 
 - Accepted hard anchors are immutable; zero-camera Gaussians are never
