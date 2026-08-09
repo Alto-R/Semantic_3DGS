@@ -31,6 +31,49 @@ VR integration work are not implemented in this repository yet.
 See [Project status](docs/PROJECT_STATUS.md) for scene-level decisions and known
 limitations.
 
+## DINOv3 black-spot recovery
+
+The DINOv3 route is a separate, maintained path alongside the DINOv2/v5
+route above. It replaces only the 2D ADE20K producer with DINOv3 ViT-7B
+Mask2Former and reuses the same real-camera rendering, identity-preserving
+ADE20K ontology, FlashSplat vote lifting, and immutable-output policy.
+
+```text
+DINOv3 route
+  render real camera views
+        |
+        v
+  DINOv3 ViT-7B + ADE20K Mask2Former
+        |
+        v
+  per-view FlashSplat lift
+        |
+        v
+  equal-camera strict-majority hard vote  ---> immutable hard-vote base
+        |
+        +-- reliability-calibrated abstention recovery
+        |       (single camera, exact tie, no strict majority)
+        |
+        v
+  labels + label map + semantic PLY + SuperSplat PLY + summary
+```
+
+The one-invocation end-to-end entry point is
+`scripts/slurm/slurm_task1_dinov3_end_to_end_recovery_scene.sbatch`
+(also listed in the entry-point table above). The staged route uses
+`slurm_task1_dinov3_scene.a100.sbatch` for DINOv3 evidence,
+`slurm_task1_dinov3_round_trip_fidelity_audit_scene.sbatch` for the audited
+hard-vote consensus, `slurm_task1_dinov3_detected_abstention_recovery_scene.sbatch`
+for recovery candidates, and
+`slurm_task1_dinov3_abstention_recovery_materialize_scene.sbatch` for the
+gate-locked materialization.
+
+The acceptance rule, gates, and results for Playroom, Dr. Johnson, Counter,
+and Kitchen are documented in the
+[DINOv3 black-spot recovery report](docs/TASK1_DINOV3_RECOVERY_REPORT.md).
+Rejected recovery experiments and the full research history are preserved
+under `archive/dinov3_recovery_experiments/`.
+
 ## Pipeline
 
 ```text
@@ -111,7 +154,7 @@ docs/             maintained pipeline, method, status, and dependency guides
 scripts/setup/    environment setup
 scripts/cluster/  cluster helpers
 scripts/slurm/    maintained Slurm entry points
-scripts/task1/    semantic subpackages: common, DINOv2, DINOv3, grounding, hybrid refinement, merge, and QA
+scripts/task1/    semantic subpackages: common, DINOv2, DINOv3, grounding, merge, and QA
 tests/            unit and configuration tests
 archive/          retired workflows, rejected experiments, and project history
 ```
