@@ -262,6 +262,7 @@ def main() -> None:
         "segmentation_manifest": str(args.segmentation_manifest),
         "ontology": str(args.ontology),
         "iteration": args.iteration,
+        "render_max_width": args.max_width,
         "gaussian_count": gaussian_count,
         "camera_count": len(frames),
         "pixel_filtering": "none",

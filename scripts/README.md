@@ -9,7 +9,6 @@ superseded schedulers are preserved under `archive/`. The retired DINOv3
 | Scheduler | Role |
 |---|---|
 | `slurm/slurm_task1_dinov2_scene.sbatch` | Render real cameras, run DINOv2 ADE20K, lift votes, and build an immutable multiview base |
-| `slurm/slurm_task1_dinov3_scene.a100.sbatch` | Audit DINOv3 ViT-7B ADE20K on A100; report-only by default, with optional maintained lift/fusion |
 | `slurm/slurm_task1_ade_refinement_scene.sbatch` | Run adaptive instance-guard v5 from an immutable DINOv2 base |
 | `slurm/slurm_task1_ade_refinement_replay_scene.sbatch` | Reapply the v5 merge to cached refinement evidence |
 | `slurm/slurm_task1_semantic_scene.sbatch` | Generate standalone GroundingDINO+SAM evidence for classes absent from ADE20K |

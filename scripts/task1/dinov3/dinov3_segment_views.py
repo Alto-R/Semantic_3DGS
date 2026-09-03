@@ -6,12 +6,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import subprocess
 import sys
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import numpy as np
 from PIL import Image
@@ -41,6 +45,8 @@ CONFIDENCE_METRIC = "relative_top1_top2_margin"
 CONFIDENCE_FORMULA = (
     "(top1_probability - top2_probability) / max(top1_probability, epsilon)"
 )
+GIB_BYTES = 1024**3
+DINO_ADAPTER_SPATIAL_ALIGNMENT = 32
 
 
 def sha256_file(path: Path, block_size: int = 1024 * 1024) -> str:
@@ -213,6 +219,181 @@ def validate_runtime(torch: Any, device: str, precision: str) -> None:
             )
 
 
+def resolve_cuda_device_index(torch: Any, device: str) -> int:
+    parsed_device = torch.device(device)
+    if parsed_device.type != "cuda":
+        raise ValueError("Expected a CUDA device")
+    if parsed_device.index is None:
+        return int(torch.cuda.current_device())
+    return int(parsed_device.index)
+
+
+def configure_cuda_memory_limit(
+    torch: Any,
+    device: str,
+    max_cuda_memory_gib: float | None,
+) -> dict[str, Any]:
+    if max_cuda_memory_gib is None:
+        return {
+            "enabled": False,
+            "allocator": "pytorch_cuda_caching_allocator",
+        }
+    if not device.startswith("cuda"):
+        raise ValueError("max-cuda-memory-gib requires a CUDA device")
+    if not math.isfinite(max_cuda_memory_gib) or max_cuda_memory_gib <= 0.0:
+        raise ValueError("max-cuda-memory-gib must be a finite positive number")
+
+    device_index = resolve_cuda_device_index(torch, device)
+    total_memory = int(
+        torch.cuda.get_device_properties(device_index).total_memory
+    )
+    requested_bytes = int(max_cuda_memory_gib * GIB_BYTES)
+    if requested_bytes >= total_memory:
+        raise ValueError(
+            "max-cuda-memory-gib must be smaller than total visible GPU memory: "
+            f"requested {requested_bytes} bytes, total {total_memory} bytes"
+        )
+    fraction = requested_bytes / total_memory
+    torch.cuda.set_per_process_memory_fraction(
+        fraction,
+        device=device_index,
+    )
+    free_memory, reported_total = torch.cuda.mem_get_info(device_index)
+    record = {
+        "enabled": True,
+        "allocator": "pytorch_cuda_caching_allocator",
+        "logical_device_index": device_index,
+        "requested_gib": float(max_cuda_memory_gib),
+        "requested_bytes": requested_bytes,
+        "total_device_memory_bytes": total_memory,
+        "allocator_fraction": fraction,
+        "free_memory_bytes_before_model": int(free_memory),
+        "reported_total_memory_bytes": int(reported_total),
+        "hard_hardware_partition": False,
+    }
+    print(
+        "configured PyTorch CUDA allocator limit: "
+        f"{max_cuda_memory_gib:.3f} GiB "
+        f"({fraction:.6f} of {total_memory / GIB_BYTES:.3f} GiB)",
+        flush=True,
+    )
+    return record
+
+
+def cuda_memory_usage(torch: Any, device: str) -> dict[str, Any]:
+    if not device.startswith("cuda"):
+        return {"available": False}
+    device_index = resolve_cuda_device_index(torch, device)
+    torch.cuda.synchronize(device_index)
+    record = {
+        "available": True,
+        "logical_device_index": device_index,
+        "allocated_bytes": int(torch.cuda.memory_allocated(device_index)),
+        "peak_allocated_bytes": int(
+            torch.cuda.max_memory_allocated(device_index)
+        ),
+        "reserved_bytes": int(torch.cuda.memory_reserved(device_index)),
+        "peak_reserved_bytes": int(
+            torch.cuda.max_memory_reserved(device_index)
+        ),
+    }
+    record.update(
+        {
+            f"{name.removesuffix('_bytes')}_gib": value / GIB_BYTES
+            for name, value in tuple(record.items())
+            if name.endswith("_bytes")
+        }
+    )
+    print(
+        "observed DINOv3 CUDA memory: "
+        f"peak allocated {record['peak_allocated_gib']:.3f} GiB, "
+        f"peak reserved {record['peak_reserved_gib']:.3f} GiB",
+        flush=True,
+    )
+    return record
+
+
+@contextmanager
+def checkpoint_state_dict_loader(
+    torch: Any,
+    mode: str,
+    checkpoint_paths: tuple[Path, ...],
+    *,
+    integrity_preverified: bool,
+):
+    record: dict[str, Any] = {
+        "mode": mode,
+        "mmap": mode == "local_mmap",
+        "weights_only": mode == "local_mmap",
+        "integrity_preverified": integrity_preverified,
+        "intercepted_checkpoint_paths": [],
+        "external_repository_modified": False,
+    }
+    if mode == "standard":
+        yield record
+        return
+    if mode != "local_mmap":
+        raise ValueError(f"Unsupported checkpoint load mode: {mode}")
+    if not integrity_preverified:
+        raise ValueError(
+            "local_mmap requires preverified checkpoint integrity"
+        )
+
+    allowed_paths = {
+        checkpoint_path.resolve()
+        for checkpoint_path in checkpoint_paths
+    }
+    original_loader = torch.hub.load_state_dict_from_url
+
+    def mmap_local_loader(url: str, *args: Any, **kwargs: Any) -> Any:
+        parsed = urlparse(str(url))
+        if parsed.scheme != "file" or parsed.netloc not in {"", "localhost"}:
+            return original_loader(url, *args, **kwargs)
+        checkpoint_path = Path(url2pathname(parsed.path)).resolve()
+        if checkpoint_path not in allowed_paths:
+            return original_loader(url, *args, **kwargs)
+        if args:
+            raise ValueError(
+                "local_mmap does not accept positional Hub loader arguments"
+            )
+        supported = {
+            "map_location",
+            "progress",
+            "check_hash",
+            "file_name",
+            "weights_only",
+            "model_dir",
+        }
+        unsupported = sorted(set(kwargs) - supported)
+        if unsupported:
+            raise ValueError(
+                "Unsupported local mmap Hub loader arguments: "
+                f"{unsupported}"
+            )
+        weights_only = kwargs.get("weights_only", False)
+        if weights_only is not True:
+            raise ValueError("local_mmap requires weights_only=True")
+        intercepted = record["intercepted_checkpoint_paths"]
+        assert isinstance(intercepted, list)
+        intercepted.append(str(checkpoint_path))
+        print(
+            f"memory-mapping verified local checkpoint: {checkpoint_path}",
+            flush=True,
+        )
+        return torch.load(
+            checkpoint_path,
+            map_location=kwargs.get("map_location"),
+            weights_only=True,
+            mmap=True,
+        )
+
+    torch.hub.load_state_dict_from_url = mmap_local_loader
+    try:
+        yield record
+    finally:
+        torch.hub.load_state_dict_from_url = original_loader
+
+
 def build_segmenter(
     dinov3_root: Path,
     backbone_checkpoint: Path,
@@ -220,35 +401,120 @@ def build_segmenter(
     hub_entry: str,
     device: str,
     precision: str,
-) -> tuple[Any, Any]:
+    max_cuda_memory_gib: float | None = None,
+    checkpoint_load_mode: str = "standard",
+    checkpoints_preverified: bool = False,
+    return_memory_limit: bool = False,
+) -> (
+    tuple[Any, Any]
+    | tuple[Any, Any, dict[str, Any], dict[str, Any]]
+):
     sys.path.insert(0, str(dinov3_root.resolve()))
     import torch
 
     validate_runtime(torch, device, precision)
+    cuda_memory_limit = configure_cuda_memory_limit(
+        torch,
+        device,
+        max_cuda_memory_gib,
+    )
     autocast_dtype = (
         torch.bfloat16 if precision == "bfloat16" else torch.float32
     )
-    model = torch.hub.load(
-        str(dinov3_root.resolve()),
-        hub_entry,
-        source="local",
-        pretrained=True,
-        weights=str(segmentor_checkpoint.resolve()),
-        backbone_weights=str(backbone_checkpoint.resolve()),
-        autocast_dtype=autocast_dtype,
-        check_hash=True,
-    )
+    with checkpoint_state_dict_loader(
+        torch,
+        checkpoint_load_mode,
+        (backbone_checkpoint, segmentor_checkpoint),
+        integrity_preverified=checkpoints_preverified,
+    ) as checkpoint_loading:
+        model = torch.hub.load(
+            str(dinov3_root.resolve()),
+            hub_entry,
+            source="local",
+            pretrained=True,
+            weights=str(segmentor_checkpoint.resolve()),
+            backbone_weights=str(backbone_checkpoint.resolve()),
+            autocast_dtype=autocast_dtype,
+            check_hash=True,
+        )
+    if checkpoint_load_mode == "local_mmap":
+        intercepted = {
+            Path(path).resolve()
+            for path in checkpoint_loading[
+                "intercepted_checkpoint_paths"
+            ]
+        }
+        expected = {
+            backbone_checkpoint.resolve(),
+            segmentor_checkpoint.resolve(),
+        }
+        if intercepted != expected:
+            raise RuntimeError(
+                "local_mmap did not intercept exactly the verified "
+                f"checkpoints: expected {sorted(map(str, expected))}, "
+                f"got {sorted(map(str, intercepted))}"
+            )
     model.eval().to(device)
+    if return_memory_limit:
+        return model, torch, cuda_memory_limit, checkpoint_loading
     return model, torch
+
+
+def short_side_resize_dimensions(
+    height: int,
+    width: int,
+    short_side: int,
+) -> tuple[int, int]:
+    """Match DINOv3's evaluation resize while preserving aspect ratio."""
+
+    if height <= 0 or width <= 0 or short_side <= 0:
+        raise ValueError("Image dimensions and short side must be positive")
+    if height > width:
+        resized_width = short_side
+        resized_height = int(short_side * height / width + 0.5)
+    else:
+        resized_height = short_side
+        resized_width = int(short_side * width / height + 0.5)
+    return resized_height, resized_width
+
+
+def validate_sliding_inference_geometry(crop_size: int, stride: int) -> None:
+    """Reject crop geometry that is unsafe for the DINOv3 adapter."""
+
+    if crop_size <= 0 or stride <= 0:
+        raise ValueError("crop-size and stride must be positive")
+    if stride > crop_size:
+        raise ValueError("stride must not exceed crop-size")
+    if crop_size % DINO_ADAPTER_SPATIAL_ALIGNMENT != 0:
+        raise ValueError(
+            "crop-size must be divisible by "
+            f"{DINO_ADAPTER_SPATIAL_ALIGNMENT} for the DINOv3 spatial adapter"
+        )
 
 
 def normalized_image_tensor(
     torch: Any,
     rgb_path: Path,
     device: str,
-) -> tuple[Any, int, int]:
-    rgb = np.array(Image.open(rgb_path).convert("RGB"), dtype=np.uint8, copy=True)
-    height, width = rgb.shape[:2]
+    *,
+    short_side: int | None = None,
+) -> tuple[Any, int, int, int, int]:
+    with Image.open(rgb_path) as source:
+        rgb_image = source.convert("RGB")
+    width, height = rgb_image.size
+    inference_height, inference_width = height, width
+    if short_side is not None:
+        inference_height, inference_width = short_side_resize_dimensions(
+            height,
+            width,
+            short_side,
+        )
+        if (inference_width, inference_height) != rgb_image.size:
+            rgb_image = rgb_image.resize(
+                (inference_width, inference_height),
+                resample=Image.Resampling.BILINEAR,
+            )
+    rgb = np.array(rgb_image, dtype=np.uint8, copy=True)
     image = (
         torch.from_numpy(rgb)
         .to(device=device, dtype=torch.float32)
@@ -265,7 +531,13 @@ def normalized_image_tensor(
         device=device,
         dtype=torch.float32,
     ).view(3, 1, 1)
-    return ((image - mean) / std).unsqueeze(0), height, width
+    return (
+        ((image - mean) / std).unsqueeze(0),
+        height,
+        width,
+        inference_height,
+        inference_width,
+    )
 
 
 def inference_probabilities(
@@ -276,15 +548,16 @@ def inference_probabilities(
     precision: str,
     crop_size: int,
     stride: int,
-) -> np.ndarray:
+) -> tuple[np.ndarray, dict[str, Any]]:
     """Return CxHxW ADE20K probabilities using official sliding inference."""
 
     from dinov3.eval.segmentation.inference import make_inference
 
-    image, height, width = normalized_image_tensor(
+    image, height, width, inference_height, inference_width = normalized_image_tensor(
         torch,
         rgb_path,
         device,
+        short_side=crop_size,
     )
     amp_enabled = precision == "bfloat16" and device.startswith("cuda")
     with torch.inference_mode():
@@ -312,7 +585,17 @@ def inference_probabilities(
             f"Expected DINOv3 probabilities shaped (1, 150, H, W); "
             f"got {tuple(probabilities.shape)}"
         )
-    return probabilities[0].detach().float().cpu().numpy()
+    preprocessing = {
+        "mode": "resize_short_side_to_crop_size_before_sliding",
+        "interpolation": "pillow_bilinear",
+        "original_height": height,
+        "original_width": width,
+        "inference_height": inference_height,
+        "inference_width": inference_width,
+        "crop_size": crop_size,
+        "adapter_spatial_alignment": DINO_ADAPTER_SPATIAL_ALIGNMENT,
+    }
+    return probabilities[0].detach().float().cpu().numpy(), preprocessing
 
 
 def inference_query_regions(
@@ -330,7 +613,7 @@ def inference_query_regions(
 ]:
     """Export boundaries plus full query evidence in a whole-image pass."""
 
-    image, height, width = normalized_image_tensor(
+    image, height, width, _, _ = normalized_image_tensor(
         torch,
         rgb_path,
         device,
@@ -494,7 +777,34 @@ def main() -> None:
     )
     parser.add_argument("--crop-size", default=896, type=int)
     parser.add_argument("--stride", default=596, type=int)
+    parser.add_argument(
+        "--checkpoint-load-mode",
+        choices=("standard", "local_mmap"),
+        default="standard",
+        help=(
+            "Use local_mmap only for already verified local checkpoints "
+            "to avoid eager state-dict storage allocation."
+        ),
+    )
+    parser.add_argument(
+        "--max-cuda-memory-gib",
+        default=None,
+        type=float,
+        help=(
+            "Optional PyTorch CUDA caching-allocator ceiling in GiB. "
+            "This is not a hard hardware partition."
+        ),
+    )
     parser.add_argument("--save-regions", action="store_true")
+    parser.add_argument(
+        "--save-probabilities",
+        action="store_true",
+        help=(
+            "Persist the complete 150-class softmax tensor as float16 NPY. "
+            "This is opt-in because the cache is substantially larger than "
+            "the normal hard-label diagnostic cache."
+        ),
+    )
     parser.add_argument("--region-min-objectness", default=0.30, type=float)
     parser.add_argument("--region-mask-threshold", default=0.50, type=float)
     parser.add_argument("--region-min-pixel-score", default=0.25, type=float)
@@ -508,10 +818,12 @@ def main() -> None:
         raise ValueError("min-pixel-confidence must be between zero and one")
     if not 0.0 <= args.overlay_alpha <= 1.0:
         raise ValueError("overlay-alpha must be between zero and one")
-    if args.crop_size <= 0 or args.stride <= 0:
-        raise ValueError("crop-size and stride must be positive")
-    if args.stride > args.crop_size:
-        raise ValueError("stride must not exceed crop-size")
+    validate_sliding_inference_geometry(args.crop_size, args.stride)
+    if args.max_cuda_memory_gib is not None and (
+        not math.isfinite(args.max_cuda_memory_gib)
+        or args.max_cuda_memory_gib <= 0.0
+    ):
+        raise ValueError("max-cuda-memory-gib must be a finite positive number")
     region_thresholds = QueryRegionThresholds(
         min_objectness=args.region_min_objectness,
         mask_threshold=args.region_mask_threshold,
@@ -560,6 +872,7 @@ def main() -> None:
     segment_dir = args.input_dir / "dinov3_segments"
     overlay_dir = args.input_dir / "dinov3_overlays"
     region_dir = args.input_dir / "dinov3_regions"
+    probability_dir = args.input_dir / "dinov3_probabilities"
     region_overlay_dir = args.input_dir / "dinov3_region_overlays"
     output_manifest_path = args.input_dir / "dinov3_manifest.json"
     if output_manifest_path.exists() and not args.overwrite:
@@ -571,15 +884,30 @@ def main() -> None:
     if args.save_regions:
         region_dir.mkdir(parents=True, exist_ok=True)
         region_overlay_dir.mkdir(parents=True, exist_ok=True)
+    if args.save_probabilities:
+        probability_dir.mkdir(parents=True, exist_ok=True)
 
-    model, torch = build_segmenter(
+    (
+        model,
+        torch,
+        cuda_memory_limit,
+        checkpoint_loading,
+    ) = build_segmenter(
         args.dinov3_root,
         args.backbone_checkpoint,
         args.segmentor_checkpoint,
         args.hub_entry,
         args.device,
         args.precision,
+        args.max_cuda_memory_gib,
+        args.checkpoint_load_mode,
+        checkpoints_preverified=True,
+        return_memory_limit=True,
     )
+    if args.device.startswith("cuda"):
+        torch.cuda.reset_peak_memory_stats(
+            resolve_cuda_device_index(torch, args.device)
+        )
     frames: list[dict[str, Any]] = []
     for frame in view_manifest["frames"]:
         filename = str(frame["file"])
@@ -588,14 +916,17 @@ def main() -> None:
         segment_path = segment_dir / f"{stem}.npz"
         overlay_path = overlay_dir / filename
         region_path = region_dir / f"{stem}.npz"
+        probability_path = probability_dir / f"{stem}.npy"
         region_overlay_path = region_overlay_dir / filename
         expected_outputs = [segment_path, overlay_path]
         if args.save_regions:
             expected_outputs.extend([region_path, region_overlay_path])
+        if args.save_probabilities:
+            expected_outputs.append(probability_path)
         if any(path.exists() for path in expected_outputs) and not args.overwrite:
             raise FileExistsError(f"Outputs for {filename} exist; pass --overwrite")
 
-        probabilities = inference_probabilities(
+        probabilities, preprocessing = inference_probabilities(
             model,
             torch,
             rgb_path,
@@ -617,6 +948,18 @@ def main() -> None:
         if not np.isfinite(probabilities).all():
             raise ValueError(f"Non-finite DINOv3 probabilities for {filename}")
         raw_class = np.argmax(probabilities, axis=0).astype(np.uint8)
+        if args.save_probabilities:
+            probability_sums = probabilities.sum(axis=0, dtype=np.float32)
+            if not np.allclose(probability_sums, 1.0, rtol=2e-4, atol=2e-4):
+                raise ValueError(
+                    f"DINOv3 probabilities do not sum to one for {filename}"
+                )
+            stored_probabilities = probabilities.astype(np.float16)
+            np.save(probability_path, stored_probabilities, allow_pickle=False)
+            stored_argmax = np.argmax(stored_probabilities, axis=0).astype(np.uint8)
+            quantized_argmax_disagreement = int(
+                np.count_nonzero(stored_argmax != raw_class)
+            )
         confidence_maps = mask2former_confidence_maps(probabilities)
         confidence_for_threshold = confidence_maps["confidence"]
         project_ids = lookup[raw_class]
@@ -646,6 +989,7 @@ def main() -> None:
             **frame,
             "segment_file": segment_path.relative_to(args.input_dir).as_posix(),
             "overlay_file": overlay_path.relative_to(args.input_dir).as_posix(),
+            "dinov3_preprocessing": preprocessing,
             "mean_confidence": float(confidence_for_threshold.mean()),
             "min_confidence": float(confidence_for_threshold.min()),
             "max_confidence": float(confidence_for_threshold.max()),
@@ -665,6 +1009,23 @@ def main() -> None:
             ),
             "abstain_pixel_ratio": float(np.mean(project_ids == 0)),
         }
+        if args.save_probabilities:
+            frame_record.update(
+                {
+                    "probability_file": probability_path.relative_to(
+                        args.input_dir
+                    ).as_posix(),
+                    "probability_shape": [int(value) for value in probabilities.shape],
+                    "probability_storage": "float16_npy_ade20k_class_first",
+                    "probability_size_bytes": probability_path.stat().st_size,
+                    "float16_argmax_disagreement_count": (
+                        quantized_argmax_disagreement
+                    ),
+                    "float16_argmax_disagreement_ratio": (
+                        quantized_argmax_disagreement / raw_class.size
+                    ),
+                }
+            )
         if args.save_regions:
             (
                 region_id,
@@ -715,9 +1076,14 @@ def main() -> None:
         frames.append(frame_record)
         print(f"segmented {filename}")
 
+    memory_usage = cuda_memory_usage(torch, args.device)
     output_manifest = {
         "source": "dinov3_vit7b16_ade20k_mask2former",
-        "contract": "raw_ade20k_class_and_relative_margin_confidence_v2",
+        "contract": (
+            "raw_ade20k_class_probabilities_and_relative_margin_confidence_v3"
+            if args.save_probabilities
+            else "raw_ade20k_class_and_relative_margin_confidence_v2"
+        ),
         "view_manifest": str(view_manifest_path),
         "model": {
             "backbone": "dinov3_vit7b16",
@@ -733,13 +1099,21 @@ def main() -> None:
             "precision": args.precision,
             "crop_size": args.crop_size,
             "stride": args.stride,
+            "sliding_preprocessing": {
+                "mode": "resize_short_side_to_crop_size_before_sliding",
+                "interpolation": "pillow_bilinear",
+                "adapter_spatial_alignment": DINO_ADAPTER_SPATIAL_ALIGNMENT,
+            },
+            "checkpoint_loading": checkpoint_loading,
         },
         "runtime": {
             "torch_version": str(torch.__version__),
             "cuda_version": str(torch.version.cuda),
             "device": args.device,
             "device_name": (
-                torch.cuda.get_device_name(args.device)
+                torch.cuda.get_device_name(
+                    resolve_cuda_device_index(torch, args.device)
+                )
                 if args.device.startswith("cuda")
                 else args.device
             ),
@@ -748,6 +1122,8 @@ def main() -> None:
                 if args.device.startswith("cuda")
                 else False
             ),
+            "cuda_memory_limit": cuda_memory_limit,
+            "cuda_memory_usage": memory_usage,
         },
         "ontology": str(args.ontology),
         "ontology_sha256": sha256_file(args.ontology),
@@ -761,6 +1137,17 @@ def main() -> None:
             "normalized_entropy_confidence": "float16_one_minus_normalized_entropy",
         },
         "raw_class_storage": "uint8_ade20k_zero_based",
+        "dense_probability_storage": (
+            {
+                "available": True,
+                "dtype": "float16",
+                "layout": "ade20k_class_height_width",
+                "class_count": ADE20K_CLASS_COUNT,
+                "normalization": "float32_softmax_before_float16_storage",
+            }
+            if args.save_probabilities
+            else {"available": False}
+        ),
         "class_agnostic_query_regions": (
             describe_query_regions(region_thresholds)
             if args.save_regions
