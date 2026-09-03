@@ -121,7 +121,6 @@ diagnostic, not a measurement of semantic accuracy.
 - [Current project status](docs/PROJECT_STATUS.md)
 - [Complete DINOv3, dino.txt, and SAM quickstart](docs/DINOV3_DINOTXT_SAM_QUICKSTART.md)
 - [Detailed DINOv3, dino.txt, and SAM pipeline](docs/DINOV3_DINOTXT_SAM_END_TO_END_PIPELINE.md)
-- [Legacy DINOv2 multiview fusion](docs/DINOV2_MULTIVIEW_VOTING.md)
 - [External repositories and setup](docs/EXTERNAL_REPOS.md)
 - [Script and scheduler map](scripts/README.md)
 - [Archive index](archive/README.md)

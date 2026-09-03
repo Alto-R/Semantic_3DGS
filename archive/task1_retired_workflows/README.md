@@ -10,6 +10,10 @@ configs/         stale example path configuration
 docs/            superseded implementation and method histories
 ```
 
+`docs/DINOV2_MULTIVIEW_VOTING_SUMMARY.md` is the concise final description of
+the retired DINOv2 route. The older document beside it preserves the fuller
+experimental history.
+
 They are preserved verbatim for provenance. Do not add new runtime dependencies
 on this directory; restore and modernize a file explicitly if it becomes useful
 again.
