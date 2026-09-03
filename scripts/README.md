@@ -1,14 +1,14 @@
 # Script Inventory
 
-Operational and research scripts are grouped by role. Retired utilities and
-superseded schedulers are preserved under `archive/`. The retired DINOv3
-3D-first routes are under `archive/dinov3_3d_first_experiments/`.
+Operational scripts are grouped by role. Retired utilities, audit schedulers,
+and rejected fusion methods are preserved under `archive/`.
 
 ## Slurm entry points
 
 | Scheduler | Role |
 |---|---|
 | `slurm/slurm_task1_dinov2_scene.sbatch` | Render real cameras, run DINOv2 ADE20K, lift votes, and build an immutable multiview base |
+| `slurm/slurm_task1_dinov3_end_to_end_recovery_scene.sbatch` | One-invocation end-to-end DINOv3 abstention-recovery pipeline for any scene |
 | `slurm/slurm_task1_ade_refinement_scene.sbatch` | Run adaptive instance-guard v5 from an immutable DINOv2 base |
 | `slurm/slurm_task1_ade_refinement_replay_scene.sbatch` | Reapply the v5 merge to cached refinement evidence |
 | `slurm/slurm_task1_semantic_scene.sbatch` | Generate standalone GroundingDINO+SAM evidence for classes absent from ADE20K |
@@ -23,23 +23,27 @@ ADE replay scheduler does not currently expose this mode.
 
 ## Task 1 package
 
-The semantic implementation is split by responsibility:
+The active semantic implementation is split by responsibility:
 
 ```text
 task1/
   common/      shared FlashSplat camera, PLY, and palette utilities
   dinov2/      rendering, ADE20K inference, vote lifting, and exact fusion
-  dinov3/      contract-compatible DINOv3 ADE20K segmentation
+  dinov3/      DINOv3 segmentation, vote lifting, recovery, dino.txt/SAM classification, and OOV fusion
   grounding/   camera selection, GroundingDINO+SAM, and 3D proposal fusion
-  merge/       guarded ADE v5 and reviewed custom-extension merges
+  merge/       guarded ADE v5, reviewed custom extensions, and approved identity corrections
   qa/          PLY publishing, overlays, contact sheets, summaries, and validation
 ```
+
+The retired DINOv3 3D-first and hybrid-refinement modules are preserved under
+`archive/dinov3_3d_first_experiments/`.
 
 Schedulers invoke these as Python modules from the repository root, for example:
 
 ```bash
 python -m scripts.task1.dinov2.fuse_dinov2_multiview_votes --help
-python -m scripts.task1.merge.merge_semantic_extensions --help
+python -m scripts.task1.dinov3.dinotxt_sam_mask_pilot --help
+python -m scripts.task1.dinov3.compose_oov_multiclass_votes --help
 python -m scripts.task1.qa.validate_task1_outputs --help
 ```
 

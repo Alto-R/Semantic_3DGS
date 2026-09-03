@@ -1,35 +1,59 @@
 # EyeNavGS Semantic 3D Gaussian Splatting
 
 This repository builds semantic labels for pretrained EyeNavGS/3D Gaussian
-Splatting scenes. The maintained pipeline renders the original scene cameras,
-predicts 2D semantics with DINOv2, lifts the evidence onto Gaussians, fuses it
-across views, and optionally applies conservative GroundingDINO+SAM refinements.
+Splatting scenes. The maintained complete pipeline renders the original scene
+cameras, predicts ADE20K semantics with DINOv3, lifts the evidence onto
+Gaussians, adds out-of-vocabulary classes with dino.txt and SAM, and renders the
+final labels back into every camera.
 
 The current deliverable is semantic annotation (D1). Downstream navigation and
 VR integration work are not implemented in this repository yet.
 
 ## Current state
 
-- The production semantic base is prompt-free DINOv2 ADE20K fusion using all
-  available real cameras and explicit abstention for weak evidence.
-- The active automatic refinement is adaptive instance-guard v5. It may repair
-  incomplete ADE20K instances, but never overwrites its immutable DINOv2 base.
-- Classes missing from ADE20K are handled separately with reviewed
-  GroundingDINO+SAM evidence. They are not merged automatically.
-- The report-only SAM-Mask2Former hybrid was validated and rejected as a
-  semantic-label source because large coherent false components survived its
-  global gates. It remains available for research reproduction only.
-- The independent DINOv3 3D-first route remains experimental. Its reviewed
-  24-view v2 result is the preferred DINOv3 checkpoint. Current larger-view
-  spatial-core and empirically calibrated dense cross-validation stages are
-  report-only, preserve that checkpoint unchanged, and cannot publish labels
-  or a PLY.
-- The experimental v6-v10 singleton-recovery methods were rejected after an
-  independent multiview audit and are retained under `archive/`.
+- The production base uses DINOv3 ViT-7B ADE20K predictions from every real
+  reconstruction camera and abstains when the multiview evidence is weak.
+- Reliability-calibrated recovery fills detected ties and weak majorities. It
+  does not fill Gaussians that no camera observes.
+- Classes missing from ADE20K use competitive dino.txt classification, SAM
+  masks, and multiview OOV fusion against the DINOv3 base.
+- Rejected camera-selection, identity-correction, ownership, and global
+  refinement experiments are preserved under `archive/`.
 - Every accepted result remains versioned. No stage overwrites a base output.
 
 See [Project status](docs/PROJECT_STATUS.md) for scene-level decisions and known
 limitations.
+
+## Complete DINOv3 and dino.txt pipeline
+
+The complete route starts from a Graphdeco reconstruction and creates fresh
+semantic outputs. It does not require an accepted semantic result from an
+earlier run.
+
+```text
+DINOv3 route
+  render real camera views
+        |
+        v
+  DINOv3 ViT-7B + ADE20K Mask2Former
+        |
+        v
+  per-view FlashSplat lift
+        |
+        v
+  equal-camera strict-majority hard vote  ---> immutable hard-vote base
+        |
+        +-- reliability-calibrated abstention recovery
+        |       (single camera, exact tie, no strict majority)
+        |
+        v
+  labels + label map + semantic PLY + SuperSplat PLY + summary
+```
+
+The direct commands are in the
+[complete quickstart](docs/DINOV3_DINOTXT_SAM_QUICKSTART.md). The longer
+[pipeline guide](docs/DINOV3_DINOTXT_SAM_END_TO_END_PIPELINE.md) explains the
+inputs, intermediate artifacts, and fusion rules.
 
 ## Pipeline
 
@@ -67,6 +91,8 @@ are documented in [Pipeline guide](docs/PIPELINE.md).
 | Run adaptive instance-guard v5 | `scripts/slurm/slurm_task1_ade_refinement_scene.sbatch` |
 | Replay a v5 merge from cached evidence | `scripts/slurm/slurm_task1_ade_refinement_replay_scene.sbatch` |
 | Generate custom-class source evidence | `scripts/slurm/slurm_task1_semantic_scene.sbatch` |
+| Run the general DINOv3 abstention-recovery pipeline end to end | `scripts/slurm/slurm_task1_dinov3_end_to_end_recovery_scene.sbatch` |
+| Fuse dino.txt and SAM masks into a DINOv3 base | `scripts/task1/dinov3/run_oov_multiclass_scene.sh` |
 | Merge explicitly reviewed custom classes | `scripts/slurm/slurm_task1_reviewed_extensions_scene.sbatch` |
 | Recolor an existing semantic output | `scripts/slurm/slurm_task1_recolor_output.sbatch` |
 
@@ -133,6 +159,8 @@ diagnostic, not a measurement of semantic accuracy.
 - [Pipeline guide](docs/PIPELINE.md)
 - [Current project status](docs/PROJECT_STATUS.md)
 - [DINOv2 multiview fusion](docs/DINOV2_MULTIVIEW_VOTING.md)
+- [Complete DINOv3, dino.txt, and SAM quickstart](docs/DINOV3_DINOTXT_SAM_QUICKSTART.md)
+- [Detailed DINOv3, dino.txt, and SAM pipeline](docs/DINOV3_DINOTXT_SAM_END_TO_END_PIPELINE.md)
 - [External repositories and setup](docs/EXTERNAL_REPOS.md)
 - [Script and scheduler map](scripts/README.md)
 - [Archive index](archive/README.md)
