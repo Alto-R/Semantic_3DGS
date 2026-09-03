@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(cd -- "${SLURM_SUBMIT_DIR:-$(pwd)}" && pwd)"
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd -- "${SLURM_SUBMIT_DIR:-$(pwd)}" && pwd -P)}"
 ROOT="$(cd -- "${PROJECT_ROOT}/../.." && pwd)"
 FLASHSPLAT_ROOT="${ROOT}/external/FlashSplat"
 TASK1_ROOT="${ROOT}/outputs/eyenavgs_task1"
@@ -59,6 +59,7 @@ FILL_THINGS="${FILL_THINGS:-0}"
 CONTACT_THUMB_WIDTH="${CONTACT_THUMB_WIDTH:-360}"
 RESET_OUTPUT="${RESET_OUTPUT:-1}"
 CONFIG_ONLY="${CONFIG_ONLY:-0}"
+REPORT_ONLY="${REPORT_ONLY:-0}"
 
 # fill mode baseline (accepted GroundingDINO result).
 FILL_SOURCE="${FILL_SOURCE:-${TASK1_ROOT}/accepted/${SCENE}}"
@@ -83,6 +84,10 @@ if [ "${MODE}" != "full" ] && [ "${MODE}" != "fill" ]; then
   echo "MODE must be full or fill, got: ${MODE}" >&2
   exit 2
 fi
+if [ "${REPORT_ONLY}" != "0" ] && [ "${REPORT_ONLY}" != "1" ]; then
+  echo "REPORT_ONLY must be 0 or 1, got: ${REPORT_ONLY}" >&2
+  exit 2
+fi
 
 # Baseline layouts differ across pipeline generations (GroundingDINO runs use
 # stages/03_semantic_fusion, the DINOv2 production route uses
@@ -90,7 +95,7 @@ fi
 # overridable and only default to the FILL_SOURCE convention.
 BASE_LABELS="${BASE_LABELS:-}"
 BASE_LABEL_MAP="${BASE_LABEL_MAP:-}"
-if [ "${MODE}" = "fill" ]; then
+if [ "${MODE}" = "fill" ] && [ "${REPORT_ONLY}" != "1" ]; then
   if [ -z "${BASE_LABELS}" ]; then
     for candidate in       "${FILL_SOURCE}/stages/03_semantic_fusion/gaussian_labels.npy"       "${FILL_SOURCE}/stages/03_exact_fusion/gaussian_labels.npy"       "${FILL_SOURCE}/deliverables/gaussian_labels.npy"; do
       if [ -f "${candidate}" ]; then
@@ -111,9 +116,9 @@ if [ "${SEG_BACKEND}" = "dinov3" ]; then
 fi
 
 if [ "${CONFIG_ONLY}" = "1" ]; then
-  printf 'scene=%s\nmodel=%s\noutput=%s\nmode=%s\nbackend=%s\nontology=%s\nview_count=%s\nfill_source=%s\n' \
+  printf 'scene=%s\nmodel=%s\noutput=%s\nmode=%s\nbackend=%s\nontology=%s\nview_count=%s\nfill_source=%s\nreport_only=%s\n' \
     "${SCENE}" "${MODEL_DIR}" "${OUT_DIR}" "${MODE}" "${SEG_BACKEND}" \
-    "${ONTOLOGY}" "${VIEW_COUNT}" "${FILL_SOURCE:-<none>}"
+    "${ONTOLOGY}" "${VIEW_COUNT}" "${FILL_SOURCE:-<none>}" "${REPORT_ONLY}"
   exit 0
 fi
 
@@ -184,6 +189,7 @@ run_report() {
   echo "min_stuff_gaussians=${MIN_STUFF_GAUSSIANS}"
   echo "fill_source=${FILL_SOURCE:-<none>}"
   echo "fill_things=${FILL_THINGS}"
+  echo "report_only=${REPORT_ONLY}"
   echo "mask2former_model=${MASK2FORMER_MODEL}"
   echo "dinov3_repo=${DINOV3_REPO}"
   nvidia-smi
@@ -213,6 +219,26 @@ run_stage 01_dense_seg \
     --count "${VIEW_COUNT}" \
     --backend "${SEG_BACKEND}" \
     "${SEG_BACKEND_ARGS[@]}"
+
+if [ "${REPORT_ONLY}" = "1" ]; then
+  run_stage 02_dense_seg_contact_sheet \
+    python -m scripts.task1.qa.make_contact_sheet \
+      --image-dir "${SEG_DIR}/overlays" \
+      --output "${CONTACT_DIR}/dense_seg.png" \
+      --columns 5 \
+      --thumb-width "${CONTACT_THUMB_WIDTH}"
+
+  {
+    echo "mode=report_only_dense_seg"
+    echo "backend=${SEG_BACKEND}"
+    echo "view_count=${VIEW_COUNT}"
+    echo "semantic_labels_written=0"
+    echo "semantic_ply_written=0"
+  } > "${OUT_DIR}/experiment_mode.txt"
+
+  find "${OUT_DIR}" -maxdepth 4 -type f | sort
+  exit 0
+fi
 
 # Later stages need an explicit camera list; recover the exact cameras that
 # stage 01 actually segmented (VIEW_COUNT=0 means "all cameras", which

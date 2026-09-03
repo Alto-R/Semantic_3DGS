@@ -18,6 +18,11 @@ Backends:
 
 Model loading is deliberately deferred to first use so that importing this
 module never requires GPU libraries beyond torch.
+
+The Mask2Former backend also exposes ``segment_with_regions``. It returns the
+same semantic arrays plus a compact class-agnostic region partition derived
+from the model's mask queries. Downstream hybrid refinement deliberately
+ignores each query's predicted ADE20K class and uses only its boundary.
 """
 
 from __future__ import annotations
@@ -60,9 +65,27 @@ class Mask2FormerBackend:
     model_id: str = "facebook/mask2former-swin-large-ade-semantic"
     device: str = "cuda"
     fp16: bool = True
+    region_min_objectness: float = 0.30
+    region_mask_threshold: float = 0.50
+    region_min_pixel_score: float = 0.25
+    region_min_area: int = 100
+    region_max_area_ratio: float = 0.80
+    region_max_queries: int = 64
     name: str = "mask2former"
 
     def __post_init__(self) -> None:
+        if not 0.0 <= self.region_min_objectness <= 1.0:
+            raise ValueError("region_min_objectness must be between 0 and 1")
+        if not 0.0 < self.region_mask_threshold < 1.0:
+            raise ValueError("region_mask_threshold must be between 0 and 1")
+        if not 0.0 <= self.region_min_pixel_score <= 1.0:
+            raise ValueError("region_min_pixel_score must be between 0 and 1")
+        if self.region_min_area < 1:
+            raise ValueError("region_min_area must be positive")
+        if not 0.0 < self.region_max_area_ratio <= 1.0:
+            raise ValueError("region_max_area_ratio must be greater than 0 and at most 1")
+        if self.region_max_queries < 1 or self.region_max_queries > np.iinfo(np.uint16).max:
+            raise ValueError("region_max_queries must fit in a positive uint16 id range")
         self._model = None
         self._processor = None
 
@@ -74,27 +97,151 @@ class Mask2FormerBackend:
         self._processor = AutoImageProcessor.from_pretrained(self.model_id)
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_id)
         model = model.to(self.device).eval()
-        if self.fp16 and self.device.startswith("cuda"):
-            model = model.half()
+        # Keep FP32 master weights. Transformers 4.30 Mask2Former explicitly
+        # promotes some decoder features with x.float(); converting the whole
+        # model to half then pairs FP32 activations with FP16 convolution
+        # biases. CUDA autocast in segment() provides mixed-precision kernels
+        # without creating that invalid dtype combination.
         self._model = model
 
+    def _class_agnostic_regions(
+        self,
+        class_probabilities: torch.Tensor,
+        mask_probabilities: torch.Tensor,
+        height: int,
+        width: int,
+    ) -> tuple[np.ndarray, np.ndarray, list[dict[str, Any]]]:
+        """Build a compact hard region partition from Mask2Former queries.
+
+        Query semantic classes are retained only as diagnostic metadata. They
+        never participate in region matching or downstream identity decisions.
+        """
+
+        full_class_probabilities = class_probabilities[0]
+        mask_probabilities = mask_probabilities[0]
+        objectness = 1.0 - full_class_probabilities[:, -1]
+        raw_class_confidence, raw_class_id = full_class_probabilities[:, :-1].max(dim=-1)
+
+        candidate_indices = torch.nonzero(
+            objectness >= self.region_min_objectness,
+            as_tuple=False,
+        ).flatten()
+        if candidate_indices.numel() == 0:
+            return (
+                np.zeros((height, width), dtype=np.uint16),
+                np.zeros((height, width), dtype=np.float32),
+                [],
+            )
+
+        candidate_masks = torch.nn.functional.interpolate(
+            mask_probabilities[candidate_indices, None],
+            size=(height, width),
+            mode="bilinear",
+            align_corners=False,
+        )[:, 0]
+        candidate_areas = (candidate_masks >= self.region_mask_threshold).sum(dim=(1, 2))
+        max_area = max(int(round(height * width * self.region_max_area_ratio)), 1)
+        keep = (candidate_areas >= self.region_min_area) & (candidate_areas <= max_area)
+        candidate_indices = candidate_indices[keep]
+        candidate_masks = candidate_masks[keep]
+        if candidate_indices.numel() == 0:
+            return (
+                np.zeros((height, width), dtype=np.uint16),
+                np.zeros((height, width), dtype=np.float32),
+                [],
+            )
+
+        ordering = torch.argsort(objectness[candidate_indices], descending=True)
+        ordering = ordering[: self.region_max_queries]
+        candidate_indices = candidate_indices[ordering]
+        candidate_masks = candidate_masks[ordering]
+        candidate_objectness = objectness[candidate_indices]
+
+        pixel_scores = candidate_masks * candidate_objectness[:, None, None]
+        winner_score, winner_index = pixel_scores.max(dim=0)
+        winner_mask_probability = torch.gather(
+            candidate_masks,
+            0,
+            winner_index[None],
+        )[0]
+        assigned = (
+            (winner_score >= self.region_min_pixel_score)
+            & (winner_mask_probability >= self.region_mask_threshold)
+        )
+
+        raw_region_id = winner_index.to(torch.int32) + 1
+        raw_region_id = torch.where(assigned, raw_region_id, torch.zeros_like(raw_region_id))
+        raw_region_id_np = raw_region_id.cpu().numpy()
+        winner_score_np = torch.where(
+            assigned,
+            winner_score,
+            torch.zeros_like(winner_score),
+        ).to(torch.float32).cpu().numpy()
+
+        region_id = np.zeros((height, width), dtype=np.uint16)
+        region_confidence = np.zeros((height, width), dtype=np.float32)
+        regions: list[dict[str, Any]] = []
+        next_region_id = 1
+        for candidate_position, query_index in enumerate(candidate_indices.tolist(), start=1):
+            pixels = raw_region_id_np == candidate_position
+            area = int(pixels.sum())
+            if area < self.region_min_area:
+                continue
+            rows, columns = np.nonzero(pixels)
+            compact_id = next_region_id
+            next_region_id += 1
+            region_id[pixels] = compact_id
+            region_confidence[pixels] = winner_score_np[pixels]
+            regions.append(
+                {
+                    "region_id": compact_id,
+                    "query_index": int(query_index),
+                    "area": area,
+                    "bbox_xyxy": [
+                        int(columns.min()),
+                        int(rows.min()),
+                        int(columns.max()) + 1,
+                        int(rows.max()) + 1,
+                    ],
+                    "mean_region_confidence": float(winner_score_np[pixels].mean()),
+                    "objectness": float(objectness[query_index].item()),
+                    "diagnostic_ade20k_class": int(raw_class_id[query_index].item()),
+                    "diagnostic_class_confidence": float(
+                        raw_class_confidence[query_index].item()
+                    ),
+                }
+            )
+        return region_id, region_confidence, regions
+
     @torch.no_grad()
-    def segment(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _segment(
+        self,
+        rgb: np.ndarray,
+        *,
+        include_regions: bool,
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray | None,
+        np.ndarray | None,
+        list[dict[str, Any]],
+    ]:
         rgb = _validate_rgb(rgb)
         self._ensure_loaded()
         height, width = rgb.shape[:2]
 
         inputs = self._processor(images=rgb, return_tensors="pt")
         pixel_values = inputs["pixel_values"].to(self.device)
-        if self.fp16 and self.device.startswith("cuda"):
-            pixel_values = pixel_values.half()
-        outputs = self._model(pixel_values=pixel_values)
+        amp_enabled = self.fp16 and self.device.startswith("cuda")
+        with torch.cuda.amp.autocast(enabled=amp_enabled):
+            outputs = self._model(pixel_values=pixel_values)
 
         # Reproduce post_process_semantic_segmentation in float32, keeping the
         # per-pixel class-score stack so we can also emit a confidence map.
         class_queries = outputs.class_queries_logits.float()  # (1, Q, 151)
         mask_queries = outputs.masks_queries_logits.float()  # (1, Q, h, w)
-        class_probs = class_queries.softmax(dim=-1)[..., :-1]  # drop no-object
+        full_class_probs = class_queries.softmax(dim=-1)
+        class_probs = full_class_probs[..., :-1]  # drop no-object
         mask_probs = mask_queries.sigmoid()
         segmentation = torch.einsum("bqc,bqhw->bchw", class_probs, mask_probs)
         segmentation = torch.nn.functional.interpolate(
@@ -107,17 +254,68 @@ class Mask2FormerBackend:
         scores, class_id = segmentation.max(dim=0)
         total = segmentation.sum(dim=0).clamp_min(1e-6)
         confidence = (scores / total).clamp(0.0, 1.0)
+        region_id: np.ndarray | None = None
+        region_confidence: np.ndarray | None = None
+        regions: list[dict[str, Any]] = []
+        if include_regions:
+            region_id, region_confidence, regions = self._class_agnostic_regions(
+                full_class_probs,
+                mask_probs,
+                height,
+                width,
+            )
         return (
             class_id.to(torch.int16).cpu().numpy(),
             confidence.to(torch.float32).cpu().numpy(),
+            region_id,
+            region_confidence,
+            regions,
         )
+
+    def segment(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        class_id, confidence, _region_id, _region_confidence, _regions = self._segment(
+            rgb,
+            include_regions=False,
+        )
+        return class_id, confidence
+
+    def segment_with_regions(
+        self,
+        rgb: np.ndarray,
+    ) -> tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        list[dict[str, Any]],
+    ]:
+        class_id, confidence, region_id, region_confidence, regions = self._segment(
+            rgb,
+            include_regions=True,
+        )
+        if region_id is None or region_confidence is None:
+            raise AssertionError("Mask2Former region export was requested but not produced")
+        return class_id, confidence, region_id, region_confidence, regions
 
     def describe(self) -> dict[str, Any]:
         return {
             "backend": self.name,
             "model_id": self.model_id,
             "fp16": self.fp16,
+            "precision": (
+                "amp_fp16" if self.fp16 and self.device.startswith("cuda") else "fp32"
+            ),
             "num_classes": ADE20K_NUM_CLASSES,
+            "class_agnostic_regions": {
+                "available": True,
+                "semantic_class_used_for_matching": False,
+                "min_objectness": self.region_min_objectness,
+                "mask_threshold": self.region_mask_threshold,
+                "min_pixel_score": self.region_min_pixel_score,
+                "min_area": self.region_min_area,
+                "max_area_ratio": self.region_max_area_ratio,
+                "max_queries": self.region_max_queries,
+            },
         }
 
 
@@ -253,6 +451,12 @@ def build_backend(name: str, args: Any) -> DenseSegBackend:
             model_id=args.mask2former_model,
             device=args.device,
             fp16=not args.no_fp16,
+            region_min_objectness=args.region_min_objectness,
+            region_mask_threshold=args.region_mask_threshold,
+            region_min_pixel_score=args.region_min_pixel_score,
+            region_min_area=args.region_min_area,
+            region_max_area_ratio=args.region_max_area_ratio,
+            region_max_queries=args.region_max_queries,
         )
     if name == "dinov3":
         # Path("") silently becomes "." and passes exists() checks, so reject

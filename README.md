@@ -67,8 +67,6 @@ are documented in [Pipeline guide](docs/PIPELINE.md).
 | Run adaptive instance-guard v5 | `scripts/slurm/slurm_task1_ade_refinement_scene.sbatch` |
 | Replay a v5 merge from cached evidence | `scripts/slurm/slurm_task1_ade_refinement_replay_scene.sbatch` |
 | Generate custom-class source evidence | `scripts/slurm/slurm_task1_semantic_scene.sbatch` |
-| Audit SAM-seeded Mask2Former refinement and one-round propagation in one pass | `scripts/slurm/slurm_task1_sam_mask2former_hybrid_scene.sbatch` |
-| Audit calibrated DINOv3 dense evidence against core-first proposals | `scripts/slurm/slurm_task1_dinov3_core_first_calibrated_dense_cross_validation_audit_scene.sbatch` |
 | Merge explicitly reviewed custom classes | `scripts/slurm/slurm_task1_reviewed_extensions_scene.sbatch` |
 | Recolor an existing semantic output | `scripts/slurm/slurm_task1_recolor_output.sbatch` |
 
@@ -112,7 +110,7 @@ docs/             maintained pipeline, method, status, and dependency guides
 scripts/setup/    environment setup
 scripts/cluster/  cluster helpers
 scripts/slurm/    maintained Slurm entry points
-scripts/task1/    semantic subpackages: common, DINOv2, DINOv3, grounding, hybrid refinement, merge, and QA
+scripts/task1/    semantic subpackages: common, DINOv2, DINOv3, grounding, merge, and QA
 tests/            unit and configuration tests
 archive/          retired workflows, rejected experiments, and project history
 ```
@@ -135,8 +133,6 @@ diagnostic, not a measurement of semantic accuracy.
 - [Pipeline guide](docs/PIPELINE.md)
 - [Current project status](docs/PROJECT_STATUS.md)
 - [DINOv2 multiview fusion](docs/DINOV2_MULTIVIEW_VOTING.md)
-- [DINOv3 ADE20K and 3D-first research pipeline](docs/DINOV3_PIPELINE.md)
-- [SAM-Mask2Former hybrid refinement](docs/SAM_MASK2FORMER_HYBRID.md)
 - [External repositories and setup](docs/EXTERNAL_REPOS.md)
 - [Script and scheduler map](scripts/README.md)
 - [Archive index](archive/README.md)

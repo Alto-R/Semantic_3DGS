@@ -33,20 +33,6 @@ SEGMENTER_PATH = (
     / "dinov3"
     / "dinov3_segment_views.py"
 )
-LIFT_PATH = (
-    PROJECT_ROOT
-    / "scripts"
-    / "task1"
-    / "dinov2"
-    / "lift_dinov2_view_votes.py"
-)
-FUSION_PATH = (
-    PROJECT_ROOT
-    / "scripts"
-    / "task1"
-    / "dinov2"
-    / "fuse_dinov2_multiview_votes.py"
-)
 SETUP_PATH = (
     PROJECT_ROOT
     / "scripts"
@@ -130,8 +116,6 @@ class Dinov3AdapterContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.segmenter = SEGMENTER_PATH.read_text(encoding="utf-8")
-        cls.lift = LIFT_PATH.read_text(encoding="utf-8")
-        cls.fusion = FUSION_PATH.read_text(encoding="utf-8")
 
     def test_adapter_writes_raw_ade20k_contract(self) -> None:
         self.assertIn("class_id=raw_class", self.segmenter.replace(" ", ""))
@@ -164,15 +148,6 @@ class Dinov3AdapterContractTest(unittest.TestCase):
         self.assertIn("max_softmax_probability", self.segmenter)
         self.assertIn("top1_top2_margin", self.segmenter)
         self.assertIn("normalized_entropy_confidence", self.segmenter)
-
-    def test_lift_accepts_an_explicit_segmentation_manifest(self) -> None:
-        self.assertIn('"--segmentation-manifest"', self.lift)
-        self.assertIn('"segmentation_source"', self.lift)
-
-    def test_fusion_propagates_the_segmentation_source(self) -> None:
-        self.assertIn("fused_source = f", self.fusion)
-        self.assertIn('"source": fused_source', self.fusion)
-
 
 class Dinov3SchedulerContractTest(unittest.TestCase):
     @classmethod

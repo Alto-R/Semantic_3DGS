@@ -1,6 +1,7 @@
 # Dense-Semantic Route with Pluggable 2D Backends
 
-Status: code complete, not yet run on the cluster.
+Status: direct-label report-only audit complete; class-agnostic region export
+implemented locally and awaiting cluster validation.
 
 This route is a backend-upgrade candidate for the maintained DINOv2 multiview
 fusion base (`docs/DINOV2_MULTIVIEW_VOTING.md`). The maintained base runs the
@@ -45,6 +46,20 @@ scripts/task1/dense_seg/fuse_semantic_votes.py      threshold votes, instances,
 scripts/slurm/slurm_task1_dense_semantic_scene.sbatch
 ```
 
+For initial backend QA, set `REPORT_ONLY=1`. The scheduler stops after dense
+2D segmentation, writes the RGB renders, per-view class/confidence arrays,
+overlays, manifest, and a contact sheet, and records this contract in
+`experiment_mode.txt`. It does not lift votes, fuse Gaussian labels, or write
+a semantic PLY. Report-only mode does not require a fill baseline.
+
+For hybrid GroundingDINO+SAM refinement, pass `--save-regions` to
+`segment_views_semantic.py`. Mask2Former then exports `region_id` and
+`region_confidence` arrays plus diagnostic query metadata. Region identity is
+independent of the predicted ADE20K class. See
+`docs/SAM_MASK2FORMER_HYBRID.md` and the one-pass hybrid scheduler. That
+scheduler also performs one guarded 3D-seed reprojection round before its
+final proposal lift; the dense backend itself does not perform propagation.
+
 Fusion modes:
 
 - `--mode full`: every Gaussian labeled from votes alone (pure dense route).
@@ -75,6 +90,7 @@ SCENE, MODEL_DIR, OUTPUT_NAME
 MODE                    fill | full           (default fill)
 SEG_BACKEND             mask2former | dinov3  (default mask2former)
 VIEW_COUNT              0 = all cameras.json cameras (default)
+REPORT_ONLY             1 = stop after 2D overlay/contact-sheet QA
 MIN_CONFIDENCE          pixel gate at lift time      (default 0.35)
 MIN_VIEWS / MIN_AGREEMENT / MIN_VISIBLE_RATIO
 FILL_SOURCE             baseline run dir for fill mode
@@ -83,14 +99,27 @@ MASK2FORMER_MODEL       HF model id
 DINOV3_REPO / DINOV3_BACKBONE_WEIGHTS / DINOV3_SEGMENTOR_WEIGHTS
 ```
 
+The Mask2Former backend keeps FP32 master weights and uses CUDA autocast for
+FP16 acceleration. Do not convert the complete model with `.half()`:
+Transformers 4.30 promotes part of the decoder to FP32 internally, and global
+FP16 weights create an activation/bias dtype mismatch. The CLI `--no-fp16`
+option disables autocast for a full-FP32 diagnostic run.
+
 Confidence gating happens in the lift stage, so re-lifting with a different
 `MIN_CONFIDENCE` never re-runs the segmentation model.
+
+The scheduler honors an explicitly exported `PROJECT_ROOT`; otherwise it
+derives the repository from `SLURM_SUBMIT_DIR`. This keeps isolated cluster
+checkouts usable regardless of the caller's shell directory.
 
 ## Known limitations
 
 - ADE20K closed set: no railroad-track class, no wheel class; unknown objects
   are force-classified into the nearest ADE20K class. The `MIN_CONFIDENCE`
   gate and `ignore` mappings are the mitigation.
+- Direct Mask2Former class labels are not suitable for shuttered-window
+  refinement: the completed audit repeatedly classified shutters as doors.
+  The hybrid route therefore consumes query boundaries, not those identities.
 - The merging ontology (`*.dense_backends.json`) is intentionally different
   from the maintained identity ontology; the two are not interchangeable and
   each stage validates that its manifest and config agree (names and

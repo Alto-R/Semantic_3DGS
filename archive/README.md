@@ -8,6 +8,7 @@ must not be imported, scheduled, or presented as a maintained entry point.
 |---|---|
 | `task1_legacy/` | Early semantic annotation implementation |
 | `task1_prompt_pilot/` | Prompt-pilot experiments |
+| `dinov3_3d_first_experiments/` | Retired DINOv3 3D-first, dense-vote, anchored-component, and hybrid-refinement experiments |
 | `task1_singleton_experiments_v6_v10/` | Rejected post-v5 singleton and multiview evidence audits |
 | `task1_retired_workflows/` | Retired utilities, wrapper scheduler, stale config, and historical method documents |
 | `project_context/` | Internship schedule and original task brief |
