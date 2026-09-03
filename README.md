@@ -17,12 +17,12 @@ VR integration work are not implemented in this repository yet.
   does not fill Gaussians that no camera observes.
 - Classes missing from ADE20K use competitive dino.txt classification, SAM
   masks, and multiview OOV fusion against the DINOv3 base.
-- Rejected camera-selection, identity-correction, ownership, and global
-  refinement experiments are preserved under `archive/`.
+- Retired DINOv3 3D-first, hybrid-refinement, and singleton-recovery
+  experiments are preserved under `archive/`.
 - Every accepted result remains versioned. No stage overwrites a base output.
 
-See [Project status](docs/PROJECT_STATUS.md) for scene-level decisions and known
-limitations.
+See [Project status](docs/PROJECT_STATUS.md) for the verified reference result
+and known limitations.
 
 ## Complete DINOv3 and dino.txt pipeline
 
@@ -55,65 +55,24 @@ The direct commands are in the
 [pipeline guide](docs/DINOV3_DINOTXT_SAM_END_TO_END_PIPELINE.md) explains the
 inputs, intermediate artifacts, and fusion rules.
 
-## Pipeline
-
-```text
-pretrained 3DGS + cameras.json
-              |
-              v
-render real camera views
-              |
-              v
-DINOv2 ViT-L/14 + ADE20K head
-              |
-              v
-per-view FlashSplat lift
-              |
-              v
-exact multiview fusion + abstention  ---> immutable DINOv2 base
-              |
-              +-- ADE v5 refinement ------> versioned refined output
-              |
-              +-- reviewed custom classes -> versioned extension output
-              |
-              v
-labels + label map + overlays + validation + optional semantic PLY
-```
-
-The full stage contract, scheduler variables, review gates, and output layout
-are documented in [Pipeline guide](docs/PIPELINE.md).
-
 ## Main entry points
 
-| Purpose | Scheduler |
+| Purpose | Entry point |
 |---|---|
-| Build the prompt-free DINOv2 base | `scripts/slurm/slurm_task1_dinov2_scene.sbatch` |
-| Run adaptive instance-guard v5 | `scripts/slurm/slurm_task1_ade_refinement_scene.sbatch` |
-| Replay a v5 merge from cached evidence | `scripts/slurm/slurm_task1_ade_refinement_replay_scene.sbatch` |
-| Generate custom-class source evidence | `scripts/slurm/slurm_task1_semantic_scene.sbatch` |
 | Run the general DINOv3 abstention-recovery pipeline end to end | `scripts/slurm/slurm_task1_dinov3_end_to_end_recovery_scene.sbatch` |
 | Fuse dino.txt and SAM masks into a DINOv3 base | `scripts/task1/dinov3/run_oov_multiclass_scene.sh` |
-| Merge explicitly reviewed custom classes | `scripts/slurm/slurm_task1_reviewed_extensions_scene.sbatch` |
-| Recolor an existing semantic output | `scripts/slurm/slurm_task1_recolor_output.sbatch` |
 
-The user owns Slurm submission and monitoring. Schedulers that expose
-`CONFIG_ONLY` can be resolved without submission by setting `CONFIG_ONLY=1` and
-running the scheduler through `bash`.
+The repository still contains the earlier DINOv2 base, ADE v5 refinement,
+GroundingDINO source, reviewed-extension, and recoloring entry points. They are
+legacy alternatives, not stages of the maintained DINOv3 and dino.txt route.
+See the [script inventory](scripts/README.md) for their locations.
 
 ## Quick start
 
-Run from the repository root on the cluster. The schedulers derive the workspace,
-data, external-repository, and output roots from the repository location.
-
-```bash
-sbatch --chdir="$(pwd -P)" \
-  --export=ALL,SCENE=<scene>,OUTPUT_NAME=<scene>_dinov2_separate_abstain_allviews_v1,VIEW_COUNT=0,FUSION_MODE=separate_abstain,MIN_SEMANTIC_EVIDENCE=0.50,ENABLE_GROUNDINGDINO=0,RESET_OUTPUT=0,COLOR_MODE=class \
-  scripts/slurm/slurm_task1_dinov2_scene.sbatch
-```
-
-`VIEW_COUNT=0` selects every real camera. Do not treat a successful job as an
-accepted annotation: inspect its overlays, fused counts, label map, and
-validation report first.
+Follow the [complete quickstart](docs/DINOV3_DINOTXT_SAM_QUICKSTART.md). Its
+single shell block starts from a Graphdeco reconstruction and creates fresh
+DINOv3 base labels, dino.txt/SAM evidence, final semantic and SuperSplat PLYs,
+and class-colored PNGs for every reconstruction camera.
 
 ## Expected workspace
 
@@ -143,24 +102,26 @@ archive/          retired workflows, rejected experiments, and project history
 
 ## Output contract
 
-A reviewed semantic output is expected to contain:
+A completed maintained run is expected to contain:
 
 - `gaussian_labels.npy`: one integer semantic label per Gaussian;
 - `label_map.json`: label identifiers, names, and provenance;
-- class and instance overlays plus contact sheets;
-- validation and summary reports;
-- `semantic_point_cloud.ply` only when that stage intentionally publishes one.
+- `semantic_point_cloud.ply` and
+  `semantic_point_cloud_supersplat_debug.ply` for both the base and final OOV
+  fusion;
+- dino.txt probabilities, SAM masks, and their manifest;
+- class-colored semantic PNGs and RGB PNGs for every camera;
+- fusion summaries and vote manifests.
 
 The PLY `label` property is an integer. Image-space overlay coverage is a useful
 diagnostic, not a measurement of semantic accuracy.
 
 ## Documentation
 
-- [Pipeline guide](docs/PIPELINE.md)
 - [Current project status](docs/PROJECT_STATUS.md)
-- [DINOv2 multiview fusion](docs/DINOV2_MULTIVIEW_VOTING.md)
 - [Complete DINOv3, dino.txt, and SAM quickstart](docs/DINOV3_DINOTXT_SAM_QUICKSTART.md)
 - [Detailed DINOv3, dino.txt, and SAM pipeline](docs/DINOV3_DINOTXT_SAM_END_TO_END_PIPELINE.md)
+- [Legacy DINOv2 multiview fusion](docs/DINOV2_MULTIVIEW_VOTING.md)
 - [External repositories and setup](docs/EXTERNAL_REPOS.md)
 - [Script and scheduler map](scripts/README.md)
 - [Archive index](archive/README.md)

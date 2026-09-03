@@ -1,14 +1,23 @@
-# Script Inventory
+# Script inventory
 
 Operational scripts are grouped by role. Retired utilities, audit schedulers,
 and rejected fusion methods are preserved under `archive/`.
 
-## Slurm entry points
+## Maintained entry points
+
+| Entry point | Role |
+|---|---|
+| `slurm/slurm_task1_dinov3_end_to_end_recovery_scene.sbatch` | One-invocation end-to-end DINOv3 abstention-recovery pipeline for any scene |
+| `task1/dinov3/run_oov_multiclass_scene.sh` | Fuse dino.txt/SAM masks against a DINOv3 base and publish semantic and SuperSplat PLYs |
+
+The complete Graphdeco-to-final-PNG command sequence is in the
+[quickstart](../docs/DINOV3_DINOTXT_SAM_QUICKSTART.md).
+
+## Legacy alternative entry points
 
 | Scheduler | Role |
 |---|---|
 | `slurm/slurm_task1_dinov2_scene.sbatch` | Render real cameras, run DINOv2 ADE20K, lift votes, and build an immutable multiview base |
-| `slurm/slurm_task1_dinov3_end_to_end_recovery_scene.sbatch` | One-invocation end-to-end DINOv3 abstention-recovery pipeline for any scene |
 | `slurm/slurm_task1_ade_refinement_scene.sbatch` | Run adaptive instance-guard v5 from an immutable DINOv2 base |
 | `slurm/slurm_task1_ade_refinement_replay_scene.sbatch` | Reapply the v5 merge to cached refinement evidence |
 | `slurm/slurm_task1_semantic_scene.sbatch` | Generate standalone GroundingDINO+SAM evidence for classes absent from ADE20K |
@@ -19,11 +28,11 @@ and rejected fusion methods are preserved under `archive/`.
 The DINOv2, DINOv3, ADE v5, custom-source, reviewed-extension, and recolor
 schedulers support configuration inspection. Use `CONFIG_ONLY=1` with `bash`
 to resolve paths, inputs, and parameters without submitting a job. The cached
-ADE replay scheduler does not currently expose this mode.
+ADE replay scheduler does not expose this mode.
 
 ## Task 1 package
 
-The active semantic implementation is split by responsibility:
+The repository code is split by responsibility:
 
 ```text
 task1/
@@ -31,7 +40,7 @@ task1/
   dinov2/      rendering, ADE20K inference, vote lifting, and exact fusion
   dinov3/      DINOv3 segmentation, vote lifting, recovery, dino.txt/SAM classification, and OOV fusion
   grounding/   camera selection, GroundingDINO+SAM, and 3D proposal fusion
-  merge/       guarded ADE v5, reviewed custom extensions, and approved identity corrections
+  merge/       legacy guarded ADE v5 and reviewed custom extensions
   qa/          PLY publishing, overlays, contact sheets, summaries, and validation
 ```
 
@@ -48,9 +57,8 @@ python -m scripts.task1.qa.validate_task1_outputs --help
 ```
 
 Package imports are absolute (`scripts.task1...`), so tests and child processes
-use the same import graph as cluster jobs. The guarded ADE merge implements the
-active class-neutral v5 policy; the reviewed-extension merge handles only
-explicitly accepted identities that are absent from the base ontology.
+use the same import graph as cluster jobs. The guarded ADE and reviewed-extension
+merges belong to the legacy DINOv2 workflow.
 
 ## Setup and cluster helpers
 
@@ -63,13 +71,19 @@ names.
 
 ## Configuration
 
-Scene semantic vocabularies live in:
+The maintained dino.txt/SAM target configurations use:
+
+```text
+configs/task1_dinotxt_sam.<scene>_<target>.json
+```
+
+Legacy GroundingDINO scene vocabularies use:
 
 ```text
 configs/task1_semantic_classes.<scene>[.<version>].json
 ```
 
-Reviewed hybrid policies live in:
+Legacy reviewed-extension policies use:
 
 ```text
 configs/task1_hybrid_extensions.<scene>[.<version>].json

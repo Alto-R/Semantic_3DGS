@@ -1,8 +1,8 @@
 # DINOv3 dino.txt + SAM OOV semantic pipeline
 
-This document is the implementation runbook for adding an object class that is
-not reliable in the maintained ADE20K vocabulary. It describes the current
-repository implementation, not a proposed training system.
+This document explains the implementation and intermediate contracts for the
+maintained pipeline. For the shortest complete command sequence, use the
+[complete quickstart](DINOV3_DINOTXT_SAM_QUICKSTART.md).
 
 The pipeline is inference-only. It does not train, fine-tune, delete
 Gaussians, select cameras by hand, or select individual Gaussians by hand.
@@ -45,19 +45,19 @@ The maintained implementation is split into four reusable pieces:
 | --- | --- | --- |
 | Render reconstruction cameras | `scripts/task1/dinov2/render_task1_views.py` | `view_manifest.json` plus `rgb_renders/` |
 | Closed-set DINOv3 segmentation | `scripts/task1/dinov3/dinov3_segment_views.py` | `dinov3_manifest.json` plus per-view `class_id` maps |
-| dino.txt + automatic SAM proposal source | `scripts/task1/dinov3/dinotxt_sam_mask_pilot.py` | review-only `grounded_sam_manifest.json` plus mask stacks |
+| dino.txt + automatic SAM mask source | `scripts/task1/dinov3/dinotxt_sam_mask_pilot.py` | `grounded_sam_manifest.json` plus mask stacks |
 | OOV composition, lifting, and fusion | `scripts/task1/dinov3/compose_oov_multiclass_votes.py` | semantic labels, maps, evidence, and semantic PLY |
 
-The direct end-to-end wrapper is
-`[run_oov_multiclass_scene.sh](../scripts/task1/dinov3/run_oov_multiclass_scene.sh)`.
-It consumes an existing OOV mask manifest and an accepted base. It does not
-run the dino.txt pilot itself; that separation is deliberate so 2D evidence
-can be reviewed before any 3D label is written.
+The OOV fusion wrapper is
+[run_oov_multiclass_scene.sh](../scripts/task1/dinov3/run_oov_multiclass_scene.sh).
+It consumes an existing OOV mask manifest and DINOv3 base. The complete
+quickstart runs base creation, dino.txt/SAM inference, this fusion wrapper, and
+final render-back in one shell block.
 
 The final wrapper also calls
-`[export_supersplat_label_colors.py](../scripts/task1/qa/export_supersplat_label_colors.py)`
+[export_supersplat_label_colors.py](../scripts/task1/qa/export_supersplat_label_colors.py)
 and
-`[validate_task1_outputs.py](../scripts/task1/qa/validate_task1_outputs.py)`.
+[validate_task1_outputs.py](../scripts/task1/qa/validate_task1_outputs.py).
 
 ## 3. Required inputs and invariants
 
@@ -73,11 +73,14 @@ For a scene, the workspace must provide:
     cameras.json
     point_cloud/iteration_30000/point_cloud.ply
   data/models/dinov3/
+    dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth
+    dinov3_vit7b16_ade20k_m2f_head-bf307cb1.pth
     dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth
     dinov3_vitl16_dinotxt_vision_head_and_text_encoder-a442d8f5.pth
     bpe_simple_vocab_16e6.txt.gz
   external/dinov3/                 # pinned, clean Git checkout
   external/FlashSplat/
+  external/segment-anything/
   outputs/eyenavgs_task1/
 ```
 
@@ -108,14 +111,10 @@ The pilot verifies these dino.txt and tokenizer hashes. The current SAM
 loader verifies that the checkpoint exists and loads it as `vit_h`; its SAM
 weights are not silently substituted.
 
-## 4. Stage 0: create or select the base
+## 4. Stage 0: create the base
 
-The base must be the accepted DINOv3 ADE20K output, normally the completed
-DINOv3 abstention-recovery materialization for the same scene. It is not a raw
-per-view map and it is not a diagnostic experiment.
-
-If no accepted base exists, create it through the maintained DINOv3 recovery
-route, then review and accept it before continuing:
+The complete route creates a fresh DINOv3 ADE20K base through the maintained
+recovery scheduler:
 
 ```bash
 SCENE=<scene> \
@@ -123,14 +122,17 @@ OUTPUT_NAME=<scene>_dinov3_abstention_recovery_review_v1 \
 bash scripts/slurm/slurm_task1_dinov3_end_to_end_recovery_scene.sbatch
 ```
 
-The base output must provide at least:
+The base output provides:
 
 ```text
-<base-output>/deliverables/gaussian_labels.npy
-<base-output>/deliverables/label_map.json
+<base-output>/gaussian_labels.npy
+<base-output>/label_map.json
 <base-output>/stages/01_real_camera_views/view_manifest.json
 <base-output>/stages/01_real_camera_views/rgb_renders/
 <base-output>/stages/01_real_camera_views/dinov3_manifest.json
+<base-output>/semantic_point_cloud.ply
+<base-output>/semantic_point_cloud_supersplat_debug.ply
+<base-output>/summary.json
 ```
 
 Keep this directory immutable. Every OOV experiment gets a new
@@ -420,7 +422,7 @@ Visual acceptance requires original RGB views beside semantic overlays or the
 class-colored SuperSplat PLY, especially at object boundaries and in views not
 used for a small pilot.
 
-## 14. Recommended one-shot OOV command after the pilot
+## 14. Fusion-only command for existing base and masks
 
 Once the pilot is visually accepted, reuse the accepted base's closed-set
 DINOv3 cache and run the immutable OOV wrapper. The following is a template;
@@ -440,8 +442,8 @@ env \
   DINO_INPUT_DIR="${BASE_OUTPUT}/stages/01_real_camera_views" \
   OOV_MANIFEST="${PILOT_OUTPUT}/grounded_sam_manifest.json" \
   OOV_MASK_DIR="${PILOT_OUTPUT}" \
-  BASE_LABELS="${BASE_OUTPUT}/deliverables/gaussian_labels.npy" \
-  BASE_LABEL_MAP="${BASE_OUTPUT}/deliverables/label_map.json" \
+  BASE_LABELS="${BASE_OUTPUT}/gaussian_labels.npy" \
+  BASE_LABEL_MAP="${BASE_OUTPUT}/label_map.json" \
   OUTPUT_NAME="${SCENE}_dinov3_dinotxt_sam_oov_<target>_v1" \
   SKIP_DINOV3=1 \
   bash scripts/task1/dinov3/run_oov_multiclass_scene.sh

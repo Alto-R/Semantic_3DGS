@@ -1,8 +1,9 @@
-# DINOv2 Multiview Fusion
+# Legacy DINOv2 multiview fusion
 
-The maintained semantic base uses the official DINOv2 ViT-L/14 ADE20K linear
-head and exact disk-backed fusion across the scene's real cameras. This document
-summarizes the active method; historical prototypes are under `archive/`.
+This document describes the earlier DINOv2 ViT-L/14 ADE20K base. Its scheduler
+and modules remain available for reproducing older results, but the maintained
+production route now uses DINOv3 and dino.txt. Historical DINOv2 prototypes are
+under `archive/`.
 
 ## Data flow
 
@@ -53,8 +54,8 @@ tracks:
 - accumulated semantic evidence;
 - visibility without sufficient semantic confidence.
 
-The production mode is `separate_abstain`. A label is assigned only when all
-relevant gates pass:
+The documented DINOv2 mode is `separate_abstain`. A label is assigned only when
+all relevant gates pass:
 
 ```text
 MIN_VIEWS=2
@@ -70,13 +71,13 @@ important during QA and later refinement.
 
 ## Ontology
 
-The base ontology is ADE20K. `scripts/task1/dinov2/dinov2_ontology.py` is the maintained
-source for normalized names and thing/stuff metadata used by fusion and config
-validation.
+The DINOv2 base ontology is ADE20K.
+`scripts/task1/dinov2/dinov2_ontology.py` provides normalized names and
+thing/stuff metadata used by fusion and config validation.
 
-GroundingDINO is disabled for the production base. ADE20K instance completion is
-performed later by adaptive instance-guard v5; identities absent from ADE20K use
-the separate reviewed-extension workflow.
+GroundingDINO is disabled for this base configuration. The older workflow used
+adaptive instance-guard v5 for ADE20K completion and a separate reviewed merge
+for identities absent from ADE20K.
 
 ## Outputs
 
@@ -95,11 +96,11 @@ published, must contain one integer label per source Gaussian.
 
 ## Why all real cameras
 
-The production run uses `VIEW_COUNT=0`, which resolves to every camera in
-`cameras.json`. This maximizes available evidence without inventing poses and
-reduces the chance that a class decision depends on one selected viewpoint.
-Multiple views do not guarantee completeness: an occluded object or a consistently
-weak prediction can still abstain.
+Use `VIEW_COUNT=0` to select every camera in `cameras.json`. This maximizes
+available evidence without inventing poses and reduces the chance that a class
+decision depends on one selected viewpoint. Multiple views do not guarantee
+completeness. An occluded object or consistently weak prediction can still
+abstain.
 
 ## QA interpretation
 
