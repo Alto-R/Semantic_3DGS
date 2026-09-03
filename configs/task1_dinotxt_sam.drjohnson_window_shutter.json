@@ -1,0 +1,64 @@
+{
+  "target_class": "window_shutter",
+  "classes": [
+    {
+      "class": "window_shutter",
+      "prompts": [
+        "window shutter",
+        "wooden window shutters",
+        "closed interior window shutters"
+      ]
+    },
+    {
+      "class": "door",
+      "prompts": [
+        "interior door",
+        "wooden room door"
+      ]
+    },
+    {
+      "class": "window",
+      "prompts": [
+        "window",
+        "windowpane"
+      ]
+    },
+    {
+      "class": "wall_panel",
+      "prompts": [
+        "wall panel",
+        "decorative wall panel",
+        "wooden wall panel"
+      ]
+    },
+    {
+      "class": "cabinet",
+      "prompts": [
+        "cabinet",
+        "wooden cabinet"
+      ]
+    },
+    {
+      "class": "wall",
+      "prompts": [
+        "interior wall",
+        "painted wall"
+      ]
+    },
+    {
+      "class": "picture_frame",
+      "prompts": [
+        "picture frame",
+        "framed painting"
+      ]
+    }
+  ],
+  "selection": {
+    "min_target_probability": 0.35,
+    "min_competitor_margin": 0.05,
+    "min_target_win_fraction": 0.50,
+    "max_selected_masks": 8,
+    "containment_threshold": 0.90,
+    "nms_iou": 0.70
+  }
+}
