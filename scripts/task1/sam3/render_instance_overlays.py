@@ -78,8 +78,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--columns", default=8, type=int)
     parser.add_argument("--alpha", default=0.55, type=float)
+    parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
 
+    sheet_path = args.output_dir / "instance_overlays_contact.jpg"
+    if sheet_path.exists() and not args.overwrite:
+        raise FileExistsError(sheet_path)
     manifest = json.loads(args.masks_manifest.read_text(encoding="utf-8"))
     validate_masks_manifest(manifest)
     overlays_dir = args.output_dir / "overlays"

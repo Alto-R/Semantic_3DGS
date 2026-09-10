@@ -52,6 +52,8 @@ SAM3_MODEL_REVISION="${SAM3_MODEL_REVISION:?Set SAM3_MODEL_REVISION to the pinne
 SAM3_MIN_SCORE="${SAM3_MIN_SCORE:-0.4}"
 ASSOCIATION_THRESHOLD="${ASSOCIATION_THRESHOLD:-0.3}"
 MIN_WEIGHT="${MIN_WEIGHT:-0.5}"
+# Set OVERWRITE=1 to rerun into an existing output root after a failed run.
+OVERWRITE_FLAG="${OVERWRITE:+--overwrite}"
 
 S1_DIR="${OUT_DIR}/stages/01_sam3_masks"
 S2_DIR="${OUT_DIR}/stages/02_mask_votes"
@@ -89,7 +91,7 @@ run_stage 01_sam3_segment_views "${SAM3_ENV}" \
   --backend transformers \
   --model-id "${SAM3_MODEL_ID}" \
   --model-revision "${SAM3_MODEL_REVISION}" \
-  --min-score "${SAM3_MIN_SCORE}"
+  --min-score "${SAM3_MIN_SCORE}" ${OVERWRITE_FLAG}
 
 run_stage 02_lift_mask_votes "${GAUSSIAN_ENV}" \
   python -m scripts.task1.sam3.lift_mask_view_votes \
@@ -100,14 +102,14 @@ run_stage 02_lift_mask_votes "${GAUSSIAN_ENV}" \
   --output-dir "${S2_DIR}" \
   --flashsplat-root "${FLASHSPLAT_ROOT}" \
   --iteration "${ITERATION}" \
-  --max-width "${RENDER_MAX_WIDTH}"
+  --max-width "${RENDER_MAX_WIDTH}" ${OVERWRITE_FLAG}
 
 run_stage 03_associate_instances "${GAUSSIAN_ENV}" \
   python -m scripts.task1.sam3.associate_instances \
   --masks-manifest "${S1_DIR}/sam3_masks_manifest.json" \
   --votes-manifest "${S2_DIR}/sam3_vote_manifest.json" \
   --output "${S3_REGISTRY}" \
-  --threshold "${ASSOCIATION_THRESHOLD}"
+  --threshold "${ASSOCIATION_THRESHOLD}" ${OVERWRITE_FLAG}
 
 run_stage 04_instance_membership "${GAUSSIAN_ENV}" \
   python -m scripts.task1.sam3.instance_membership \
@@ -115,7 +117,7 @@ run_stage 04_instance_membership "${GAUSSIAN_ENV}" \
   --votes-manifest "${S2_DIR}/sam3_vote_manifest.json" \
   --registry "${S3_REGISTRY}" \
   --output-dir "${S4_DIR}" \
-  --min-weight "${MIN_WEIGHT}"
+  --min-weight "${MIN_WEIGHT}" ${OVERWRITE_FLAG}
 
 run_stage 05_scene_graph "${GAUSSIAN_ENV}" \
   python -m scripts.task1.sam3.instance_hierarchy \
@@ -123,13 +125,13 @@ run_stage 05_scene_graph "${GAUSSIAN_ENV}" \
   --registry "${S3_REGISTRY}" \
   --source-ply "${MODEL_DIR}/point_cloud/iteration_${ITERATION}/point_cloud.ply" \
   --vocabulary "${VOCABULARY}" \
-  --output-dir "${S5_DIR}"
+  --output-dir "${S5_DIR}" ${OVERWRITE_FLAG}
 
 run_stage 06_qa_overlays "${GAUSSIAN_ENV}" \
   python -m scripts.task1.sam3.render_instance_overlays \
   --masks-manifest "${S1_DIR}/sam3_masks_manifest.json" \
   --masks-dir "${S1_DIR}/masks" \
   --rgb-dir "${RGB_DIR}" \
-  --output-dir "${QA_DIR}"
+  --output-dir "${QA_DIR}" ${OVERWRITE_FLAG}
 
 echo "SAM3 instance route complete: ${OUT_DIR}"

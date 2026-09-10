@@ -193,9 +193,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--registry", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--min-weight", default=0.5, type=float)
+    parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
 
-    if args.output_dir.exists():
+    if args.output_dir.exists() and not args.overwrite:
         raise FileExistsError(args.output_dir)
     masks_manifest = json.loads(args.masks_manifest.read_text(encoding="utf-8"))
     validate_masks_manifest(masks_manifest)
@@ -261,7 +262,7 @@ def main(argv: list[str] | None = None) -> None:
     membership = accumulate_membership(
         events, observe_totals.astype(np.uint16), gaussian_count
     )
-    args.output_dir.mkdir(parents=True, exist_ok=False)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
     save_membership(args.output_dir / "membership.npz", membership)
 
     status_counts = {

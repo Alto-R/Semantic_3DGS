@@ -327,6 +327,45 @@ def run_mini_pipeline(tmp_path):
     return registry_path, membership_dir, graph_dir
 
 
+def test_stage_reruns_require_overwrite(tmp_path):
+    registry_path, membership_dir, graph_dir = run_mini_pipeline(tmp_path)
+    masks_manifest = tmp_path / "s1" / "sam3_masks_manifest.json"
+    votes_manifest = tmp_path / "s2" / "sam3_vote_manifest.json"
+
+    s4 = [
+        "--masks-manifest", str(masks_manifest),
+        "--votes-manifest", str(votes_manifest),
+        "--registry", str(registry_path),
+        "--output-dir", str(membership_dir),
+        "--min-weight", "0.5",
+    ]
+    with pytest.raises(FileExistsError):
+        instance_membership.main(s4)
+    instance_membership.main([*s4, "--overwrite"])
+
+    s5 = [
+        "--membership", str(membership_dir / "membership.npz"),
+        "--registry", str(registry_path),
+        "--source-ply", str(tmp_path / "scene.ply"),
+        "--vocabulary", str(tmp_path / "vocab.json"),
+        "--output-dir", str(graph_dir),
+    ]
+    with pytest.raises(FileExistsError):
+        instance_hierarchy.main(s5)
+    instance_hierarchy.main([*s5, "--overwrite"])
+
+    qa = [
+        "--masks-manifest", str(masks_manifest),
+        "--masks-dir", str(tmp_path / "s1" / "masks"),
+        "--rgb-dir", str(tmp_path / "rgb"),
+        "--output-dir", str(tmp_path / "qa"),
+    ]
+    render_instance_overlays.main(qa)
+    with pytest.raises(FileExistsError):
+        render_instance_overlays.main(qa)
+    render_instance_overlays.main([*qa, "--overwrite"])
+
+
 def test_mini_pipeline_registry(tmp_path):
     registry_path, _, _ = run_mini_pipeline(tmp_path)
     registry = json.loads(registry_path.read_text(encoding="utf-8"))

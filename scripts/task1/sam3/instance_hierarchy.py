@@ -364,9 +364,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--part-of-child", default=0.6, type=float)
     parser.add_argument("--part-of-parent", default=0.3, type=float)
     parser.add_argument("--duplicate-mutual", default=0.8, type=float)
+    parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
 
-    if args.output_dir.exists():
+    if args.output_dir.exists() and not args.overwrite:
         raise FileExistsError(args.output_dir)
     membership = load_membership(args.membership)
     registry = json.loads(args.registry.read_text(encoding="utf-8"))
@@ -398,7 +399,7 @@ def main(argv: list[str] | None = None) -> None:
         membership, classification.merges, size_by_id, gaussian_count
     )
 
-    args.output_dir.mkdir(parents=True, exist_ok=False)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
     hierarchy = {
         "source": HIERARCHY_SOURCE,
         "contract": HIERARCHY_CONTRACT,
