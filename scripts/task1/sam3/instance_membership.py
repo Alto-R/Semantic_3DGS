@@ -298,6 +298,7 @@ def main(argv: list[str] | None = None) -> None:
         "status_counts": status_counts,
         "camera_vote_policy": "one_unique_dominant_mask_per_camera_else_abstain",
         "consensus_policy": "per_instance_at_least_two_cameras_strict_majority",
+        "observe_denominator": "views_with_any_rendered_visibility_of_the_gaussian",
     }
     (args.output_dir / "membership_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"

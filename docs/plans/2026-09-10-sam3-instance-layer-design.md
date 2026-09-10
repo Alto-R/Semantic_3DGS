@@ -105,9 +105,13 @@ the route order-free:
 For each global instance, an equal-camera vote generalizing the audited
 strict-majority policy:
 
-- A camera that observes Gaussian g (positive visibility in that concept
-  pass) votes for instance i if g's within-concept winner is i's per-view
-  mask; otherwise it votes against.
+- A camera that observes Gaussian g (positive rendered visibility in that
+  view, which is identical across concept passes) votes for instance i if
+  g's within-concept winner is i's per-view mask; otherwise it votes
+  against. Because every phrase is prompted in every view, absence of a
+  detection is negative evidence: a view that saw the Gaussian but produced
+  no winning mask counts against the instance. A view with no masks at all
+  contributes no observations.
 - Membership score = supporting cameras / observing cameras, with the same
   acceptance statuses (single camera, tie, weak majority) recorded per
   (Gaussian, instance) pair, mirroring the dense route's abstention codes.
@@ -130,9 +134,11 @@ classified from post-vote 3D statistics:
   `scene_graph.json` (nodes with concept, membership-weighted 3D centroid,
   axis-aligned bounding box, supporting-camera count; edges: part_of). The
   scene graph is the GNN-facing deliverable.
-- A derived flat labeling (one chosen hierarchy cut, one instance per
-  Gaussian by top score) feeds the existing PLY/SuperSplat tooling as a
-  visualization view only; it is never the storage format.
+- A derived flat labeling (one instance per Gaussian by top accepted score;
+  score ties resolve to the most specific, smallest instance so nested
+  labels stay visible, then to the smaller id) feeds the existing
+  PLY/SuperSplat tooling as a visualization view only; it is never the
+  storage format.
 
 ## Vocabulary config
 
@@ -175,6 +181,16 @@ Acceptance criteria:
   already in production. New sbatch entry point follows the existing
   scheduler conventions; SAM3 setup is documented in EXTERNAL_REPOS.md with a
   pinned model revision.
+
+## Implementation notes
+
+- The Slurm entry point doubles as the bash runner (matching the DINOv3
+  route), so no separate shell orchestrator exists.
+- S3-S5 record sha256 hashes of their inputs; membership refuses to run
+  against manifests that changed after association.
+- Candidate-pair search in S3 uses a scipy sparse intersection product with
+  connected-pair skipping; a pure-Python fallback covers scipy-free
+  environments.
 
 ## Risks
 

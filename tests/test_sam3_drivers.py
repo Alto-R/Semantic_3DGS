@@ -442,6 +442,10 @@ def test_mini_pipeline_membership(tmp_path):
     )
     assert summary["gaussian_count"] == GAUSSIAN_COUNT
     assert summary["status_counts"]["accepted"] > 0
+    assert (
+        summary["observe_denominator"]
+        == "views_with_any_rendered_visibility_of_the_gaussian"
+    )
 
 
 def test_mini_pipeline_scene_graph_and_flat_labels(tmp_path):
