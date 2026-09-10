@@ -67,6 +67,46 @@ GroundingDINO source, reviewed-extension, and recoloring entry points. They are
 legacy alternatives, not stages of the maintained DINOv3 and dino.txt route.
 See the [script inventory](scripts/README.md) for their locations.
 
+## SAM3 instance route (experimental)
+
+The SAM3 route produces object-level data for the downstream scene-graph
+GNN: every countable object becomes an individual instance with a 3D
+position. SAM3 promptable concept segmentation is its only recognition
+model; the FlashSplat lift and equal-camera voting skeleton is reused with
+per-concept independent votes instead of a single-label partition, so a
+Gaussian may hold several concurrent memberships (window, storefront,
+building) with part_of relations derived from 3D containment.
+
+```text
+SAM3 route (branch feature/sam3-instance-layer)
+  existing rendered camera views + per-scene vocabulary
+        |
+        v
+  SAM3 concept segmentation (per-view instance masks)
+        |
+        v
+  per-concept FlashSplat lift  ->  cross-view support-overlap association
+        |
+        v
+  per-instance equal-camera strict-majority membership
+        |
+        v
+  overlap classification -> hierarchy + scene graph + QA overlays
+```
+
+| Purpose | Entry point |
+|---|---|
+| Run the SAM3 instance route end to end | `scripts/slurm/slurm_task1_sam3_instance_scene.sbatch` |
+
+Outputs: `membership.npz` (sparse multi-label memberships),
+`instance_registry.json`, `hierarchy.json`, `scene_graph.json` (GNN-facing
+nodes and part_of edges), `gaussian_instances.npy` (derived flat
+visualization view). Design and pilot acceptance criteria:
+[design document](docs/plans/2026-09-10-sam3-instance-layer-design.md).
+The route is locally tested against a mock backend; cluster verification on
+the `old_street` pilot scene is pending. It does not modify any DINOv3
+deliverable.
+
 ## Quick start
 
 Follow the [complete quickstart](docs/DINOV3_DINOTXT_SAM_QUICKSTART.md). Its

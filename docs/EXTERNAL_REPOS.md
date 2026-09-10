@@ -38,6 +38,16 @@ scripts do not download model weights.
 DINOv2 and GroundingDINO remain dependencies of legacy alternative workflows.
 They are not required by the maintained DINOv3 and dino.txt route.
 
+## Experimental SAM3 instance route
+
+The SAM3 route loads `facebook/sam3` through Hugging Face transformers inside
+a dedicated conda environment (default name `sam3_semantic`). It does not use
+the external checkouts above except FlashSplat. The checkpoint revision is
+not defaulted: every scheduler run must set `SAM3_MODEL_REVISION` to the
+pinned revision, and the exact revision plus the transformers version are
+recorded here once cluster verification completes. Local unit tests use a
+mock backend and never download the checkpoint.
+
 Exact repository revisions and environment commands are maintained by the setup
 scripts under `scripts/setup/`. Cluster helpers live under `scripts/cluster/`.
 

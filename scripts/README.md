@@ -13,6 +13,16 @@ and rejected fusion methods are preserved under `archive/`.
 The complete Graphdeco-to-final-PNG command sequence is in the
 [quickstart](../docs/DINOV3_DINOTXT_SAM_QUICKSTART.md).
 
+## Experimental SAM3 instance route
+
+| Entry point | Role |
+|---|---|
+| `slurm/slurm_task1_sam3_instance_scene.sbatch` | SAM3 concept segmentation, per-concept FlashSplat lift, cross-view association, per-instance consensus, scene graph, and QA overlays |
+
+The route consumes an existing render stage and is under pilot evaluation;
+see [the design](../docs/plans/2026-09-10-sam3-instance-layer-design.md).
+Cluster verification of the SAM3 checkpoint is pending.
+
 ## Legacy alternative entry points
 
 | Scheduler | Role |
@@ -42,6 +52,7 @@ task1/
   grounding/   camera selection, GroundingDINO+SAM, and 3D proposal fusion
   merge/       legacy guarded ADE v5 and reviewed custom extensions
   qa/          PLY publishing, overlays, contact sheets, summaries, and validation
+  sam3/        experimental SAM3 instance route: segmentation, mask lifting, association, membership, hierarchy, overlays
 ```
 
 The retired DINOv3 3D-first and hybrid-refinement modules are preserved under
