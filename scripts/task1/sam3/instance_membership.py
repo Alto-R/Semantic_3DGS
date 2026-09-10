@@ -8,8 +8,11 @@ per (Gaussian, instance) pair instead of per Gaussian.
 
 from __future__ import annotations
 
+import argparse
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -166,3 +169,118 @@ def load_membership(path: Path) -> MembershipCSR:
             scores=data["scores"],
             status=data["status"],
         )
+
+
+MEMBERSHIP_SOURCE = "sam3_instance_membership"
+MEMBERSHIP_CONTRACT = "per_instance_equal_camera_strict_majority_v1"
+
+
+def main(argv: list[str] | None = None) -> None:
+    from scripts.task1.sam3.associate_instances import validate_instance_registry
+    from scripts.task1.sam3.lift_mask_view_votes import validate_votes_manifest
+    from scripts.task1.sam3.segment_views_core import validate_masks_manifest
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--masks-manifest", required=True, type=Path)
+    parser.add_argument("--votes-manifest", required=True, type=Path)
+    parser.add_argument("--registry", required=True, type=Path)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--min-weight", default=0.5, type=float)
+    args = parser.parse_args(argv)
+
+    if args.output_dir.exists():
+        raise FileExistsError(args.output_dir)
+    masks_manifest = json.loads(args.masks_manifest.read_text(encoding="utf-8"))
+    validate_masks_manifest(masks_manifest)
+    votes_manifest = json.loads(args.votes_manifest.read_text(encoding="utf-8"))
+    validate_votes_manifest(votes_manifest)
+    registry = json.loads(args.registry.read_text(encoding="utf-8"))
+    validate_instance_registry(registry)
+
+    gaussian_count = int(votes_manifest["gaussian_count"])
+    global_id: dict[tuple[str, int], int] = {}
+    for instance in registry["instances"]:
+        for member in instance["members"]:
+            key = (str(member["view"]), int(member["mask_index"]))
+            global_id[key] = int(instance["instance_id"])
+
+    concept_of: dict[str, dict[int, str]] = {}
+    for frame in masks_manifest["frames"]:
+        stem = Path(str(frame["file"])).stem
+        concept_of[stem] = {
+            int(mask["mask_index"]): str(mask["concept"]) for mask in frame["masks"]
+        }
+
+    observe_totals = np.zeros(gaussian_count, dtype=np.int64)
+    events: list[tuple[np.ndarray, np.ndarray]] = []
+    votes_dir = args.votes_manifest.parent
+    for frame in votes_manifest["frames"]:
+        stem = Path(str(frame["file"])).stem
+        with np.load(votes_dir / str(frame["vote_file"]), allow_pickle=False) as data:
+            indices = data["indices"]
+            mask_ids = data["mask_ids"]
+            weights = data["weights"]
+            observed = data["observed"]
+        observe_totals[observed.astype(np.int64)] += 1
+
+        frame_concepts = concept_of.get(stem)
+        if frame_concepts is None:
+            raise ValueError(f"masks manifest does not know view {stem}")
+        concept_rows: dict[str, np.ndarray] = {}
+        for mask_index, concept in frame_concepts.items():
+            rows = mask_ids == np.uint16(mask_index)
+            if rows.any():
+                existing = concept_rows.get(concept)
+                concept_rows[concept] = (
+                    rows if existing is None else existing | rows
+                )
+        for concept, rows in concept_rows.items():
+            winners_g, winners_m = view_concept_winners(
+                indices[rows], mask_ids[rows], weights[rows], args.min_weight
+            )
+            if winners_g.size == 0:
+                continue
+            instance_ids = np.empty(winners_m.shape, dtype=np.uint16)
+            for position, mask_index in enumerate(winners_m.tolist()):
+                key = (stem, int(mask_index))
+                if key not in global_id:
+                    raise RuntimeError(
+                        f"registry does not map view {stem} mask {mask_index}"
+                    )
+                instance_ids[position] = global_id[key]
+            events.append((winners_g, instance_ids))
+
+    if int(observe_totals.max(initial=0)) > 65535:
+        raise ValueError("camera count exceeds the uint16 observation space")
+    membership = accumulate_membership(
+        events, observe_totals.astype(np.uint16), gaussian_count
+    )
+    args.output_dir.mkdir(parents=True, exist_ok=False)
+    save_membership(args.output_dir / "membership.npz", membership)
+
+    status_counts = {
+        name: int(np.count_nonzero(membership.status == code))
+        for code, name in sorted(STATUS_NAMES.items())
+    }
+    summary: dict[str, Any] = {
+        "source": MEMBERSHIP_SOURCE,
+        "contract": MEMBERSHIP_CONTRACT,
+        "masks_manifest": str(args.masks_manifest),
+        "votes_manifest": str(args.votes_manifest),
+        "registry": str(args.registry),
+        "gaussian_count": gaussian_count,
+        "camera_count": int(votes_manifest["camera_count"]),
+        "min_weight": args.min_weight,
+        "entry_count": int(membership.instance_ids.shape[0]),
+        "status_counts": status_counts,
+        "camera_vote_policy": "one_unique_dominant_mask_per_camera_else_abstain",
+        "consensus_policy": "per_instance_at_least_two_cameras_strict_majority",
+    }
+    (args.output_dir / "membership_summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
+    print(json.dumps(summary, indent=2))
+
+
+if __name__ == "__main__":
+    main()

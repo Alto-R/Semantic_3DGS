@@ -88,6 +88,17 @@ def write_view_masks(path: Path, view_masks: list[ViewMask]) -> dict[str, Any]:
     }
 
 
+def validate_masks_manifest(manifest: dict[str, Any]) -> None:
+    if manifest.get("source") != MASKS_SOURCE:
+        raise ValueError(f"unsupported masks source: {manifest.get('source')!r}")
+    if manifest.get("contract") != MASKS_CONTRACT:
+        raise ValueError(
+            f"unsupported masks contract: {manifest.get('contract')!r}"
+        )
+    if not isinstance(manifest.get("frames"), list):
+        raise ValueError("masks manifest must list its frames")
+
+
 def build_masks_manifest(
     scene: str,
     vocabulary: Vocabulary,

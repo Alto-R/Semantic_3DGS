@@ -9,7 +9,10 @@ hierarchy stage.
 
 from __future__ import annotations
 
+import argparse
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -152,3 +155,96 @@ def build_instance_registry(
         "same_view_conflict_groups": conflict_groups,
         "instances": instances,
     }
+
+
+def validate_instance_registry(registry: dict[str, Any]) -> None:
+    if registry.get("source") != ASSOCIATION_SOURCE:
+        raise ValueError(f"unsupported registry source: {registry.get('source')!r}")
+    if registry.get("contract") != ASSOCIATION_CONTRACT:
+        raise ValueError(
+            f"unsupported registry contract: {registry.get('contract')!r}"
+        )
+    if not isinstance(registry.get("instances"), list):
+        raise ValueError("instance registry must list its instances")
+
+
+def load_mask_supports(
+    masks_manifest: dict[str, Any],
+    votes_manifest: dict[str, Any],
+    votes_dir: Path,
+) -> list[MaskSupport]:
+    """Join S1 mask metadata with S2 sparse supports, one MaskSupport per mask."""
+
+    meta: dict[str, dict[int, tuple[str, float]]] = {}
+    for frame in masks_manifest["frames"]:
+        stem = Path(str(frame["file"])).stem
+        meta[stem] = {
+            int(mask["mask_index"]): (str(mask["concept"]), float(mask["score"]))
+            for mask in frame["masks"]
+        }
+
+    supports: list[MaskSupport] = []
+    for frame in votes_manifest["frames"]:
+        stem = Path(str(frame["file"])).stem
+        if stem not in meta:
+            raise ValueError(f"masks manifest does not know view {stem}")
+        with np.load(votes_dir / str(frame["vote_file"]), allow_pickle=False) as data:
+            indices = data["indices"]
+            mask_ids = data["mask_ids"]
+            weights = data["weights"]
+        for mask_index in np.unique(mask_ids):
+            if int(mask_index) not in meta[stem]:
+                raise ValueError(
+                    f"view {stem} vote references unknown mask {int(mask_index)}"
+                )
+            concept, score = meta[stem][int(mask_index)]
+            rows = mask_ids == mask_index
+            supports.append(
+                MaskSupport(
+                    view=stem,
+                    mask_index=int(mask_index),
+                    concept=concept,
+                    score=score,
+                    indices=indices[rows].astype(np.uint32),
+                    weights=weights[rows].astype(np.float32),
+                )
+            )
+    return supports
+
+
+def main(argv: list[str] | None = None) -> None:
+    from scripts.task1.sam3.lift_mask_view_votes import validate_votes_manifest
+    from scripts.task1.sam3.segment_views_core import validate_masks_manifest
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--masks-manifest", required=True, type=Path)
+    parser.add_argument("--votes-manifest", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--threshold", default=0.3, type=float)
+    parser.add_argument("--overwrite", action="store_true")
+    args = parser.parse_args(argv)
+
+    if args.output.exists() and not args.overwrite:
+        raise FileExistsError(args.output)
+    masks_manifest = json.loads(args.masks_manifest.read_text(encoding="utf-8"))
+    validate_masks_manifest(masks_manifest)
+    votes_manifest = json.loads(args.votes_manifest.read_text(encoding="utf-8"))
+    validate_votes_manifest(votes_manifest)
+
+    supports = load_mask_supports(
+        masks_manifest, votes_manifest, args.votes_manifest.parent
+    )
+    groups = associate_masks(supports, args.threshold)
+    registry = build_instance_registry(supports, groups, args.threshold)
+    registry["masks_manifest"] = str(args.masks_manifest)
+    registry["votes_manifest"] = str(args.votes_manifest)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+    print(
+        f"associated {registry['mask_count']} masks into "
+        f"{registry['instance_count']} instances"
+    )
+
+
+if __name__ == "__main__":
+    main()

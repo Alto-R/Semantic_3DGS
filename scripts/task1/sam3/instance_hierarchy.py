@@ -9,7 +9,10 @@ configured expectations are used only as QA checks.
 
 from __future__ import annotations
 
+import argparse
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -215,6 +218,176 @@ def build_scene_graph(
         "edges": edges,
         "expected_part_of_found": qa,
     }
+
+
+HIERARCHY_SOURCE = "sam3_instance_hierarchy"
+HIERARCHY_CONTRACT = "support_containment_classification_v1"
+
+
+def accepted_instances(
+    membership: Any, registry: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Group accepted membership entries into per-instance support sets."""
+
+    concept_by_id = {
+        int(instance["instance_id"]): str(instance["concept"])
+        for instance in registry["instances"]
+    }
+    counts = np.diff(membership.indptr)
+    gaussian_of_entry = np.repeat(
+        np.arange(counts.shape[0], dtype=np.int64), counts
+    )
+    accepted = membership.status == 1  # STATUS_ACCEPTED
+    gaussians = gaussian_of_entry[accepted]
+    ids = membership.instance_ids[accepted].astype(np.int64)
+    scores = membership.scores[accepted]
+
+    order = np.lexsort((gaussians, ids))
+    gaussians, ids, scores = gaussians[order], ids[order], scores[order]
+    boundaries = np.flatnonzero(np.diff(ids)) + 1
+    starts = np.concatenate([[0], boundaries])
+    stops = np.concatenate([boundaries, [ids.shape[0]]])
+
+    instances: list[dict[str, Any]] = []
+    for start, stop in zip(starts, stops):
+        if start == stop:
+            continue
+        instance_id = int(ids[start])
+        if instance_id not in concept_by_id:
+            raise ValueError(f"membership references unknown instance {instance_id}")
+        instances.append(
+            {
+                "instance_id": instance_id,
+                "concept": concept_by_id[instance_id],
+                "support": gaussians[start:stop].astype(np.uint32),
+                "scores": scores[start:stop].astype(np.float32),
+            }
+        )
+    return instances
+
+
+def _resolve_aliases(merges: list[tuple[int, int]]) -> dict[int, int]:
+    alias: dict[int, int] = {}
+    for source_id, target_id in merges:
+        while target_id in alias:
+            target_id = alias[target_id]
+        alias[source_id] = target_id
+    return alias
+
+
+def flat_instance_labels(
+    membership: Any,
+    merges: list[tuple[int, int]],
+    size_by_id: dict[int, int],
+    gaussian_count: int,
+) -> np.ndarray:
+    """Derive the one-instance-per-Gaussian visualization view.
+
+    Among accepted memberships the top score wins; score ties resolve to the
+    most specific (smallest) instance so nested labels stay visible, then to
+    the smaller id. Gaussians without accepted membership stay 0.
+    """
+
+    alias = _resolve_aliases(merges)
+    counts = np.diff(membership.indptr)
+    gaussian_of_entry = np.repeat(
+        np.arange(counts.shape[0], dtype=np.int64), counts
+    )
+    accepted = membership.status == 1
+    gaussians = gaussian_of_entry[accepted]
+    labels = np.zeros(gaussian_count, dtype=np.int32)
+    if gaussians.size == 0:
+        return labels
+    ids = membership.instance_ids[accepted].astype(np.int64)
+    for position, instance_id in enumerate(ids.tolist()):
+        if instance_id in alias:
+            ids[position] = alias[instance_id]
+    scores = membership.scores[accepted].astype(np.float64)
+    sizes = np.array([size_by_id[int(value)] for value in ids], dtype=np.int64)
+
+    order = np.lexsort((ids, sizes, -scores, gaussians))
+    gaussians, ids = gaussians[order], ids[order]
+    first = np.ones(gaussians.shape[0], dtype=bool)
+    first[1:] = gaussians[1:] != gaussians[:-1]
+    labels[gaussians[first]] = ids[first].astype(np.int32)
+    return labels
+
+
+def main(argv: list[str] | None = None) -> None:
+    from scripts.task1.common.ply_utils import read_vertex_xyz
+    from scripts.task1.sam3.associate_instances import validate_instance_registry
+    from scripts.task1.sam3.instance_membership import load_membership
+    from scripts.task1.sam3.vocabulary import load_vocabulary
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--membership", required=True, type=Path)
+    parser.add_argument("--registry", required=True, type=Path)
+    parser.add_argument("--source-ply", required=True, type=Path)
+    parser.add_argument("--vocabulary", required=True, type=Path)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--part-of-child", default=0.6, type=float)
+    parser.add_argument("--part-of-parent", default=0.3, type=float)
+    parser.add_argument("--duplicate-mutual", default=0.8, type=float)
+    args = parser.parse_args(argv)
+
+    if args.output_dir.exists():
+        raise FileExistsError(args.output_dir)
+    membership = load_membership(args.membership)
+    registry = json.loads(args.registry.read_text(encoding="utf-8"))
+    validate_instance_registry(registry)
+    vocabulary = load_vocabulary(args.vocabulary)
+    xyz = read_vertex_xyz(args.source_ply)
+    gaussian_count = membership.indptr.shape[0] - 1
+    if xyz.shape[0] != gaussian_count:
+        raise ValueError(
+            f"PLY has {xyz.shape[0]} vertices; membership covers {gaussian_count}"
+        )
+
+    thresholds = OverlapThresholds(
+        part_of_child=args.part_of_child,
+        part_of_parent=args.part_of_parent,
+        duplicate_mutual=args.duplicate_mutual,
+    )
+    instances = accepted_instances(membership, registry)
+    classification = classify_overlaps(instances, thresholds)
+    graph = build_scene_graph(
+        instances,
+        classification.part_of_edges,
+        classification.merges,
+        xyz,
+        list(vocabulary.expected_part_of),
+    )
+    size_by_id = {node["instance_id"]: node["gaussian_count"] for node in graph["nodes"]}
+    labels = flat_instance_labels(
+        membership, classification.merges, size_by_id, gaussian_count
+    )
+
+    args.output_dir.mkdir(parents=True, exist_ok=False)
+    hierarchy = {
+        "source": HIERARCHY_SOURCE,
+        "contract": HIERARCHY_CONTRACT,
+        "membership": str(args.membership),
+        "registry": str(args.registry),
+        "thresholds": {
+            "part_of_child": thresholds.part_of_child,
+            "part_of_parent": thresholds.part_of_parent,
+            "duplicate_mutual": thresholds.duplicate_mutual,
+        },
+        "merges": [list(pair) for pair in classification.merges],
+        "part_of_edges": classification.part_of_edges,
+        "noise_pairs": [list(pair) for pair in classification.noise_pairs],
+    }
+    (args.output_dir / "hierarchy.json").write_text(
+        json.dumps(hierarchy, indent=2), encoding="utf-8"
+    )
+    (args.output_dir / "scene_graph.json").write_text(
+        json.dumps(graph, indent=2), encoding="utf-8"
+    )
+    np.save(args.output_dir / "gaussian_instances.npy", labels)
+    print(
+        f"scene graph: {graph['node_count']} nodes, {graph['edge_count']} "
+        f"part_of edges, {len(classification.merges)} merges"
+    )
 
 
 def _require_acyclic(node_ids: set[int], edges: set[tuple[int, int]]) -> None:
