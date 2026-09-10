@@ -135,6 +135,33 @@ def test_validate_votes_manifest_rejects_wrong_source():
         )
 
 
+def test_validate_votes_manifest_rejects_wrong_contract():
+    with pytest.raises(ValueError):
+        validate_votes_manifest(
+            {
+                "source": VOTES_SOURCE,
+                "contract": "something_else",
+                "gaussian_count": 10,
+                "camera_count": 1,
+                "frames": [{}],
+            }
+        )
+
+
+def test_mask_support_join_rejects_duplicate_stems():
+    masks_manifest = {
+        "frames": [
+            {"file": "a.png", "masks": []},
+            {"file": "a.png", "masks": []},
+        ]
+    }
+    votes_manifest = {"frames": []}
+    with pytest.raises(ValueError, match="duplicate"):
+        associate_instances.load_mask_supports(
+            masks_manifest, votes_manifest, Path(".")
+        )
+
+
 @pytest.mark.parametrize(
     "module",
     [

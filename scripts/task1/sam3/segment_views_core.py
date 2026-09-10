@@ -88,6 +88,20 @@ def write_view_masks(path: Path, view_masks: list[ViewMask]) -> dict[str, Any]:
     }
 
 
+def stem_index(
+    frames: list[dict[str, Any]], description: str
+) -> dict[str, dict[str, Any]]:
+    """Index manifest frames by file stem, rejecting silent last-wins joins."""
+
+    index: dict[str, dict[str, Any]] = {}
+    for frame in frames:
+        stem = Path(str(frame["file"])).stem
+        if stem in index:
+            raise ValueError(f"duplicate view stem {stem!r} in {description}")
+        index[stem] = frame
+    return index
+
+
 def validate_masks_manifest(manifest: dict[str, Any]) -> None:
     if manifest.get("source") != MASKS_SOURCE:
         raise ValueError(f"unsupported masks source: {manifest.get('source')!r}")

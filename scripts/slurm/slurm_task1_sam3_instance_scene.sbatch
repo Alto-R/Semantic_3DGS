@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+#SBATCH --job-name=task1_sam3_instance
+#SBATCH --account=gpulab02
+#SBATCH --partition=titan
+#SBATCH --qos=titan
+#SBATCH --nodelist=rtx8000
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=96G
+#SBATCH --time=06:00:00
+#SBATCH --output=../../outputs/eyenavgs_task1/logs/%x-%j.out
+#SBATCH --error=../../outputs/eyenavgs_task1/logs/%x-%j.err
+
 # Per-scene SAM3 instance route: concept segmentation -> per-concept
 # FlashSplat lift -> cross-view association -> per-instance consensus ->
 # hierarchy/scene graph -> QA overlays.

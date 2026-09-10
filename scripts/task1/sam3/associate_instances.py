@@ -175,9 +175,12 @@ def load_mask_supports(
 ) -> list[MaskSupport]:
     """Join S1 mask metadata with S2 sparse supports, one MaskSupport per mask."""
 
+    from scripts.task1.sam3.segment_views_core import stem_index
+
     meta: dict[str, dict[int, tuple[str, float]]] = {}
-    for frame in masks_manifest["frames"]:
-        stem = Path(str(frame["file"])).stem
+    for stem, frame in stem_index(
+        masks_manifest["frames"], "masks manifest"
+    ).items():
         meta[stem] = {
             int(mask["mask_index"]): (str(mask["concept"]), float(mask["score"]))
             for mask in frame["masks"]

@@ -51,8 +51,9 @@ class Sam3TransformersBackend:
             .eval()
         )
 
-    def segment(self, image: np.ndarray, phrase: str) -> list[InstanceMask]:
-        # pragma: no cover - exercised only on the cluster
+    def segment(  # pragma: no cover - exercised only on the cluster
+        self, image: np.ndarray, phrase: str
+    ) -> list[InstanceMask]:
         torch = self._torch
         inputs = self._processor(images=image, text=phrase, return_tensors="pt").to(
             self._device

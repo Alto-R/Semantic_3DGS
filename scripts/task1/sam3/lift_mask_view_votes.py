@@ -23,7 +23,10 @@ from scripts.task1.sam3.lift_mask_votes_core import (
     mask_membership_votes,
     observed_gaussians,
 )
-from scripts.task1.sam3.segment_views_core import validate_masks_manifest
+from scripts.task1.sam3.segment_views_core import (
+    stem_index,
+    validate_masks_manifest,
+)
 
 
 VOTES_SOURCE = "sam3_mask_flashsplat_votes"
@@ -92,8 +95,10 @@ def main(argv: list[str] | None = None) -> None:
     validate_masks_manifest(masks_manifest)
     render_manifest = json.loads(args.render_manifest.read_text(encoding="utf-8"))
     camera_index_by_stem = {
-        Path(str(frame["file"])).stem: int(frame["camera_index"])
-        for frame in render_manifest["frames"]
+        stem: int(frame["camera_index"])
+        for stem, frame in stem_index(
+            render_manifest["frames"], "render manifest"
+        ).items()
     }
 
     vote_dir = args.output_dir / "view_votes"

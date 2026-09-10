@@ -79,6 +79,26 @@ def test_accumulate_membership_multiple_instances_sorted_per_gaussian():
     assert csr.support_counts.tolist() == [2, 1]
 
 
+def test_single_camera_support_never_upgrades_to_accepted():
+    # support == 1 with observe == 1 satisfies the strict-majority predicate
+    # but must stay SINGLE_CAMERA, mirroring the audited abstention policy.
+    events = [(np.array([0], np.uint32), np.array([1], np.uint16))]
+    csr = accumulate_membership(
+        events, np.array([1], np.uint16), gaussian_count=1
+    )
+    assert csr.status.tolist() == [STATUS_SINGLE_CAMERA]
+
+
+def test_accumulate_membership_rejects_support_exceeding_observation():
+    # two votes on a Gaussian observed once is a driver bug, not weak data
+    events = [
+        (np.array([0], np.uint32), np.array([1], np.uint16)),
+        (np.array([0], np.uint32), np.array([1], np.uint16)),
+    ]
+    with pytest.raises(RuntimeError):
+        accumulate_membership(events, np.array([1], np.uint16), gaussian_count=1)
+
+
 def test_accumulate_membership_rejects_vote_without_visibility():
     events = [(np.array([0], np.uint32), np.array([1], np.uint16))]
     observe_counts = np.array([0], np.uint16)

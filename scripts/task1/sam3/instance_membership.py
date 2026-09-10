@@ -134,6 +134,10 @@ def accumulate_membership(
     entry_observed = observed[entry_gaussians]
     if np.any(entry_observed == 0):
         raise RuntimeError("a camera voted on a Gaussian it never observed")
+    if np.any(support.astype(np.int64) > entry_observed.astype(np.int64)):
+        raise RuntimeError(
+            "an instance gathered more votes than observing cameras"
+        )
     scores = (support / entry_observed).astype(np.float32)
 
     status = np.full(support.shape, STATUS_WEAK_MAJORITY, dtype=np.uint8)
@@ -207,9 +211,12 @@ def main(argv: list[str] | None = None) -> None:
             key = (str(member["view"]), int(member["mask_index"]))
             global_id[key] = int(instance["instance_id"])
 
+    from scripts.task1.sam3.segment_views_core import stem_index
+
     concept_of: dict[str, dict[int, str]] = {}
-    for frame in masks_manifest["frames"]:
-        stem = Path(str(frame["file"])).stem
+    for stem, frame in stem_index(
+        masks_manifest["frames"], "masks manifest"
+    ).items():
         concept_of[stem] = {
             int(mask["mask_index"]): str(mask["concept"]) for mask in frame["masks"]
         }

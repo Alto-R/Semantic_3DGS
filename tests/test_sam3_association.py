@@ -76,7 +76,11 @@ def test_registry_shape_and_conflict_count():
     merged = max(instances, key=lambda inst: len(inst["members"]))
     assert merged["concept"] == "car"
     assert merged["supporting_camera_count"] == 2
-    assert {tuple(sorted(member)) for member in map(dict.items, merged["members"])}
+    assert merged["members"] == [
+        {"view": "v0", "mask_index": 0, "score": 0.9},
+        {"view": "v0", "mask_index": 1, "score": 0.9},
+        {"view": "v1", "mask_index": 0, "score": 0.9},
+    ]
     # a and c share view v0 inside one merged group -> one conflict group
     assert registry["same_view_conflict_groups"] == 1
 
