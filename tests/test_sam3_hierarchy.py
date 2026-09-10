@@ -135,6 +135,50 @@ def test_scene_graph_applies_merges():
     assert graph["nodes"][0]["gaussian_count"] == 12  # union of both supports
 
 
+def test_scene_graph_survives_merge_chains():
+    # Regression: alias chains from cascading same-concept duplicates.
+    # merges retarget earlier targets: (2,1), (1,3), (5,2) must all land on 3.
+    xyz = np.zeros((40, 3), np.float32)
+    instances = [
+        make_instance(1, "car", 0, 12),
+        make_instance(2, "car", 0, 11),
+        make_instance(3, "car", 0, 14),
+        make_instance(5, "car", 1, 12),
+    ]
+    graph = build_scene_graph(
+        instances,
+        part_of_edges=[],
+        merges=[(2, 1), (1, 3), (5, 2)],
+        xyz=xyz,
+        expected_part_of=[],
+    )
+    assert [node["instance_id"] for node in graph["nodes"]] == [3]
+    assert graph["nodes"][0]["gaussian_count"] == 14  # union of all supports
+    assert graph["merged_instance_count"] == 3
+
+
+def test_flat_labels_resolve_merge_chains():
+    from scripts.task1.sam3.instance_hierarchy import flat_instance_labels
+    from scripts.task1.sam3.instance_membership import accumulate_membership
+
+    # instance 2 wins gaussians 0..3 in both cameras; merges chain 2 -> 1 -> 3,
+    # so the flat labels must resolve to the surviving id 3.
+    events = [
+        (np.arange(4, dtype=np.uint32), np.full(4, 2, np.uint16)),
+        (np.arange(4, dtype=np.uint32), np.full(4, 2, np.uint16)),
+    ]
+    membership = accumulate_membership(
+        events, np.full(6, 2, np.uint16), gaussian_count=6
+    )
+    labels = flat_instance_labels(
+        membership,
+        merges=[(2, 1), (1, 3)],
+        size_by_id={3: 10},
+        gaussian_count=6,
+    )
+    assert labels.tolist() == [3, 3, 3, 3, 0, 0]
+
+
 def test_scene_graph_cycle_raises():
     xyz = np.zeros((20, 3), np.float32)
     a = make_instance(1, "building", 0, 10)

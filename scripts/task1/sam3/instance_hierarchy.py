@@ -180,25 +180,18 @@ def build_scene_graph(
     by_id: dict[int, dict[str, Any]] = {
         int(instance["instance_id"]): dict(instance) for instance in instances
     }
-    alias: dict[int, int] = {}
-    for source_id, target_id in merges:
-        source_id = alias.get(source_id, source_id)
-        target_id = alias.get(target_id, target_id)
-        if source_id == target_id or source_id not in by_id:
-            continue
-        by_id[target_id] = _merge_supports(by_id[target_id], by_id.pop(source_id))
-        alias[source_id] = target_id
-
-    def resolve(instance_id: int) -> int:
-        while instance_id in alias:
-            instance_id = alias[instance_id]
-        return instance_id
+    alias = _resolve_aliases(merges)
+    for source_id, target_id in alias.items():
+        if source_id in by_id and target_id in by_id:
+            by_id[target_id] = _merge_supports(
+                by_id[target_id], by_id.pop(source_id)
+            )
 
     edges: list[dict[str, Any]] = []
     seen_edges: set[tuple[int, int]] = set()
     for edge in part_of_edges:
-        child = resolve(int(edge["child"]))
-        parent = resolve(int(edge["parent"]))
+        child = alias.get(int(edge["child"]), int(edge["child"]))
+        parent = alias.get(int(edge["parent"]), int(edge["parent"]))
         if child == parent or (child, parent) in seen_edges:
             continue
         seen_edges.add((child, parent))
@@ -301,8 +294,22 @@ def accepted_instances(
 
 
 def _resolve_aliases(merges: list[tuple[int, int]]) -> dict[int, int]:
+    """Flatten merge chains so every source maps to its terminal target.
+
+    Merges may retarget earlier targets ((2,1), (1,3), (5,2) must all land on
+    3), so both ends are chain-resolved on insertion and the map is
+    path-compressed afterwards.
+    """
+
     alias: dict[int, int] = {}
     for source_id, target_id in merges:
+        while source_id in alias:
+            source_id = alias[source_id]
+        while target_id in alias:
+            target_id = alias[target_id]
+        if source_id != target_id:
+            alias[source_id] = target_id
+    for source_id, target_id in alias.items():
         while target_id in alias:
             target_id = alias[target_id]
         alias[source_id] = target_id
@@ -417,3 +424,7 @@ def main(argv: list[str] | None = None) -> None:
         f"scene graph: {graph['node_count']} nodes, {graph['edge_count']} "
         f"part_of edges, {len(classification.merges)} merges"
     )
+
+
+if __name__ == "__main__":
+    main()

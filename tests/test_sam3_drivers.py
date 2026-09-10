@@ -4,6 +4,7 @@ torch or downloads a model."""
 
 import json
 import struct
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -132,6 +133,33 @@ def test_validate_votes_manifest_rejects_wrong_source():
                 "frames": [{}],
             }
         )
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        "scripts.task1.sam3.sam3_segment_views",
+        "scripts.task1.sam3.lift_mask_view_votes",
+        "scripts.task1.sam3.associate_instances",
+        "scripts.task1.sam3.instance_membership",
+        "scripts.task1.sam3.instance_hierarchy",
+        "scripts.task1.sam3.render_instance_overlays",
+    ],
+)
+def test_driver_modules_are_executable(module):
+    # The sbatch invokes every stage as `python -m <module>`; a missing
+    # __main__ guard makes the stage a silent no-op with exit status 0.
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-m", module, "--help"],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parents[1]),
+    )
+    assert result.returncode == 0
+    assert "usage:" in result.stdout
 
 
 def test_overlay_driver_writes_views_and_contact_sheet(tmp_path):

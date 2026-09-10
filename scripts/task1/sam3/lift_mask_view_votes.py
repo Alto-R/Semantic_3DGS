@@ -58,19 +58,6 @@ def group_masks_by_concept(
 
 
 def main(argv: list[str] | None = None) -> None:
-    import torch
-
-    from scripts.task1.common.flashsplat_cameras import (
-        background_tensor,
-        default_pipeline,
-        load_cameras,
-        load_flashsplat,
-        load_gaussians,
-        make_camera,
-        point_cloud_path,
-        render_flashsplat,
-    )
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True, type=Path)
     parser.add_argument("--masks-manifest", required=True, type=Path)
@@ -85,6 +72,21 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--white-background", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
+
+    # Heavy cluster-only imports come after argument parsing so --help and
+    # argument errors work in any environment.
+    import torch
+
+    from scripts.task1.common.flashsplat_cameras import (
+        background_tensor,
+        default_pipeline,
+        load_cameras,
+        load_flashsplat,
+        load_gaussians,
+        make_camera,
+        point_cloud_path,
+        render_flashsplat,
+    )
 
     masks_manifest = json.loads(args.masks_manifest.read_text(encoding="utf-8"))
     validate_masks_manifest(masks_manifest)
