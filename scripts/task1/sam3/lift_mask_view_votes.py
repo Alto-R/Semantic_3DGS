@@ -22,6 +22,7 @@ from scripts.task1.sam3.lift_mask_votes_core import (
     concept_index_map,
     mask_membership_votes,
     observed_gaussians,
+    verify_pass_visibility,
 )
 from scripts.task1.sam3.segment_views_core import (
     stem_index,
@@ -154,7 +155,12 @@ def main(argv: list[str] | None = None) -> None:
                     gaussian_count,
                 )
                 if visibility is None:
+                    # Total support summed over all rows is the Gaussian's
+                    # rendered alpha mass, independent of the gt_mask; every
+                    # later pass of this view must reproduce it exactly.
                     visibility = used_count.sum(axis=0, dtype=np.float32)
+                else:
+                    verify_pass_visibility(used_count, visibility)
                 indices, mask_ids, weights = mask_membership_votes(
                     used_count,
                     visibility,

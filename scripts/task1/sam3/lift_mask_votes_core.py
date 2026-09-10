@@ -91,6 +91,28 @@ def mask_membership_votes(
     )
 
 
+def verify_pass_visibility(
+    used_count: np.ndarray, visibility: np.ndarray
+) -> None:
+    """Check the cross-pass invariant behind the shared vote denominator.
+
+    FlashSplat's total per-Gaussian support (the sum over all index rows,
+    sentinel included) is the Gaussian's rendered alpha mass and therefore
+    independent of the gt_mask labeling. Every concept pass of one view must
+    reproduce the visibility taken from the first pass; a mismatch means the
+    membership denominators are wrong and must fail loudly.
+    """
+
+    totals = np.asarray(used_count, dtype=np.float32).sum(axis=0)
+    expected = np.asarray(visibility, dtype=np.float32)
+    if totals.shape != expected.shape or not np.allclose(
+        totals, expected, rtol=1e-4, atol=1e-6
+    ):
+        raise RuntimeError(
+            "concept pass visibility deviates from the view's first pass"
+        )
+
+
 def observed_gaussians(visibility: np.ndarray) -> np.ndarray:
     """Indices of Gaussians with any rendered mass in this view."""
 

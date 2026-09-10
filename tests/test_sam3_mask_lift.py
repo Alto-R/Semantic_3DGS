@@ -7,7 +7,16 @@ from scripts.task1.sam3.lift_mask_votes_core import (
     concept_index_map,
     mask_membership_votes,
     observed_gaussians,
+    verify_pass_visibility,
 )
+
+
+def test_verify_pass_visibility_accepts_matching_and_rejects_drift():
+    used = np.array([[0.5, 1.0], [0.5, 0.0]], np.float32)
+    visibility = used.sum(axis=0)
+    verify_pass_visibility(used, visibility)  # must not raise
+    with pytest.raises(RuntimeError):
+        verify_pass_visibility(used, visibility + 0.1)
 
 
 def test_concept_index_map_scores_break_overlaps():
