@@ -57,6 +57,52 @@ def test_same_view_pairs_do_not_union_directly():
     assert len(associate_masks([a, b], threshold=0.1)) == 2
 
 
+def test_associate_masks_matches_bruteforce_reference():
+    rng = np.random.default_rng(7)
+    masks = []
+    for view in range(6):
+        for mask_index in range(4):
+            size = int(rng.integers(3, 30))
+            indices = np.sort(
+                rng.choice(200, size=size, replace=False)
+            ).astype(np.uint32)
+            weights = (rng.random(size) + 0.1).astype(np.float32)
+            masks.append(
+                MaskSupport(
+                    view=f"v{view}",
+                    mask_index=mask_index,
+                    concept="car",
+                    score=0.9,
+                    indices=indices,
+                    weights=weights,
+                )
+            )
+    threshold = 0.08
+    groups = associate_masks(masks, threshold)
+
+    parent = list(range(len(masks)))
+
+    def find(node):
+        while parent[node] != node:
+            node = parent[node]
+        return node
+
+    for i in range(len(masks)):
+        for j in range(i + 1, len(masks)):
+            if masks[i].view == masks[j].view:
+                continue
+            if weighted_jaccard(masks[i], masks[j]) >= threshold:
+                parent[find(j)] = find(i)
+    expected: dict = {}
+    for i in range(len(masks)):
+        expected.setdefault(find(i), []).append(i)
+
+    assert sorted(sorted(g) for g in groups) == sorted(
+        sorted(g) for g in expected.values()
+    )
+    assert 1 < len(groups) < len(masks)  # the case is neither trivial nor total
+
+
 def test_registry_shape_and_conflict_count():
     a = sup("v0", 0, "car", [(i, 1.0) for i in range(10)])
     b = sup("v1", 0, "car", [(i, 1.0) for i in range(10)])

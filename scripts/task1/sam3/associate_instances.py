@@ -83,16 +83,13 @@ def associate_masks(
         by_concept.setdefault(mask.concept, []).append(position)
 
     for positions in by_concept.values():
-        inverted: dict[int, list[int]] = {}
-        for position in positions:
-            for gaussian in masks[position].indices.tolist():
-                inverted.setdefault(gaussian, []).append(position)
-        candidate_pairs: set[tuple[int, int]] = set()
-        for bucket in inverted.values():
-            for left, right in combinations(bucket, 2):
-                if masks[left].view != masks[right].view:
-                    candidate_pairs.add((left, right))
-        for left, right in sorted(candidate_pairs):
+        # Candidate pairs are ranked by intersection count so heavily
+        # overlapping masks union first; pairs already connected are then
+        # skipped without computing their Jaccard. Neither ranking nor
+        # skipping can change the final connectivity.
+        for left, right in _candidate_pairs(masks, positions):
+            if union.find(left) == union.find(right):
+                continue
             if weighted_jaccard(masks[left], masks[right]) >= threshold:
                 union.union(left, right)
 
@@ -100,6 +97,60 @@ def associate_masks(
     for position in range(len(masks)):
         groups.setdefault(union.find(position), []).append(position)
     return [sorted(group) for group in groups.values()]
+
+
+def _candidate_pairs(
+    masks: list[MaskSupport], positions: list[int]
+) -> list[tuple[int, int]]:
+    """Cross-view mask pairs sharing support, ranked by intersection count.
+
+    Stuff concepts produce hundreds of masks with hundreds of thousands of
+    supporting Gaussians each; the pair search runs as a sparse matrix
+    product so its cost stays in C. Falls back to a pure-Python inverted
+    index when scipy is unavailable.
+    """
+
+    try:
+        from scipy import sparse
+    except ImportError:  # pragma: no cover - scipy present in project envs
+        return _candidate_pairs_python(masks, positions)
+
+    lengths = np.array([masks[p].indices.size for p in positions], np.int64)
+    if lengths.sum() == 0:
+        return []
+    stacked = np.concatenate([masks[p].indices for p in positions])
+    _, compact = np.unique(stacked, return_inverse=True)
+    indptr = np.zeros(len(positions) + 1, dtype=np.int64)
+    np.cumsum(lengths, out=indptr[1:])
+    matrix = sparse.csr_matrix(
+        (np.ones(stacked.size, np.int64), compact, indptr),
+        shape=(len(positions), int(compact.max()) + 1),
+    )
+    overlap = (matrix @ matrix.T).tocoo()
+
+    views = np.array([masks[p].view for p in positions])
+    keep = (overlap.row < overlap.col) & (views[overlap.row] != views[overlap.col])
+    rows, cols, counts = overlap.row[keep], overlap.col[keep], overlap.data[keep]
+    order = np.lexsort((cols, rows, -counts))
+    return [
+        (positions[int(row)], positions[int(col)])
+        for row, col in zip(rows[order], cols[order])
+    ]
+
+
+def _candidate_pairs_python(
+    masks: list[MaskSupport], positions: list[int]
+) -> list[tuple[int, int]]:
+    inverted: dict[int, list[int]] = {}
+    for position in positions:
+        for gaussian in masks[position].indices.tolist():
+            inverted.setdefault(gaussian, []).append(position)
+    candidate_pairs: set[tuple[int, int]] = set()
+    for bucket in inverted.values():
+        for left, right in combinations(bucket, 2):
+            if masks[left].view != masks[right].view:
+                candidate_pairs.add((left, right))
+    return sorted(candidate_pairs)
 
 
 def build_instance_registry(
