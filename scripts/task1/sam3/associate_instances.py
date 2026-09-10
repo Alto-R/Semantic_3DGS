@@ -241,8 +241,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     groups = associate_masks(supports, args.threshold)
     registry = build_instance_registry(supports, groups, args.threshold)
+    from scripts.task1.sam3.provenance import sha256_file
+
     registry["masks_manifest"] = str(args.masks_manifest)
     registry["votes_manifest"] = str(args.votes_manifest)
+    registry["masks_manifest_sha256"] = sha256_file(args.masks_manifest)
+    registry["votes_manifest_sha256"] = sha256_file(args.votes_manifest)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(registry, indent=2), encoding="utf-8")
     print(

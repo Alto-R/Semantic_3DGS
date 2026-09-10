@@ -366,6 +366,53 @@ def test_stage_reruns_require_overwrite(tmp_path):
     render_instance_overlays.main([*qa, "--overwrite"])
 
 
+def test_provenance_hashes_recorded(tmp_path):
+    from scripts.task1.sam3.provenance import sha256_file
+
+    registry_path, membership_dir, graph_dir = run_mini_pipeline(tmp_path)
+    masks_manifest = tmp_path / "s1" / "sam3_masks_manifest.json"
+    votes_manifest = tmp_path / "s2" / "sam3_vote_manifest.json"
+
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert registry["masks_manifest_sha256"] == sha256_file(masks_manifest)
+    assert registry["votes_manifest_sha256"] == sha256_file(votes_manifest)
+
+    summary = json.loads(
+        (membership_dir / "membership_summary.json").read_text(encoding="utf-8")
+    )
+    assert summary["masks_manifest_sha256"] == sha256_file(masks_manifest)
+    assert summary["votes_manifest_sha256"] == sha256_file(votes_manifest)
+    assert summary["registry_sha256"] == sha256_file(registry_path)
+
+    hierarchy = json.loads(
+        (graph_dir / "hierarchy.json").read_text(encoding="utf-8")
+    )
+    assert hierarchy["membership_sha256"] == sha256_file(
+        membership_dir / "membership.npz"
+    )
+    assert hierarchy["registry_sha256"] == sha256_file(registry_path)
+
+
+def test_membership_rejects_tampered_upstream(tmp_path):
+    registry_path, membership_dir, _ = run_mini_pipeline(tmp_path)
+    masks_manifest = tmp_path / "s1" / "sam3_masks_manifest.json"
+    votes_manifest = tmp_path / "s2" / "sam3_vote_manifest.json"
+    # regenerating an upstream artifact after association must be detected
+    votes_manifest.write_text(
+        votes_manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match="changed"):
+        instance_membership.main(
+            [
+                "--masks-manifest", str(masks_manifest),
+                "--votes-manifest", str(votes_manifest),
+                "--registry", str(registry_path),
+                "--output-dir", str(membership_dir),
+                "--overwrite",
+            ]
+        )
+
+
 def test_mini_pipeline_registry(tmp_path):
     registry_path, _, _ = run_mini_pipeline(tmp_path)
     registry = json.loads(registry_path.read_text(encoding="utf-8"))

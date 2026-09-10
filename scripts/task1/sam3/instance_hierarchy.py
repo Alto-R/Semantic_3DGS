@@ -353,6 +353,7 @@ def main(argv: list[str] | None = None) -> None:
     from scripts.task1.common.ply_utils import read_vertex_xyz
     from scripts.task1.sam3.associate_instances import validate_instance_registry
     from scripts.task1.sam3.instance_membership import load_membership
+    from scripts.task1.sam3.provenance import sha256_file
     from scripts.task1.sam3.vocabulary import load_vocabulary
 
     parser = argparse.ArgumentParser()
@@ -405,6 +406,8 @@ def main(argv: list[str] | None = None) -> None:
         "contract": HIERARCHY_CONTRACT,
         "membership": str(args.membership),
         "registry": str(args.registry),
+        "membership_sha256": sha256_file(args.membership),
+        "registry_sha256": sha256_file(args.registry),
         "thresholds": {
             "part_of_child": thresholds.part_of_child,
             "part_of_parent": thresholds.part_of_parent,

@@ -205,6 +205,19 @@ def main(argv: list[str] | None = None) -> None:
     registry = json.loads(args.registry.read_text(encoding="utf-8"))
     validate_instance_registry(registry)
 
+    from scripts.task1.sam3.provenance import sha256_file
+
+    masks_sha256 = sha256_file(args.masks_manifest)
+    votes_sha256 = sha256_file(args.votes_manifest)
+    for recorded, actual, name in (
+        (registry.get("masks_manifest_sha256"), masks_sha256, "masks manifest"),
+        (registry.get("votes_manifest_sha256"), votes_sha256, "votes manifest"),
+    ):
+        if recorded != actual:
+            raise RuntimeError(
+                f"the {name} changed since instance association"
+            )
+
     gaussian_count = int(votes_manifest["gaussian_count"])
     global_id: dict[tuple[str, int], int] = {}
     for instance in registry["instances"]:
@@ -275,6 +288,9 @@ def main(argv: list[str] | None = None) -> None:
         "masks_manifest": str(args.masks_manifest),
         "votes_manifest": str(args.votes_manifest),
         "registry": str(args.registry),
+        "masks_manifest_sha256": masks_sha256,
+        "votes_manifest_sha256": votes_sha256,
+        "registry_sha256": sha256_file(args.registry),
         "gaussian_count": gaussian_count,
         "camera_count": int(votes_manifest["camera_count"]),
         "min_weight": args.min_weight,
