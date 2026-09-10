@@ -191,6 +191,19 @@ def element_stride(element: PlyElement) -> int:
     return stride
 
 
+def read_vertex_xyz(path: Path) -> np.ndarray:
+    """Read vertex positions from a binary PLY as an (N, 3) float32 array."""
+    _, data = vertex_data_memmap(path)
+    names = data.dtype.names or ()
+    for axis in ("x", "y", "z"):
+        if axis not in names:
+            raise ValueError(f"{path} vertex element is missing property {axis}")
+    xyz = np.empty((data.shape[0], 3), dtype=np.float32)
+    for column, axis in enumerate(("x", "y", "z")):
+        xyz[:, column] = data[axis]
+    return xyz
+
+
 def vertex_data_memmap(path: Path, mode: str = "r") -> tuple[PlyHeader, np.memmap]:
     """Memory-map scalar vertex properties from a binary PLY."""
     header = read_ply_header(path)
