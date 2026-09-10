@@ -9,6 +9,8 @@ no sum-to-one constraint across concepts.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 
@@ -35,6 +37,14 @@ def concept_index_map(mask_stack: np.ndarray, scores: np.ndarray) -> np.ndarray:
         index_map[wins] = np.float32(row + 1)
         best_score[wins] = score_values[row]
     return index_map
+
+
+def concat_or_empty(parts: list[np.ndarray], dtype: Any) -> np.ndarray:
+    """Join sparse vote columns, yielding a typed empty array when there are none."""
+
+    if not parts:
+        return np.zeros(0, dtype=dtype)
+    return np.concatenate(parts)
 
 
 def mask_membership_votes(
@@ -74,16 +84,10 @@ def mask_membership_votes(
         all_mask_ids.append(np.full(indices.shape, mask_index, dtype=np.uint16))
         all_weights.append(weights)
 
-    if not all_indices:
-        return (
-            np.zeros((0,), dtype=np.uint32),
-            np.zeros((0,), dtype=np.uint16),
-            np.zeros((0,), dtype=np.float32),
-        )
     return (
-        np.concatenate(all_indices),
-        np.concatenate(all_mask_ids),
-        np.concatenate(all_weights),
+        concat_or_empty(all_indices, np.uint32),
+        concat_or_empty(all_mask_ids, np.uint16),
+        concat_or_empty(all_weights, np.float32),
     )
 
 

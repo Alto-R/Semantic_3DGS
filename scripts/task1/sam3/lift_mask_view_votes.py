@@ -18,6 +18,7 @@ import numpy as np
 
 from scripts.task1.dinov3.lift_dense_view_votes import flashsplat_class_rows
 from scripts.task1.sam3.lift_mask_votes_core import (
+    concat_or_empty,
     concept_index_map,
     mask_membership_votes,
     observed_gaussians,
@@ -119,12 +120,12 @@ def main(argv: list[str] | None = None) -> None:
             with np.load(args.masks_dir / str(frame["mask_file"])) as data:
                 mask_stack = data["mask_stack"]
 
+            concept_groups = group_masks_by_concept(frame["masks"])
             visibility: np.ndarray | None = None
             all_indices: list[np.ndarray] = []
             all_mask_ids: list[np.ndarray] = []
             all_weights: list[np.ndarray] = []
-            concept_passes = 0
-            for concept, masks in group_masks_by_concept(frame["masks"]).items():
+            for masks in concept_groups.values():
                 rows = [int(mask["mask_index"]) for mask in masks]
                 scores = np.array([float(mask["score"]) for mask in masks])
                 index_map = concept_index_map(mask_stack[rows], scores)
@@ -155,7 +156,6 @@ def main(argv: list[str] | None = None) -> None:
                 all_indices.append(indices)
                 all_mask_ids.append(mask_ids)
                 all_weights.append(weights)
-                concept_passes += 1
                 del render_pkg, gt_mask
                 torch.cuda.empty_cache()
 
@@ -167,21 +167,9 @@ def main(argv: list[str] | None = None) -> None:
                 raise FileExistsError(vote_path)
             np.savez_compressed(
                 vote_path,
-                indices=(
-                    np.concatenate(all_indices)
-                    if all_indices
-                    else np.zeros(0, np.uint32)
-                ),
-                mask_ids=(
-                    np.concatenate(all_mask_ids)
-                    if all_mask_ids
-                    else np.zeros(0, np.uint16)
-                ),
-                weights=(
-                    np.concatenate(all_weights)
-                    if all_weights
-                    else np.zeros(0, np.float32)
-                ),
+                indices=concat_or_empty(all_indices, np.uint32),
+                mask_ids=concat_or_empty(all_mask_ids, np.uint16),
+                weights=concat_or_empty(all_weights, np.float32),
                 observed=observed,
             )
             frames.append(
@@ -189,11 +177,11 @@ def main(argv: list[str] | None = None) -> None:
                     "file": str(frame["file"]),
                     "camera_index": camera_index_by_stem[stem],
                     "vote_file": vote_path.relative_to(args.output_dir).as_posix(),
-                    "concept_passes": concept_passes,
+                    "concept_passes": len(concept_groups),
                     "observed_gaussian_count": int(observed.shape[0]),
                 }
             )
-            print(f"lifted {stem}: {concept_passes} concept passes")
+            print(f"lifted {stem}: {len(concept_groups)} concept passes")
 
     manifest = {
         "source": VOTES_SOURCE,

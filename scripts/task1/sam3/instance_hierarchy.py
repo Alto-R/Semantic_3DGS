@@ -17,7 +17,11 @@ from typing import Any
 
 import numpy as np
 
+from scripts.task1.sam3.instance_membership import STATUS_ACCEPTED
 
+
+HIERARCHY_SOURCE = "sam3_instance_hierarchy"
+HIERARCHY_CONTRACT = "support_containment_classification_v1"
 SCENE_GRAPH_SOURCE = "sam3_instance_scene_graph"
 SCENE_GRAPH_CONTRACT = "membership_derived_nodes_part_of_edges_v1"
 
@@ -65,8 +69,9 @@ def classify_overlaps(
             pair = tuple(sorted((int(left["instance_id"]), int(right["instance_id"]))))
 
             if left["concept"] == right["concept"]:
-                if c_left >= thresholds.duplicate_mutual and (
-                    c_right >= thresholds.duplicate_mutual
+                if (
+                    c_left >= thresholds.duplicate_mutual
+                    and c_right >= thresholds.duplicate_mutual
                 ):
                     smaller, larger = sorted(
                         (left, right),
@@ -82,13 +87,15 @@ def classify_overlaps(
                     noise.append(pair)
                 continue
 
-            if c_left >= thresholds.part_of_child and (
-                c_right <= thresholds.part_of_parent
+            if (
+                c_left >= thresholds.part_of_child
+                and c_right <= thresholds.part_of_parent
             ):
                 child, parent = left, right
                 child_in_parent, parent_in_child = c_left, c_right
-            elif c_right >= thresholds.part_of_child and (
-                c_left <= thresholds.part_of_parent
+            elif (
+                c_right >= thresholds.part_of_child
+                and c_left <= thresholds.part_of_parent
             ):
                 child, parent = right, left
                 child_in_parent, parent_in_child = c_right, c_left
@@ -138,6 +145,27 @@ def _merge_supports(
     merged["support"] = indices[first]
     merged["scores"] = scores[first]
     return merged
+
+
+def _require_acyclic(node_ids: set[int], edges: set[tuple[int, int]]) -> None:
+    """Kahn's algorithm over the deduplicated child -> parent edge set."""
+
+    outgoing: dict[int, set[int]] = {node: set() for node in node_ids}
+    incoming_count: dict[int, int] = {node: 0 for node in node_ids}
+    for child, parent in edges:
+        outgoing[child].add(parent)
+        incoming_count[parent] += 1
+    frontier = [node for node in node_ids if incoming_count[node] == 0]
+    visited = 0
+    while frontier:
+        node = frontier.pop()
+        visited += 1
+        for parent in outgoing[node]:
+            incoming_count[parent] -= 1
+            if incoming_count[parent] == 0:
+                frontier.append(parent)
+    if visited != len(node_ids):
+        raise ValueError("part_of cycle detected in the instance hierarchy")
 
 
 def build_scene_graph(
@@ -220,8 +248,21 @@ def build_scene_graph(
     }
 
 
-HIERARCHY_SOURCE = "sam3_instance_hierarchy"
-HIERARCHY_CONTRACT = "support_containment_classification_v1"
+def _accepted_entries(
+    membership: Any,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Expand accepted CSR entries into gaussian, instance id, score columns."""
+
+    counts = np.diff(membership.indptr)
+    gaussian_of_entry = np.repeat(
+        np.arange(counts.shape[0], dtype=np.int64), counts
+    )
+    accepted = membership.status == STATUS_ACCEPTED
+    return (
+        gaussian_of_entry[accepted],
+        membership.instance_ids[accepted].astype(np.int64),
+        membership.scores[accepted],
+    )
 
 
 def accepted_instances(
@@ -233,14 +274,7 @@ def accepted_instances(
         int(instance["instance_id"]): str(instance["concept"])
         for instance in registry["instances"]
     }
-    counts = np.diff(membership.indptr)
-    gaussian_of_entry = np.repeat(
-        np.arange(counts.shape[0], dtype=np.int64), counts
-    )
-    accepted = membership.status == 1  # STATUS_ACCEPTED
-    gaussians = gaussian_of_entry[accepted]
-    ids = membership.instance_ids[accepted].astype(np.int64)
-    scores = membership.scores[accepted]
+    gaussians, ids, scores = _accepted_entries(membership)
 
     order = np.lexsort((gaussians, ids))
     gaussians, ids, scores = gaussians[order], ids[order], scores[order]
@@ -289,23 +323,18 @@ def flat_instance_labels(
     """
 
     alias = _resolve_aliases(merges)
-    counts = np.diff(membership.indptr)
-    gaussian_of_entry = np.repeat(
-        np.arange(counts.shape[0], dtype=np.int64), counts
-    )
-    accepted = membership.status == 1
-    gaussians = gaussian_of_entry[accepted]
+    gaussians, ids, scores = _accepted_entries(membership)
     labels = np.zeros(gaussian_count, dtype=np.int32)
     if gaussians.size == 0:
         return labels
-    ids = membership.instance_ids[accepted].astype(np.int64)
-    for position, instance_id in enumerate(ids.tolist()):
-        if instance_id in alias:
-            ids[position] = alias[instance_id]
-    scores = membership.scores[accepted].astype(np.float64)
-    sizes = np.array([size_by_id[int(value)] for value in ids], dtype=np.int64)
+    ids = np.array(
+        [alias.get(value, value) for value in ids.tolist()], dtype=np.int64
+    )
+    sizes = np.array(
+        [size_by_id[value] for value in ids.tolist()], dtype=np.int64
+    )
 
-    order = np.lexsort((ids, sizes, -scores, gaussians))
+    order = np.lexsort((ids, sizes, -scores.astype(np.float64), gaussians))
     gaussians, ids = gaussians[order], ids[order]
     first = np.ones(gaussians.shape[0], dtype=bool)
     first[1:] = gaussians[1:] != gaussians[:-1]
@@ -388,23 +417,3 @@ def main(argv: list[str] | None = None) -> None:
         f"scene graph: {graph['node_count']} nodes, {graph['edge_count']} "
         f"part_of edges, {len(classification.merges)} merges"
     )
-
-
-def _require_acyclic(node_ids: set[int], edges: set[tuple[int, int]]) -> None:
-    outgoing: dict[int, set[int]] = {node: set() for node in node_ids}
-    incoming_count: dict[int, int] = {node: 0 for node in node_ids}
-    for child, parent in edges:
-        if parent not in outgoing[child]:
-            outgoing[child].add(parent)
-            incoming_count[parent] += 1
-    frontier = [node for node in node_ids if incoming_count[node] == 0]
-    visited = 0
-    while frontier:
-        node = frontier.pop()
-        visited += 1
-        for parent in outgoing[node]:
-            incoming_count[parent] -= 1
-            if incoming_count[parent] == 0:
-                frontier.append(parent)
-    if visited != len(node_ids):
-        raise ValueError("part_of cycle detected in the instance hierarchy")

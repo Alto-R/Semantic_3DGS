@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -88,10 +89,8 @@ def associate_masks(
                 inverted.setdefault(gaussian, []).append(position)
         candidate_pairs: set[tuple[int, int]] = set()
         for bucket in inverted.values():
-            for i, left in enumerate(bucket):
-                for right in bucket[i + 1 :]:
-                    if masks[left].view == masks[right].view:
-                        continue
+            for left, right in combinations(bucket, 2):
+                if masks[left].view != masks[right].view:
                     candidate_pairs.add((left, right))
         for left, right in sorted(candidate_pairs):
             if weighted_jaccard(masks[left], masks[right]) >= threshold:
@@ -124,7 +123,8 @@ def build_instance_registry(
     conflict_groups = 0
     for instance_id, group in enumerate(ordered, start=1):
         views = [masks[position].view for position in group]
-        if len(set(views)) != len(views):
+        distinct_views = set(views)
+        if len(distinct_views) != len(views):
             conflict_groups += 1
         members = sorted(
             (
@@ -142,7 +142,7 @@ def build_instance_registry(
                 "instance_id": instance_id,
                 "concept": masks[group[0]].concept,
                 "members": members,
-                "supporting_camera_count": len(set(views)),
+                "supporting_camera_count": len(distinct_views),
             }
         )
 
@@ -186,23 +186,25 @@ def load_mask_supports(
     supports: list[MaskSupport] = []
     for frame in votes_manifest["frames"]:
         stem = Path(str(frame["file"])).stem
-        if stem not in meta:
+        frame_meta = meta.get(stem)
+        if frame_meta is None:
             raise ValueError(f"masks manifest does not know view {stem}")
         with np.load(votes_dir / str(frame["vote_file"]), allow_pickle=False) as data:
             indices = data["indices"]
             mask_ids = data["mask_ids"]
             weights = data["weights"]
-        for mask_index in np.unique(mask_ids):
-            if int(mask_index) not in meta[stem]:
+        for raw_index in np.unique(mask_ids):
+            mask_index = int(raw_index)
+            if mask_index not in frame_meta:
                 raise ValueError(
-                    f"view {stem} vote references unknown mask {int(mask_index)}"
+                    f"view {stem} vote references unknown mask {mask_index}"
                 )
-            concept, score = meta[stem][int(mask_index)]
-            rows = mask_ids == mask_index
+            concept, score = frame_meta[mask_index]
+            rows = mask_ids == raw_index
             supports.append(
                 MaskSupport(
                     view=stem,
-                    mask_index=int(mask_index),
+                    mask_index=mask_index,
                     concept=concept,
                     score=score,
                     indices=indices[rows].astype(np.uint32),

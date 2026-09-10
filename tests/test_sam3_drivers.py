@@ -45,6 +45,8 @@ BOXES = {
     "building": [(0, 8, 0, 8, 0.8)],
 }
 
+VIEW_STEMS = ("00000_cam0001", "00001_cam0002")
+
 
 def write_json(path, payload):
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -54,8 +56,8 @@ def write_json(path, payload):
 def make_s1_inputs(tmp_path):
     rgb_dir = tmp_path / "rgb"
     rgb_dir.mkdir(exist_ok=True)
-    for name in ("00000_cam0001", "00001_cam0002"):
-        Image.new("RGB", (8, 8), (90, 90, 90)).save(rgb_dir / f"{name}.png")
+    for stem in VIEW_STEMS:
+        Image.new("RGB", (8, 8), (90, 90, 90)).save(rgb_dir / f"{stem}.png")
     vocab_path = write_json(tmp_path / "vocab.json", VOCAB)
     boxes_path = write_json(tmp_path / "boxes.json", BOXES)
     return rgb_dir, vocab_path, boxes_path
@@ -162,43 +164,43 @@ def synth_votes(tmp_path, masks_manifest_path):
     building mask 2 -> 0..19; every view observes every gaussian.
     """
 
+    indices = np.concatenate(
+        [
+            np.arange(0, 5, dtype=np.uint32),
+            np.arange(8, 13, dtype=np.uint32),
+            np.arange(0, 20, dtype=np.uint32),
+        ]
+    )
+    mask_ids = np.concatenate(
+        [
+            np.full(5, 0, np.uint16),
+            np.full(5, 1, np.uint16),
+            np.full(20, 2, np.uint16),
+        ]
+    )
+    weights = np.concatenate(
+        [
+            np.full(5, 0.9, np.float32),
+            np.full(5, 0.9, np.float32),
+            np.full(20, 0.8, np.float32),
+        ]
+    )
+    observed = np.arange(GAUSSIAN_COUNT, dtype=np.uint32)
+
     vote_dir = tmp_path / "s2" / "view_votes"
     vote_dir.mkdir(parents=True)
-    frames = []
-    for stem in ("00000_cam0001", "00001_cam0002"):
-        indices = np.concatenate(
-            [
-                np.arange(0, 5, dtype=np.uint32),
-                np.arange(8, 13, dtype=np.uint32),
-                np.arange(0, 20, dtype=np.uint32),
-            ]
-        )
-        mask_ids = np.concatenate(
-            [
-                np.full(5, 0, np.uint16),
-                np.full(5, 1, np.uint16),
-                np.full(20, 2, np.uint16),
-            ]
-        )
-        weights = np.concatenate(
-            [
-                np.full(5, 0.9, np.float32),
-                np.full(5, 0.9, np.float32),
-                np.full(20, 0.8, np.float32),
-            ]
-        )
-        observed = np.arange(GAUSSIAN_COUNT, dtype=np.uint32)
-        vote_path = vote_dir / f"{stem}.npz"
+    for stem in VIEW_STEMS:
         np.savez_compressed(
-            vote_path,
+            vote_dir / f"{stem}.npz",
             indices=indices,
             mask_ids=mask_ids,
             weights=weights,
             observed=observed,
         )
-        frames.append(
-            {"file": f"{stem}.png", "vote_file": f"view_votes/{stem}.npz"}
-        )
+    frames = [
+        {"file": f"{stem}.png", "vote_file": f"view_votes/{stem}.npz"}
+        for stem in VIEW_STEMS
+    ]
     manifest = {
         "source": VOTES_SOURCE,
         "contract": VOTES_CONTRACT,

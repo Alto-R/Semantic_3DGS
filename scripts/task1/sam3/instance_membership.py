@@ -17,6 +17,9 @@ from typing import Any
 import numpy as np
 
 
+MEMBERSHIP_SOURCE = "sam3_instance_membership"
+MEMBERSHIP_CONTRACT = "per_instance_equal_camera_strict_majority_v1"
+
 STATUS_ACCEPTED = 1
 STATUS_SINGLE_CAMERA = 2
 STATUS_WEAK_MAJORITY = 3
@@ -75,13 +78,17 @@ def view_concept_winners(
     winner_m = sorted_m[first_pos]
     winner_w = sorted_w[first_pos]
 
+    # A winner ties when the row right after it holds the same Gaussian at the
+    # same weight. Clamping keeps the final winner's lookup in range; the
+    # has_runner_up mask discards that borrowed comparison.
     next_pos = first_pos + 1
-    tie = np.zeros(first_pos.size, dtype=bool)
-    has_next = next_pos < sorted_g.size
-    candidates = np.flatnonzero(has_next)
-    same_gaussian = sorted_g[next_pos[candidates]] == winner_g[candidates]
-    runners_up = candidates[same_gaussian]
-    tie[runners_up] = sorted_w[next_pos[runners_up]] == winner_w[runners_up]
+    has_runner_up = next_pos < sorted_g.size
+    runner_up = np.minimum(next_pos, sorted_g.size - 1)
+    tie = (
+        has_runner_up
+        & (sorted_g[runner_up] == winner_g)
+        & (sorted_w[runner_up] == winner_w)
+    )
 
     keep = (winner_w >= np.float32(min_weight)) & ~tie
     return winner_g[keep].astype(np.uint32), winner_m[keep].astype(np.uint16)
@@ -171,10 +178,6 @@ def load_membership(path: Path) -> MembershipCSR:
         )
 
 
-MEMBERSHIP_SOURCE = "sam3_instance_membership"
-MEMBERSHIP_CONTRACT = "per_instance_equal_camera_strict_majority_v1"
-
-
 def main(argv: list[str] | None = None) -> None:
     from scripts.task1.sam3.associate_instances import validate_instance_registry
     from scripts.task1.sam3.lift_mask_view_votes import validate_votes_manifest
@@ -226,15 +229,11 @@ def main(argv: list[str] | None = None) -> None:
         frame_concepts = concept_of.get(stem)
         if frame_concepts is None:
             raise ValueError(f"masks manifest does not know view {stem}")
-        concept_rows: dict[str, np.ndarray] = {}
+        masks_by_concept: dict[str, list[int]] = {}
         for mask_index, concept in frame_concepts.items():
-            rows = mask_ids == np.uint16(mask_index)
-            if rows.any():
-                existing = concept_rows.get(concept)
-                concept_rows[concept] = (
-                    rows if existing is None else existing | rows
-                )
-        for concept, rows in concept_rows.items():
+            masks_by_concept.setdefault(concept, []).append(mask_index)
+        for concept_masks in masks_by_concept.values():
+            rows = np.isin(mask_ids, np.array(concept_masks, dtype=np.uint16))
             winners_g, winners_m = view_concept_winners(
                 indices[rows], mask_ids[rows], weights[rows], args.min_weight
             )

@@ -38,16 +38,14 @@ def overlay_instances(
     stack = np.asarray(mask_stack)
     if image.ndim != 3 or image.shape[2] != 3:
         raise ValueError("rgb must have shape height x width x 3")
-    result = image.astype(np.float64).copy()
+    result = image.astype(np.float64)
     if stack.size:
         if stack.shape[1:] != image.shape[:2]:
             raise ValueError("mask_stack must match the image size")
         for row, color in enumerate(instance_palette(stack.shape[0])):
             covered = stack[row] > 0
-            blended = (1.0 - alpha) * result[covered] + alpha * np.array(
-                color, dtype=np.float64
-            )
-            result[covered] = blended
+            tint = np.array(color, dtype=np.float64)
+            result[covered] = (1.0 - alpha) * result[covered] + alpha * tint
     return np.clip(np.rint(result), 0, 255).astype(np.uint8)
 
 
