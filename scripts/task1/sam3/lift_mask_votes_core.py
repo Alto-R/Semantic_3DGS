@@ -94,19 +94,26 @@ def mask_membership_votes(
 def verify_pass_visibility(
     used_count: np.ndarray, visibility: np.ndarray
 ) -> None:
-    """Check the cross-pass invariant behind the shared vote denominator.
+    """Check that concept passes observe the same rendered Gaussian mass.
 
     FlashSplat's total per-Gaussian support (the sum over all index rows,
     sentinel included) is the Gaussian's rendered alpha mass and therefore
     independent of the gt_mask labeling. Every concept pass of one view must
-    reproduce the visibility taken from the first pass; a mismatch means the
-    membership denominators are wrong and must fail loudly.
+    agree with the first pass. CUDA FP32 atomic sums are order-dependent:
+    old_street's large footprints showed up to 0.10% cross-label roundoff.
+    Allow 0.2% relative drift while requiring identical observed sets and
+    rejecting non-finite values. Membership ratios use each pass's own total.
+    This tolerance is a numerical guard, not an association threshold.
     """
 
     totals = np.asarray(used_count, dtype=np.float32).sum(axis=0)
     expected = np.asarray(visibility, dtype=np.float32)
-    if totals.shape != expected.shape or not np.allclose(
-        totals, expected, rtol=1e-4, atol=1e-6
+    if (
+        totals.shape != expected.shape
+        or not np.isfinite(totals).all()
+        or not np.isfinite(expected).all()
+        or not np.array_equal(totals > 0, expected > 0)
+        or not np.allclose(totals, expected, rtol=2e-3, atol=1e-6)
     ):
         raise RuntimeError(
             "concept pass visibility deviates from the view's first pass"

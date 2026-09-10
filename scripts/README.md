@@ -13,15 +13,18 @@ and rejected fusion methods are preserved under `archive/`.
 The complete Graphdeco-to-final-PNG command sequence is in the
 [quickstart](../docs/DINOV3_DINOTXT_SAM_QUICKSTART.md).
 
-## Experimental SAM3 instance route
+## Complete SAM3 route
 
 | Entry point | Role |
 |---|---|
-| `slurm/slurm_task1_sam3_instance_scene.sbatch` | SAM3 concept segmentation, per-concept FlashSplat lift, cross-view association, per-instance consensus, scene graph, and QA overlays |
+| `setup/install_sam3_semantic.sh` | Separate modern SAM3 environment |
+| `setup/download_sam3.py` | Fixed ModelScope download and checksum verification |
+| `slurm/slurm_task1_sam3_instance_scene.sbatch` | Reconstruction or existing RGB to masks, 3D lift, association, instance/class consensus, scene graph and 3D render-back |
+| `task1/sam3/render_results.py` | Render final semantic and instance labels through the actual 3D Gaussians |
 
-The route consumes an existing render stage and is under pilot evaluation;
-see [the design](../docs/plans/2026-09-10-sam3-instance-layer-design.md).
-Cluster verification of the SAM3 checkpoint is pending.
+See the [SAM3 quickstart](../docs/SAM3_QUICKSTART.md). The 129-view old_street
+refinement has been executed and reviewed; its limitations are documented.
+The default strict route and optional refined consensus are both retained.
 
 ## Legacy alternative entry points
 

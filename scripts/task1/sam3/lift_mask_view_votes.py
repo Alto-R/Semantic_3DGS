@@ -154,16 +154,17 @@ def main(argv: list[str] | None = None) -> None:
                     len(rows) + 1,
                     gaussian_count,
                 )
+                pass_visibility = used_count.sum(axis=0, dtype=np.float32)
                 if visibility is None:
-                    # Total support summed over all rows is the Gaussian's
-                    # rendered alpha mass, independent of the gt_mask; every
-                    # later pass of this view must reproduce it exactly.
-                    visibility = used_count.sum(axis=0, dtype=np.float32)
+                    # The observed set is shared across concept passes. FP32
+                    # atomic sums can differ slightly with mask partitioning;
+                    # use each pass's own sum for its membership fractions.
+                    visibility = pass_visibility
                 else:
                     verify_pass_visibility(used_count, visibility)
                 indices, mask_ids, weights = mask_membership_votes(
                     used_count,
-                    visibility,
+                    pass_visibility,
                     np.array(rows, dtype=np.uint16),
                 )
                 all_indices.append(indices)
@@ -173,7 +174,14 @@ def main(argv: list[str] | None = None) -> None:
                 torch.cuda.empty_cache()
 
             if visibility is None:
-                visibility = np.zeros(gaussian_count, dtype=np.float32)
+                # A view with no detections still observes the scene. Preserve
+                # that negative evidence and keep visibility-cache sets valid.
+                gt_mask = torch.zeros((camera.image_height,camera.image_width),device='cuda')
+                render_pkg = render_flashsplat(camera,gaussians,modules,pipeline,background,
+                                              gt_mask=gt_mask,obj_num=1)
+                visibility = flashsplat_class_rows(
+                    render_pkg['used_count'].detach().float().cpu().numpy(),1,gaussian_count)[0]
+                del render_pkg, gt_mask
             observed = observed_gaussians(visibility)
             vote_path = vote_dir / f"{stem}.npz"
             if vote_path.exists() and not args.overwrite:
@@ -208,7 +216,9 @@ def main(argv: list[str] | None = None) -> None:
         "render_max_width": args.max_width,
         "gaussian_count": gaussian_count,
         "camera_count": len(frames),
-        "vote_formula": "used_count_for_mask/total_view_visibility",
+        "vote_formula": "used_count_for_mask/total_concept_pass_visibility",
+        "cross_pass_visibility_rtol": 2e-3,
+        "cross_pass_observed_set": "exact_match",
         "sum_to_one_constraint": False,
         "frames": frames,
     }

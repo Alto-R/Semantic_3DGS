@@ -81,3 +81,21 @@ def test_observed_gaussians():
     observed = observed_gaussians(np.array([0.0, 0.4, 0.0, 2.0], np.float32))
     assert observed.dtype == np.uint32
     assert observed.tolist() == [1, 3]
+
+
+def test_visibility_allows_measured_fp32_roundoff_but_not_observation_changes():
+    # Real old_street high-footprint case: different label partitions change
+    # the FP32 atomic summation order by approximately 0.10%.
+    expected = np.array([23761.595703125, 0.0], np.float32)
+    used = np.array([[12000.0, 0.0], [11785.39453125, 0.0]], np.float32)
+    verify_pass_visibility(used, expected)
+    with pytest.raises(RuntimeError):
+        verify_pass_visibility(used * 1.01, expected)
+    changed_observations = used.copy()
+    changed_observations[0, 1] = 1e-8
+    with pytest.raises(RuntimeError):
+        verify_pass_visibility(changed_observations, expected)
+    _, _, weights = mask_membership_votes(
+        used, used.sum(axis=0), np.array([0], np.uint16)
+    )
+    assert np.all(weights <= 1.0)

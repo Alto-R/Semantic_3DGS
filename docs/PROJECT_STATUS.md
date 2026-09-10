@@ -3,7 +3,19 @@
 This file records the maintained semantic pipeline, the result used to verify
 it, and the limits of that verification.
 
-## Maintained method
+## SAM3 route
+
+The repository also includes the complete SAM3 reconstruction-to-renderback
+pipeline, independent of DINO inference. The [SAM3 quickstart](SAM3_QUICKSTART.md)
+covers setup and execution; [refinement notes](SAM3_REFINEMENT.md) define the
+weighted consensus and class/instance distinction.
+
+On all 129 old_street views, the refined route has 80.67% semantic coverage,
+74.22% instance coverage, 1,395 nodes and 1,390 part_of edges. It still contains
+mislabels and association conflicts. It provides annotation and scene-graph
+data, not downstream GNN training or VR navigation. Result files remain local.
+
+## Maintained DINOv3 method
 
 The production route starts from a Graphdeco reconstruction and runs these
 stages in order:

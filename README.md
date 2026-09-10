@@ -1,7 +1,8 @@
 # EyeNavGS Semantic 3D Gaussian Splatting
 
 This repository builds semantic labels for pretrained EyeNavGS/3D Gaussian
-Splatting scenes. The maintained complete pipeline renders the original scene
+Splatting scenes. It includes complete DINOv3/dino.txt and SAM3 routes.
+The DINOv3 route renders the original scene
 cameras, predicts ADE20K semantics with DINOv3, lifts the evidence onto
 Gaussians, adds out-of-vocabulary classes with dino.txt and SAM, and renders the
 final labels back into every camera.
@@ -61,51 +62,42 @@ inputs, intermediate artifacts, and fusion rules.
 |---|---|
 | Run the general DINOv3 abstention-recovery pipeline end to end | `scripts/slurm/slurm_task1_dinov3_end_to_end_recovery_scene.sbatch` |
 | Fuse dino.txt and SAM masks into a DINOv3 base | `scripts/task1/dinov3/run_oov_multiclass_scene.sh` |
+| Run the complete SAM3 semantic and instance pipeline | `scripts/slurm/slurm_task1_sam3_instance_scene.sbatch` |
 
 The repository still contains the earlier DINOv2 base, ADE v5 refinement,
 GroundingDINO source, reviewed-extension, and recoloring entry points. They are
 legacy alternatives, not stages of the maintained DINOv3 and dino.txt route.
 See the [script inventory](scripts/README.md) for their locations.
 
-## SAM3 instance route (experimental)
+## Complete SAM3 semantic and instance pipeline
 
-The SAM3 route produces object-level data for the downstream scene-graph
-GNN: every countable object becomes an individual instance with a 3D
-position. SAM3 promptable concept segmentation is its only recognition
-model; the FlashSplat lift and equal-camera voting skeleton is reused with
-per-concept independent votes instead of a single-label partition, so a
-Gaussian may hold several concurrent memberships (window, storefront,
-building) with part_of relations derived from 3D containment.
+The SAM3 route starts from a pretrained reconstruction, renders its cameras
+(or reuses existing RGB views), and produces semantic classes, multi-label
+instance memberships, a scene graph, and final 3D render-back images.
+SAM3 is its recognition model; no DINO labels are required for this route.
 
 ```text
-SAM3 route (branch feature/sam3-instance-layer)
-  existing rendered camera views + per-scene vocabulary
-        |
-        v
-  SAM3 concept segmentation (per-view instance masks)
-        |
-        v
-  per-concept FlashSplat lift  ->  cross-view support-overlap association
-        |
-        v
-  per-instance equal-camera strict-majority membership
-        |
-        v
-  overlap classification -> hierarchy + scene graph + QA overlays
+3DGS model + vocabulary
+  -> RGB camera renders (or existing RGB + manifest)
+  -> SAM3 masks -> per-concept FlashSplat lift
+  -> visibility reliability + constrained cross-view instance association
+  -> per-instance consensus + pooled semantic class consensus
+  -> hierarchy / scene graph / label arrays
+  -> final semantic and instance 3D render-back + object layers
 ```
 
-| Purpose | Entry point |
-|---|---|
-| Run the SAM3 instance route end to end | `scripts/slurm/slurm_task1_sam3_instance_scene.sbatch` |
+Run it with `scripts/slurm/slurm_task1_sam3_instance_scene.sbatch`.
+The [SAM3 quickstart](docs/SAM3_QUICKSTART.md) includes the separate environment,
+verified ModelScope checkpoint download, fresh/reused camera inputs and all
+refinement flags. The original strict route remains the default; the
+quickstart explicitly enables the verified refinement.
 
-Outputs: `membership.npz` (sparse multi-label memberships),
-`instance_registry.json`, `hierarchy.json`, `scene_graph.json` (GNN-facing
-nodes and part_of edges), `gaussian_instances.npy` (derived flat
-visualization view). Design and pilot acceptance criteria:
-[design document](docs/plans/2026-09-10-sam3-instance-layer-design.md).
-The route is locally tested against a mock backend; cluster verification on
-the `old_street` pilot scene is pending. It does not modify any DINOv3
-deliverable.
+The 129-camera old_street refinement achieves **80.67% semantic coverage**
+and **74.22% instance coverage**, with 1,395 nodes and 1,390 part_of edges.
+Class agreement and global instance identity are kept separate; these are
+coverage counts, not ground-truth accuracy. See
+[refinement semantics and limitations](docs/SAM3_REFINEMENT.md).
+Result arrays, images, logs and model weights are not committed.
 
 ## Quick start
 

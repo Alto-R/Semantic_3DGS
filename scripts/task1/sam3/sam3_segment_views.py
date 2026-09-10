@@ -31,7 +31,7 @@ from scripts.task1.sam3.vocabulary import load_vocabulary
 class Sam3TransformersBackend:
     """Hugging Face transformers SAM3 backend (cluster only)."""
 
-    def __init__(self, model_id: str, revision: str, device: str = "cuda"):
+    def __init__(self, model_id: str, revision: str, device: str = "cuda", min_score: float = 0.0):
         try:
             import torch
             from transformers import Sam3Model, Sam3Processor
@@ -42,6 +42,9 @@ class Sam3TransformersBackend:
             ) from exc
         self._torch = torch
         self._device = device
+        self._min_score = min_score
+        self._last_image = None
+        self._vision_features = None
         self._processor = Sam3Processor.from_pretrained(model_id, revision=revision)
         self._model = (
             Sam3Model.from_pretrained(
@@ -55,14 +58,32 @@ class Sam3TransformersBackend:
         self, image: np.ndarray, phrase: str
     ) -> list[InstanceMask]:
         torch = self._torch
-        inputs = self._processor(images=image, text=phrase, return_tensors="pt").to(
-            self._device
-        )
         with torch.no_grad():
-            outputs = self._model(**inputs)
+            # The driver passes the same immutable array for every phrase in
+            # a view. Cache only that view's vision features, not model outputs.
+            if image is not self._last_image:
+                image_inputs = self._processor(
+                    images=image.copy(), return_tensors="pt"
+                ).to(self._device)
+                self._vision_features = self._model.get_vision_features(
+                    pixel_values=image_inputs.pixel_values
+                )
+                self._last_image = image
+            inputs = self._processor(text=phrase, return_tensors="pt").to(self._device)
+            outputs = self._model(vision_embeds=self._vision_features, **inputs)
+        # HF compares in the score dtype (BF16 here). Step below the rounded
+        # boundary so candidates accepted by segment_view's float comparison
+        # are never discarded early. That final exact score filter is retained.
+        threshold = 0.0
+        if self._min_score > 0:
+            dtype = outputs.pred_logits.dtype
+            threshold = float(torch.nextafter(
+                torch.tensor(self._min_score, dtype=dtype),
+                torch.tensor(-float("inf"), dtype=dtype),
+            ))
         results = self._processor.post_process_instance_segmentation(
             outputs,
-            threshold=0.0,
+            threshold=threshold,
             target_sizes=[image.shape[:2]],
         )[0]
         masks: list[InstanceMask] = []
@@ -120,7 +141,7 @@ def main(argv: list[str] | None = None) -> None:
         model_id, model_revision = "mock", "mock"
     else:
         backend = Sam3TransformersBackend(
-            args.model_id, args.model_revision, args.device
+            args.model_id, args.model_revision, args.device, min_score=args.min_score
         )
         model_id, model_revision = args.model_id, args.model_revision
 

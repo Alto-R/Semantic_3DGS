@@ -21,6 +21,7 @@ import numpy as np
 
 ASSOCIATION_SOURCE = "sam3_support_overlap_association"
 ASSOCIATION_CONTRACT = "per_concept_weighted_jaccard_union_v1"
+CONSTRAINED_ASSOCIATION_CONTRACT = "per_concept_constrained_weighted_jaccard_union_v2"
 MAX_INSTANCE_ID = 65535
 
 
@@ -68,7 +69,8 @@ def weighted_jaccard(a: MaskSupport, b: MaskSupport) -> float:
 
 
 def associate_masks(
-    masks: list[MaskSupport], threshold: float
+    masks: list[MaskSupport], threshold: float,
+    cannot_links: dict[int, set[int]] | None = None,
 ) -> list[list[int]]:
     """Union masks of one concept across different views by support overlap.
 
@@ -78,6 +80,8 @@ def associate_masks(
     """
 
     union = _UnionFind(len(masks))
+    members = {i: {i} for i in range(len(masks))} if cannot_links else None
+    forbidden = {i: set(cannot_links.get(i, ())) for i in range(len(masks))} if cannot_links else None
     by_concept: dict[str, list[int]] = {}
     for position, mask in enumerate(masks):
         by_concept.setdefault(mask.concept, []).append(position)
@@ -88,15 +92,59 @@ def associate_masks(
         # skipped without computing their Jaccard. Neither ranking nor
         # skipping can change the final connectivity.
         for left, right in _candidate_pairs(masks, positions):
-            if union.find(left) == union.find(right):
+            root_l, root_r = union.find(left), union.find(right)
+            if root_l == root_r:
+                continue
+            if forbidden is not None and (members[root_l] & forbidden[root_r]
+                                          or members[root_r] & forbidden[root_l]):
                 continue
             if weighted_jaccard(masks[left], masks[right]) >= threshold:
                 union.union(left, right)
+                if members is not None:
+                    members[root_l] |= members.pop(root_r)
+                    forbidden[root_l] |= forbidden.pop(root_r)
 
     groups: dict[int, list[int]] = {}
     for position in range(len(masks)):
         groups.setdefault(union.find(position), []).append(position)
     return [sorted(group) for group in groups.values()]
+
+
+def same_view_cannot_links(masks, manifest, masks_dir, max_iou, concepts):
+    """Disallow disjoint same-concept 2D detections, including transitive unions.
+
+    Overlapping duplicate/synonym detections remain eligible for association.
+    Context concepts may intentionally be excluded by the caller.
+    """
+    if not 0 <= max_iou <= 1:
+        raise ValueError('cannot-link IoU must be in [0, 1]')
+    position = {(m.view, m.mask_index): i for i, m in enumerate(masks)}
+    result = {}
+    for frame in manifest['frames']:
+        stem = Path(frame['file']).stem
+        groups = {}
+        for m in frame['masks']:
+            if m['concept'] in concepts and (stem, m['mask_index']) in position:
+                groups.setdefault(m['concept'], []).append(m['mask_index'])
+        with np.load(masks_dir / frame['mask_file']) as z:
+            stack = z['mask_stack']
+        boxes, areas = {}, {}
+        for indices in groups.values():
+            for i in indices:
+                yy, xx = np.nonzero(stack[i])
+                areas[i] = len(xx)
+                boxes[i] = (int(xx.min()), int(yy.min()), int(xx.max())+1, int(yy.max())+1) if len(xx) else (0,0,0,0)
+            for a, b in combinations(indices, 2):
+                ba, bb = boxes[a], boxes[b]
+                x0,y0,x1,y1 = max(ba[0],bb[0]),max(ba[1],bb[1]),min(ba[2],bb[2]),min(ba[3],bb[3])
+                overlap = int(np.count_nonzero((stack[a,y0:y1,x0:x1]>0) & (stack[b,y0:y1,x0:x1]>0))) if x1>x0 and y1>y0 else 0
+                area = areas[a]+areas[b]-overlap
+                iou = overlap/area if area else 0
+                if iou <= max_iou:
+                    pa,pb = position[(stem,a)],position[(stem,b)]
+                    result.setdefault(pa,set()).add(pb)
+                    result.setdefault(pb,set()).add(pa)
+    return result
 
 
 def _candidate_pairs(
@@ -211,7 +259,7 @@ def build_instance_registry(
 def validate_instance_registry(registry: dict[str, Any]) -> None:
     if registry.get("source") != ASSOCIATION_SOURCE:
         raise ValueError(f"unsupported registry source: {registry.get('source')!r}")
-    if registry.get("contract") != ASSOCIATION_CONTRACT:
+    if registry.get("contract") not in (ASSOCIATION_CONTRACT, CONSTRAINED_ASSOCIATION_CONTRACT):
         raise ValueError(
             f"unsupported registry contract: {registry.get('contract')!r}"
         )
@@ -277,6 +325,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--votes-manifest", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--threshold", default=0.3, type=float)
+    parser.add_argument("--cannot-link-vocabulary", type=Path,
+                        help="Enable same-view disjoint-mask constraints for gnn_node concepts in this vocabulary")
+    parser.add_argument("--cannot-link-max-iou", type=float, default=0.1)
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
 
@@ -290,9 +341,23 @@ def main(argv: list[str] | None = None) -> None:
     supports = load_mask_supports(
         masks_manifest, votes_manifest, args.votes_manifest.parent
     )
-    groups = associate_masks(supports, args.threshold)
+    constraints = None
+    if args.cannot_link_vocabulary:
+        vocabulary = json.loads(args.cannot_link_vocabulary.read_text())
+        constrained_concepts = {p['phrase'] for p in vocabulary['phrases'] if p['role']=='gnn_node'}
+        constraints = same_view_cannot_links(supports, masks_manifest, args.masks_manifest.parent/'masks',
+                                           args.cannot_link_max_iou, constrained_concepts)
+        print('CANNOT_LINK_PAIRS', sum(map(len,constraints.values()))//2, flush=True)
+    groups = associate_masks(supports, args.threshold, constraints)
     registry = build_instance_registry(supports, groups, args.threshold)
     from scripts.task1.sam3.provenance import sha256_file
+    if args.cannot_link_vocabulary:
+        registry.update({'contract': CONSTRAINED_ASSOCIATION_CONTRACT,
+            'cannot_link_policy': 'same_view_same_concept_mask_iou_at_most_threshold',
+            'cannot_link_max_iou': args.cannot_link_max_iou,
+            'cannot_link_concepts': sorted(constrained_concepts),
+            'cannot_link_pairs': sum(map(len,constraints.values()))//2,
+            'cannot_link_vocabulary_sha256': sha256_file(args.cannot_link_vocabulary)})
 
     registry["masks_manifest"] = str(args.masks_manifest)
     registry["votes_manifest"] = str(args.votes_manifest)

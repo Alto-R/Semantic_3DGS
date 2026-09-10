@@ -50,6 +50,41 @@ def containment(a: np.ndarray, b: np.ndarray) -> float:
     return float(common.size) / float(left.size)
 
 
+def _support_intersections(instances: list[dict[str, Any]]):
+    """Yield nonzero (left, right, intersection size) in stable pair order.
+
+    Accepted supports contain unique Gaussian indices. Integer sparse Gram
+    products count the same intersections as pairwise intersect1d, without
+    repeatedly sorting large building/road supports for every small object.
+    """
+    try:
+        from scipy import sparse
+    except ImportError:  # pragma: no cover - lightweight environments
+        for left, a in enumerate(instances):
+            for right in range(left + 1, len(instances)):
+                common = np.intersect1d(
+                    a["support"], instances[right]["support"], assume_unique=True
+                ).size
+                if common:
+                    yield left, right, int(common)
+        return
+    lengths = np.array([len(x["support"]) for x in instances], np.int64)
+    if not lengths.sum():
+        return
+    indices = np.concatenate([x["support"] for x in instances]).astype(np.int64)
+    indptr = np.zeros(len(instances) + 1, np.int64)
+    np.cumsum(lengths, out=indptr[1:])
+    matrix = sparse.csr_matrix(
+        (np.ones(len(indices), np.int64), indices, indptr),
+        shape=(len(instances), int(indices.max()) + 1),
+    )
+    overlap = (matrix @ matrix.T).tocoo()
+    keep = overlap.row < overlap.col
+    rows, cols, counts = overlap.row[keep], overlap.col[keep], overlap.data[keep]
+    for index in np.lexsort((cols, rows)):
+        yield int(rows[index]), int(cols[index]), int(counts[index])
+
+
 def classify_overlaps(
     instances: list[dict[str, Any]],
     thresholds: OverlapThresholds,
@@ -60,56 +95,54 @@ def classify_overlaps(
     edges: list[dict[str, Any]] = []
     noise: list[tuple[int, int]] = []
 
-    for position, left in enumerate(instances):
-        for right in instances[position + 1 :]:
-            c_left = containment(left["support"], right["support"])
-            c_right = containment(right["support"], left["support"])
-            if c_left == 0.0 and c_right == 0.0:
-                continue
-            pair = tuple(sorted((int(left["instance_id"]), int(right["instance_id"]))))
+    for left_index, right_index, common in _support_intersections(instances):
+        left, right = instances[left_index], instances[right_index]
+        c_left = common / left["support"].size
+        c_right = common / right["support"].size
+        pair = tuple(sorted((int(left["instance_id"]), int(right["instance_id"]))))
 
-            if left["concept"] == right["concept"]:
-                if (
-                    c_left >= thresholds.duplicate_mutual
-                    and c_right >= thresholds.duplicate_mutual
-                ):
-                    smaller, larger = sorted(
-                        (left, right),
-                        key=lambda inst: (
-                            inst["support"].size,
-                            -int(inst["instance_id"]),
-                        ),
-                    )
-                    merges.append(
-                        (int(smaller["instance_id"]), int(larger["instance_id"]))
-                    )
-                else:
-                    noise.append(pair)
-                continue
-
+        if left["concept"] == right["concept"]:
             if (
-                c_left >= thresholds.part_of_child
-                and c_right <= thresholds.part_of_parent
+                c_left >= thresholds.duplicate_mutual
+                and c_right >= thresholds.duplicate_mutual
             ):
-                child, parent = left, right
-                child_in_parent, parent_in_child = c_left, c_right
-            elif (
-                c_right >= thresholds.part_of_child
-                and c_left <= thresholds.part_of_parent
-            ):
-                child, parent = right, left
-                child_in_parent, parent_in_child = c_right, c_left
+                smaller, larger = sorted(
+                    (left, right),
+                    key=lambda inst: (
+                        inst["support"].size,
+                        -int(inst["instance_id"]),
+                    ),
+                )
+                merges.append(
+                    (int(smaller["instance_id"]), int(larger["instance_id"]))
+                )
             else:
                 noise.append(pair)
-                continue
-            edges.append(
-                {
-                    "child": int(child["instance_id"]),
-                    "parent": int(parent["instance_id"]),
-                    "containment_child_in_parent": child_in_parent,
-                    "containment_parent_in_child": parent_in_child,
-                }
-            )
+            continue
+
+        if (
+            c_left >= thresholds.part_of_child
+            and c_right <= thresholds.part_of_parent
+        ):
+            child, parent = left, right
+            child_in_parent, parent_in_child = c_left, c_right
+        elif (
+            c_right >= thresholds.part_of_child
+            and c_left <= thresholds.part_of_parent
+        ):
+            child, parent = right, left
+            child_in_parent, parent_in_child = c_right, c_left
+        else:
+            noise.append(pair)
+            continue
+        edges.append(
+            {
+                "child": int(child["instance_id"]),
+                "parent": int(parent["instance_id"]),
+                "containment_child_in_parent": child_in_parent,
+                "containment_parent_in_child": parent_in_child,
+            }
+        )
 
     return OverlapClassification(merges=merges, part_of_edges=edges, noise_pairs=noise)
 

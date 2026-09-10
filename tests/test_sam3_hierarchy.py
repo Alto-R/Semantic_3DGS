@@ -193,3 +193,19 @@ def test_scene_graph_cycle_raises():
         build_scene_graph(
             [a, b], part_of_edges=edges, merges=[], xyz=xyz, expected_part_of=[]
         )
+
+
+def test_sparse_intersections_match_exact_pairwise_counts():
+    from scripts.task1.sam3.instance_hierarchy import _support_intersections
+    rng = np.random.default_rng(731)
+    supports = [rng.choice(2000, size=k, replace=False).astype(np.uint32)
+                for k in [0, 4, 19, 200, 1800, 33, 140, 950]]
+    # Includes unsorted supports, empty objects, nested/large supports.
+    instances = [{"support": x} for x in supports]
+    expected = []
+    for i, a in enumerate(supports):
+        for j in range(i + 1, len(supports)):
+            common = len(set(a.tolist()) & set(supports[j].tolist()))
+            if common:
+                expected.append((i, j, common))
+    assert list(_support_intersections(instances)) == expected

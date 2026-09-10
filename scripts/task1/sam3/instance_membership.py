@@ -43,6 +43,8 @@ class MembershipCSR:
     observe_counts: np.ndarray
     scores: np.ndarray
     status: np.ndarray
+    support_weights: np.ndarray | None = None
+    observe_weights: np.ndarray | None = None
 
 
 def view_concept_winners(
@@ -98,6 +100,9 @@ def accumulate_membership(
     events: list[tuple[np.ndarray, np.ndarray]],
     observe_counts: np.ndarray,
     gaussian_count: int,
+    consensus_threshold: float = 0.5,
+    event_weights: list[np.ndarray] | None = None,
+    observe_weights: np.ndarray | None = None,
 ) -> MembershipCSR:
     """Combine per-view (gaussian, global instance) winner events.
 
@@ -106,6 +111,8 @@ def accumulate_membership(
     bug and raises.
     """
 
+    if not np.isfinite(consensus_threshold) or not 0 <= consensus_threshold < 1:
+        raise ValueError('consensus threshold must be in [0, 1)')
     observed = np.asarray(observe_counts, dtype=np.uint16)
     if observed.shape != (gaussian_count,):
         raise ValueError("observe_counts must have one entry per Gaussian")
@@ -126,7 +133,19 @@ def accumulate_membership(
         keys = np.concatenate(keys_parts)
     else:
         keys = np.zeros(0, dtype=np.int64)
-    unique_keys, support = np.unique(keys, return_counts=True)
+    if event_weights is not None:
+        if observe_weights is None or len(event_weights) != len(events):
+            raise ValueError('weighted events need aligned observation weights')
+        for event, weights in zip(events, event_weights):
+            if weights.shape != event[0].shape or not np.all(np.isfinite(weights)) or np.any(weights < 0):
+                raise ValueError('invalid event reliability weights')
+        all_weights = np.concatenate(event_weights) if event_weights else np.zeros(0)
+        unique_keys, inverse, support = np.unique(keys, return_inverse=True, return_counts=True)
+        support_weight = np.bincount(inverse, weights=all_weights, minlength=len(unique_keys))
+        del inverse, all_weights
+    else:
+        unique_keys, support = np.unique(keys, return_counts=True)
+        support_weight = None
     entry_gaussians = unique_keys // _ID_SPACE
     entry_instances = (unique_keys % _ID_SPACE).astype(np.uint16)
     support = support.astype(np.uint16)
@@ -138,10 +157,21 @@ def accumulate_membership(
         raise RuntimeError(
             "an instance gathered more votes than observing cameras"
         )
-    scores = (support / entry_observed).astype(np.float32)
+    entry_observe_weight = None
+    if support_weight is not None:
+        ow = np.asarray(observe_weights, np.float64)
+        if ow.shape != (gaussian_count,) or not np.all(np.isfinite(ow)) or np.any(ow < 0):
+            raise ValueError('invalid weighted observations')
+        entry_observe_weight = ow[entry_gaussians]
+        if np.any(entry_observe_weight <= 0) or np.any(support_weight > entry_observe_weight + 1e-8):
+            raise RuntimeError('weighted support exceeds observation reliability')
+        ratio = support_weight / entry_observe_weight
+    else:
+        ratio = support / entry_observed
+    scores = ratio.astype(np.float32)
 
     status = np.full(support.shape, STATUS_WEAK_MAJORITY, dtype=np.uint8)
-    status[support.astype(np.int64) * 2 > entry_observed] = STATUS_ACCEPTED
+    status[ratio > consensus_threshold] = STATUS_ACCEPTED
     status[support == 1] = STATUS_SINGLE_CAMERA
 
     counts_per_gaussian = np.bincount(entry_gaussians, minlength=gaussian_count)
@@ -155,10 +185,15 @@ def accumulate_membership(
         observe_counts=entry_observed.astype(np.uint16),
         scores=scores,
         status=status,
+        support_weights=support_weight,
+        observe_weights=entry_observe_weight,
     )
 
 
 def save_membership(path: Path, membership: MembershipCSR) -> None:
+    extra = {}
+    if membership.support_weights is not None:
+        extra = {'support_weights': membership.support_weights, 'observe_weights': membership.observe_weights}
     np.savez_compressed(
         Path(path),
         indptr=membership.indptr,
@@ -167,6 +202,7 @@ def save_membership(path: Path, membership: MembershipCSR) -> None:
         observe_counts=membership.observe_counts,
         scores=membership.scores,
         status=membership.status,
+        **extra,
     )
 
 
@@ -179,6 +215,8 @@ def load_membership(path: Path) -> MembershipCSR:
             observe_counts=data["observe_counts"],
             scores=data["scores"],
             status=data["status"],
+            support_weights=data['support_weights'] if 'support_weights' in data else None,
+            observe_weights=data['observe_weights'] if 'observe_weights' in data else None,
         )
 
 
@@ -193,6 +231,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--registry", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--min-weight", default=0.5, type=float)
+    parser.add_argument("--consensus-threshold", default=0.5, type=float,
+                        help="Require support/eligible observations strictly above this value; still needs two cameras")
+    parser.add_argument("--visibility-manifest", type=Path,
+                        help="Optional rendered-mass cache for informative observation gating")
+    parser.add_argument("--min-visibility-mass", default=0.01, type=float)
+    parser.add_argument("--min-relative-visibility", default=0.05, type=float)
+    parser.add_argument("--visibility-weighting", choices=['hard', 'soft'], default='hard')
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
 
@@ -219,6 +264,20 @@ def main(argv: list[str] | None = None) -> None:
             )
 
     gaussian_count = int(votes_manifest["gaussian_count"])
+    visibility_frames = None
+    if args.visibility_manifest is not None:
+        from scripts.task1.sam3.visibility import informative_observations, observation_reliability
+        visibility_manifest = json.loads(args.visibility_manifest.read_text())
+        if (visibility_manifest.get('source') != 'sam3_rendered_mass_v1'
+                or visibility_manifest['votes_manifest_sha256'] != votes_sha256
+                or visibility_manifest['gaussian_count'] != gaussian_count):
+            raise RuntimeError('visibility cache does not match the source votes')
+        visibility_frames = {Path(f['file']).stem: f for f in visibility_manifest['frames']}
+        if set(visibility_frames) != {Path(f['file']).stem for f in votes_manifest['frames']}:
+            raise RuntimeError('visibility camera set differs from votes')
+        peak_mass = np.load(args.visibility_manifest.parent / visibility_manifest['peak_mass_file'])
+        if peak_mass.shape != (gaussian_count,) or not np.all(np.isfinite(peak_mass)):
+            raise RuntimeError('invalid peak visibility cache')
     global_id: dict[tuple[str, int], int] = {}
     for instance in registry["instances"]:
         for member in instance["members"]:
@@ -236,15 +295,35 @@ def main(argv: list[str] | None = None) -> None:
         }
 
     observe_totals = np.zeros(gaussian_count, dtype=np.int64)
+    soft_visibility = visibility_frames is not None and args.visibility_weighting == 'soft'
+    weighted_observe_totals = np.zeros(gaussian_count, np.float64) if soft_visibility else None
+    weighted_events = [] if soft_visibility else None
     events: list[tuple[np.ndarray, np.ndarray]] = []
     votes_dir = args.votes_manifest.parent
-    for frame in votes_manifest["frames"]:
+    raw_observation_count = 0
+    for frame_number, frame in enumerate(votes_manifest["frames"]):
         stem = Path(str(frame["file"])).stem
         with np.load(votes_dir / str(frame["vote_file"]), allow_pickle=False) as data:
             indices = data["indices"]
             mask_ids = data["mask_ids"]
             weights = data["weights"]
             observed = data["observed"]
+        raw_observation_count += len(observed)
+        eligible = None
+        if visibility_frames is not None:
+            with np.load(args.visibility_manifest.parent / visibility_frames[stem]['mass_file']) as data:
+                if not np.array_equal(data['indices'], observed):
+                    raise RuntimeError('visibility frame differs from original observations')
+                if soft_visibility:
+                    reliability = np.zeros(gaussian_count, np.float64)
+                    reliability[observed] = observation_reliability(data['indices'], data['mass'], peak_mass,
+                        args.min_visibility_mass, args.min_relative_visibility)
+                    weighted_observe_totals += reliability
+                else:
+                    observed = informative_observations(data['indices'], data['mass'], peak_mass,
+                        args.min_visibility_mass, args.min_relative_visibility)
+                    eligible = np.zeros(gaussian_count, dtype=bool)
+                    eligible[observed] = True
         observe_totals[observed.astype(np.int64)] += 1
 
         frame_concepts = concept_of.get(stem)
@@ -258,6 +337,9 @@ def main(argv: list[str] | None = None) -> None:
             winners_g, winners_m = view_concept_winners(
                 indices[rows], mask_ids[rows], weights[rows], args.min_weight
             )
+            if eligible is not None:
+                keep = eligible[winners_g]
+                winners_g, winners_m = winners_g[keep], winners_m[keep]
             if winners_g.size == 0:
                 continue
             instance_ids = np.empty(winners_m.shape, dtype=np.uint16)
@@ -269,11 +351,16 @@ def main(argv: list[str] | None = None) -> None:
                     )
                 instance_ids[position] = global_id[key]
             events.append((winners_g, instance_ids))
+            if soft_visibility:
+                weighted_events.append(reliability[winners_g])
+        if (frame_number + 1) % 16 == 0:
+            print('MEMBERSHIP_VIEWS', frame_number + 1, '/', len(votes_manifest['frames']), flush=True)
 
     if int(observe_totals.max(initial=0)) > 65535:
         raise ValueError("camera count exceeds the uint16 observation space")
     membership = accumulate_membership(
-        events, observe_totals.astype(np.uint16), gaussian_count
+        events, observe_totals.astype(np.uint16), gaussian_count, args.consensus_threshold,
+        weighted_events, weighted_observe_totals
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     save_membership(args.output_dir / "membership.npz", membership)
@@ -300,6 +387,29 @@ def main(argv: list[str] | None = None) -> None:
         "consensus_policy": "per_instance_at_least_two_cameras_strict_majority",
         "observe_denominator": "views_with_any_rendered_visibility_of_the_gaussian",
     }
+    if args.visibility_manifest is not None or args.consensus_threshold != 0.5:
+        summary.update({
+            'contract': 'per_instance_informative_camera_consensus_v2',
+            'consensus_policy': 'per_instance_at_least_two_cameras_support_ratio',
+            'consensus_threshold': args.consensus_threshold,
+            'threshold_comparison': 'strictly_greater',
+            'visibility_manifest': str(args.visibility_manifest.resolve()) if args.visibility_manifest else None,
+            'visibility_manifest_sha256': sha256_file(args.visibility_manifest) if args.visibility_manifest else None,
+            'min_visibility_mass': args.min_visibility_mass if args.visibility_manifest else None,
+            'min_relative_visibility': args.min_relative_visibility if args.visibility_manifest else None,
+            'observe_denominator': 'views_passing_absolute_and_relative_rendered_mass_gate' if args.visibility_manifest else summary['observe_denominator'],
+            'observation_count_raw': raw_observation_count,
+            'observation_count_eligible': int(observe_totals.sum()),
+            'eligible_gaussian_count': int((observe_totals > 0).sum()),
+            'support_visibility_policy': 'same_gate_as_denominator',
+        })
+        if soft_visibility:
+            summary.update({'contract': 'per_instance_visibility_weighted_consensus_v3',
+                'observe_denominator': 'sum_of_saturating_rendered_mass_reliability',
+                'support_visibility_policy': 'identical_reliability_weight_for_support_and_denominator',
+                'visibility_weight_formula': 'min(1, mass / max(absolute_scale, relative_scale * peak_mass))',
+                'observation_weight_sum': float(weighted_observe_totals.sum()),
+                'minimum_support_policy': 'at_least_two_distinct_raw_supporting_cameras'})
     (args.output_dir / "membership_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
     )

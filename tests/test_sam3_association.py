@@ -144,3 +144,27 @@ def test_registry_without_conflicts():
         {"view": "v0", "mask_index": 0, "score": 0.9},
         {"view": "v1", "mask_index": 0, "score": 0.9},
     ]
+
+
+def test_cannot_link_survives_transitive_bridge():
+    masks = [sup('v0', 0, 'window', [(0,1.),(1,1.)]),
+             sup('v1', 0, 'window', [(0,1.),(1,1.),(2,1.),(3,1.)]),
+             sup('v0', 1, 'window', [(2,1.),(3,1.)])]
+    assert len(associate_masks(masks,.3)) == 1
+    groups = associate_masks(masks,.3,{0:{2},2:{0}})
+    assert len(groups) == 2
+    assert all(not ({0,2} <= set(g)) for g in groups)
+
+
+def test_mask_evidence_allows_synonyms_but_blocks_disjoint_objects(tmp_path):
+    from scripts.task1.sam3.associate_instances import same_view_cannot_links
+    stack = np.zeros((3,10,10),np.uint8)
+    stack[0,:3,:3] = 1
+    stack[1,:3,:3] = 1  # exact duplicate from a synonym
+    stack[2,7:,7:] = 1
+    np.savez(tmp_path/'v0.npz', mask_stack=stack)
+    masks = [sup('v0',i,'signboard',[(i,1.)]) for i in range(3)]
+    manifest = {'frames':[{'file':'v0.png','mask_file':'v0.npz',
+        'masks':[{'mask_index':i,'concept':'signboard'} for i in range(3)]}]}
+    links = same_view_cannot_links(masks,manifest,tmp_path,.1,{'signboard'})
+    assert links == {0:{2},1:{2},2:{0,1}}

@@ -171,6 +171,9 @@ def test_mask_support_join_rejects_duplicate_stems():
         "scripts.task1.sam3.instance_membership",
         "scripts.task1.sam3.instance_hierarchy",
         "scripts.task1.sam3.render_instance_overlays",
+        "scripts.task1.sam3.visibility",
+        "scripts.task1.sam3.semantic_consensus",
+        "scripts.task1.sam3.render_results",
     ],
 )
 def test_driver_modules_are_executable(module):
