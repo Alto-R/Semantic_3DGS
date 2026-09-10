@@ -1,0 +1,34 @@
+{
+  "scene": "old_street",
+  "phrases": [
+    {"phrase": "car", "role": "gnn_node", "synonyms": []},
+    {"phrase": "tree", "role": "gnn_node", "synonyms": []},
+    {"phrase": "person", "role": "gnn_node", "synonyms": []},
+    {"phrase": "streetlight", "role": "gnn_node", "synonyms": ["street lamp"]},
+    {"phrase": "bench", "role": "gnn_node", "synonyms": []},
+    {"phrase": "signboard", "role": "gnn_node", "synonyms": ["shop sign"]},
+    {"phrase": "storefront", "role": "gnn_node", "synonyms": []},
+    {"phrase": "window", "role": "gnn_node", "synonyms": []},
+    {"phrase": "door", "role": "gnn_node", "synonyms": []},
+    {"phrase": "bicycle", "role": "gnn_node", "synonyms": []},
+    {"phrase": "motorbike", "role": "gnn_node", "synonyms": ["motorcycle"]},
+    {"phrase": "trash can", "role": "gnn_node", "synonyms": []},
+    {"phrase": "potted plant", "role": "gnn_node", "synonyms": []},
+    {"phrase": "building", "role": "context_probe", "synonyms": []},
+    {"phrase": "road", "role": "context_probe", "synonyms": []},
+    {"phrase": "sidewalk", "role": "context_probe", "synonyms": []},
+    {"phrase": "wall", "role": "context_probe", "synonyms": []},
+    {"phrase": "sky", "role": "context_probe", "synonyms": []},
+    {"phrase": "manhole cover", "role": "oov_probe", "synonyms": []},
+    {"phrase": "air conditioning unit", "role": "oov_probe", "synonyms": []},
+    {"phrase": "electric scooter", "role": "oov_probe", "synonyms": []},
+    {"phrase": "awning", "role": "oov_probe", "synonyms": []}
+  ],
+  "expected_part_of": [
+    ["window", "building"],
+    ["door", "building"],
+    ["storefront", "building"],
+    ["signboard", "storefront"],
+    ["awning", "storefront"]
+  ]
+}
